@@ -157,9 +157,16 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
     }
 
     fn compute_semi_dominators_and_implicit_immediate_dominators(&mut self) {
-        for current_pre_number in (1..self.block_by_pre_number.len()).rev() {
-            let block = self.block_by_pre_number[current_pre_number];
+        let mut current_pre_number = self.block_by_pre_number.len();
+        
+        while {
+            let res = current_pre_number > 1;
+            current_pre_number -= 1;
 
+            res
+        } {
+            let block = self.block_by_pre_number[current_pre_number];
+    
             for predecessor_block in self.graph.predecessors(block).iter().copied() {
                 let intermediate_block = self.eval(predecessor_block);
 

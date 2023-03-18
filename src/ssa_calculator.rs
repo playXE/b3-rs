@@ -138,10 +138,10 @@ impl SSACalculator {
                 let mut other_block = Some(starting_block);
 
                 while other_block != block {
-                    self.data[&b].phis.push(def.clone());
+                    self.data[&b].defs.insert(variable, def.clone());
                     other_block = self.dominators.as_ref().unwrap().idom(other_block.unwrap());
                 }
-
+                
                 return Some(def.clone());
             }
 
@@ -157,7 +157,7 @@ impl SSACalculator {
         variable: SSAVariableId,
         proc: &Procedure,
     ) -> Option<Rc<SSADef>> {
-        let block = self.dominators.as_ref().unwrap().idom(starting_block).unwrap();
+        let block = self.dominators.as_ref().unwrap().idom(starting_block)?;
         self.reaching_def_at_tail(block, variable, proc)
     }
 
@@ -319,3 +319,4 @@ impl std::fmt::Display for SSAVariable {
         Ok(())
     }
 }
+

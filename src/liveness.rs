@@ -38,7 +38,7 @@ pub trait LivenessAdapter {
 
 pub struct Liveness<'a, A: LivenessAdapter> {
     pub adapter: &'a mut A,
-    pub workset: IndexSparseSet,
+    pub workset: IndexSparseSet<DefaultIndexSparseSetEntry>,
     pub live_at_head: IndexMap<<A::CFG as Graph>::Node, Vec<usize>>,
     pub live_at_tail: IndexMap<<A::CFG as Graph>::Node, Vec<usize>>,
 }
@@ -82,7 +82,7 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
         }
     }
 
-    pub fn workset_mut(&mut self) -> &mut IndexSparseSet {
+    pub fn workset_mut(&mut self) -> &mut IndexSparseSet<DefaultIndexSparseSetEntry> {
         &mut self.workset
     }
 
@@ -153,7 +153,7 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
                     live_at_head.reserve(self.workset.len() + live_at_head.len());
 
                     for new_value in self.workset.iter() {
-                        live_at_head.push(*new_value);
+                        live_at_head.push(new_value.key);
                     }
 
                     self.workset.sort();
@@ -162,13 +162,13 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
                         let live_at_tail = self.live_at_tail.get_mut(predecessor).unwrap();
 
                         if live_at_tail.is_empty() {
-                            *live_at_tail = self.workset.values.clone();
+                            *live_at_tail = self.workset.values.iter().map(|x| x.key()).collect();
                         } else {
                             merge_buffer.resize(live_at_tail.len() + self.workset.len(), 0);
 
                             let k = merge_deduplicated_sorted(
-                                live_at_tail,
-                                &mut self.workset.values,
+                                live_at_tail.iter().copied(),
+                                self.workset.values.iter().map(|x| x.key),
                                 &mut merge_buffer,
                             );
 
@@ -297,7 +297,7 @@ impl<'a, 'b, A: LivenessAdapter> LocalCalc<'a, 'b, A> {
         workset.clear();
 
         for index in live_at_tail {
-            workset.add(index);
+            workset.add(index, ());
         }
 
         this
@@ -323,7 +323,7 @@ impl<'a, 'b, A: LivenessAdapter> LocalCalc<'a, 'b, A> {
         self.liveness
             .adapter
             .for_each_use(self.block, inst_index, |index| {
-                workset.add(A::value_to_index(index));
+                workset.add(A::value_to_index(index), ());
             });
     }
 }
@@ -342,10 +342,44 @@ impl<'a, A: LivenessAdapter> Iterable<'a, A> {
         self.liveness.workset.contains(index)
     }
 
-    pub fn iter(&self) -> std::slice::Iter<usize> {
+    pub fn iter(&self) -> std::slice::Iter<DefaultIndexSparseSetEntry> {
         self.liveness.workset.iter()
     }
 }
+
+pub trait IndexSparseSetEntry: Copy + Clone {
+    type Init;
+    fn create(entry: usize, init: Self::Init) -> Self;
+    fn key(&self) -> usize;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct DefaultIndexSparseSetEntry {
+    key: usize,
+}
+
+impl IndexSparseSetEntry for DefaultIndexSparseSetEntry {
+    type Init = ();
+    fn create(key: usize, _init: ()) -> Self {
+        DefaultIndexSparseSetEntry { key }
+    }
+
+    fn key(&self) -> usize {
+        self.key
+    }
+}
+
+impl<T: Copy + Clone> IndexSparseSetEntry for (usize, T) {
+    type Init = T;
+    fn create(key: usize, init: T) -> Self {
+        (key, init)
+    }
+
+    fn key(&self) -> usize {
+        self.0
+    }
+}
+
 
 /// IndexSparseSet is an efficient set of integers that can only be valued
 /// between zero and size() - 1.
@@ -358,12 +392,12 @@ impl<'a, A: LivenessAdapter> Iterable<'a, A> {
 /// The assumption here is that we only need a sparse subset of number live at any
 /// time.
 #[derive(Debug)]
-pub struct IndexSparseSet {
+pub struct IndexSparseSet<T: IndexSparseSetEntry> {
     map: Vec<usize>,
-    values: Vec<usize>,
+    values: Vec<T>,
 }
 
-impl IndexSparseSet {
+impl<T: IndexSparseSetEntry> IndexSparseSet<T> {
     pub fn new(size: usize) -> Self {
         IndexSparseSet {
             map: vec![0; size],
@@ -371,28 +405,28 @@ impl IndexSparseSet {
         }
     }
 
-    pub fn get(&self, value: usize) -> Option<usize> {
+    pub fn get(&self, value: usize) -> Option<T> {
         let position = self.map[value];
 
         if position >= self.values.len() {
             return None;
         }
 
-        if self.values[position] != value {
+        if self.values[position].key() != value {
             return None;
         }
 
         Some(self.values[position])
     }
 
-    pub fn get_mut(&mut self, value: usize) -> Option<&mut usize> {
+    pub fn get_mut(&mut self, value: usize) -> Option<&mut T> {
         let position = self.map[value];
 
         if position >= self.values.len() {
             return None;
         }
 
-        if self.values[position] != value {
+        if self.values[position].key() != value {
             return None;
         }
 
@@ -407,25 +441,25 @@ impl IndexSparseSet {
                 return false;
             }
 
-            return self.values[position] == value;
+            return self.values[position].key() == value;
         } else {
             false
         }
     }
 
     pub fn sort(&mut self) {
-        self.values.sort_by(|a, b| a.cmp(b));
+        self.values.sort_by(|a, b| a.key().cmp(&b.key()));
 
         for index in 0..self.values.len() {
-            let key = self.values[index];
+            let key = self.values[index].key();
 
             self.map[key] = index;
         }
     }
 
-    pub fn add(&mut self, value: usize) -> bool {
+    pub fn add(&mut self, value: usize, init: T::Init) -> bool {
         if !self.contains(value) {
-            self.values.push(value);
+            self.values.push(T::create(value, init));
             self.map[value] = self.values.len() - 1;
 
             true
@@ -438,13 +472,13 @@ impl IndexSparseSet {
         self.values.clear();
     }
 
-    pub fn set(&mut self, value: usize, index: usize) -> bool {
+    pub fn set(&mut self, value: usize, init: T::Init) -> bool {
         if let Some(entry) = self.get_mut(value) {
-            *entry = index;
+            *entry = T::create(value, init);
 
             false
         } else {
-            self.values.push(index);
+            self.values.push(T::create(value, init));
             self.map[value] = self.values.len() - 1;
             false
         }
@@ -457,11 +491,11 @@ impl IndexSparseSet {
             return false;
         }
 
-        if self.values[position] == value {
+        if self.values[position].key() == value {
             let last_value = self.values.last().copied().unwrap();
 
             self.values[position] = last_value;
-            self.map[last_value] = position;
+            self.map[last_value.key()] = position;
             self.values.pop().unwrap();
 
             return true;
@@ -479,26 +513,26 @@ impl IndexSparseSet {
     }
 }
 
-impl Deref for IndexSparseSet {
-    type Target = [usize];
+impl<T: IndexSparseSetEntry> Deref for IndexSparseSet<T> {
+    type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         &self.values
     }
 }
 
-impl DerefMut for IndexSparseSet {
+impl<T: IndexSparseSetEntry> DerefMut for IndexSparseSet<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.values
     }
 }
 
 fn merge_deduplicated_sorted<T: Copy + PartialOrd + Ord>(
-    left: &[T],
-    right: &[T],
+    left: impl Iterator<Item = T>,
+    right: impl Iterator<Item = T>,
     dst: &mut [T],
 ) -> usize {
-    let mut i = 0;
+    /*let mut i = 0;
     let mut j = 0;
     let mut k = 0;
 
@@ -530,5 +564,35 @@ fn merge_deduplicated_sorted<T: Copy + PartialOrd + Ord>(
         k += 1;
     }
 
-    k
+    k*/
+
+    let mut left = left.peekable();
+    let mut right = right.peekable();
+
+    let mut i = 0;
+
+    while let (Some(l), Some(r)) = (left.peek(), right.peek()) {
+        if l < r {
+            dst[i] = left.next().unwrap();
+        } else if l > r {
+            dst[i] = right.next().unwrap();
+        } else {
+            dst[i] = left.next().unwrap();
+            right.next();
+        }
+
+        i += 1;
+    }
+
+    while let Some(l) = left.next() {
+        dst[i] = l;
+        i += 1;
+    }
+
+    while let Some(r) = right.next() {
+        dst[i] = r;
+        i += 1;
+    }
+
+    i
 }

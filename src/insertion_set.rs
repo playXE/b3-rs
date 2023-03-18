@@ -33,8 +33,8 @@ pub fn execute_insertions(target: &mut Vec<ValueId>, insertions: &mut Vec<Insert
     if num_insertions == 0 {
         return 0;
     }
-
-    target.reserve(num_insertions);
+    
+    target.resize(target.len() + num_insertions, ValueId(usize::MAX));
 
     let mut last_index = target.len();
 

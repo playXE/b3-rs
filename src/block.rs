@@ -198,10 +198,11 @@ impl BasicBlock {
             write!(f, "  Successors: ")?;
 
             if self.len() != 0 {
-                proc.value(self.last().copied().unwrap()).fmt_successors(f, proc, self)?;
+                proc.value(self.last().copied().unwrap())
+                    .fmt_successors(f, proc, self)?;
             } else {
                 for (i, succ) in self.successor_list.iter().enumerate() {
-                    write!(f, "block{}", succ.0.0)?;
+                    write!(f, "block{}", succ.0 .0)?;
 
                     if i < self.successor_list.len() - 1 {
                         write!(f, ", ")?;
@@ -337,33 +338,38 @@ impl<'a> BasicBlockBuilder<'a> {
         self.func.add_to_block(self.block, value);
     }
 
-    pub fn add_int_constant(
+    pub fn add_int_constant<T>(
         &mut self,
         typ: Type,
         value: impl Into<i64>,
-        next: impl FnOnce(&mut Self, ValueId),
-    ) {
+        next: impl FnOnce(&mut Self, ValueId) -> T,
+    ) -> T {
         let value = self.func.add_int_constant(typ, value);
         self.func.add_to_block(self.block, value);
-        next(self, value);
+        next(self, value)
     }
 
-    pub fn add_binary(
+    pub fn add_binary<T>(
         &mut self,
         kind: impl Into<Kind>,
         lhs: ValueId,
         rhs: ValueId,
-        next: impl FnOnce(&mut Self, ValueId),
-    ) {
+        next: impl FnOnce(&mut Self, ValueId) -> T,
+    ) -> T {
         let value = self.func.add_binary(kind.into(), lhs, rhs);
         self.func.add_to_block(self.block, value);
-        next(self, value);
+        next(self, value)
     }
 
-    pub fn add_argument(&mut self, typ: Type, ix: usize, next: impl FnOnce(&mut Self, ValueId)) {
+    pub fn add_argument<T>(
+        &mut self,
+        typ: Type,
+        ix: usize,
+        next: impl FnOnce(&mut Self, ValueId) -> T,
+    ) -> T {
         let value = self.func.add_argument(typ, ix);
         self.func.add_to_block(self.block, value);
-        next(self, value);
+        next(self, value)
     }
 
     pub fn add_return(&mut self, value: ValueId) {
@@ -381,22 +387,40 @@ impl<'a> BasicBlockBuilder<'a> {
         next(self, value);
     }
 
-    pub fn add_variable_set(
+    pub fn add_variable_set<T>(
         &mut self,
         variable: VariableId,
         value: ValueId,
-        next: impl FnOnce(&mut Self, ValueId),
-    ) {
+        next: impl FnOnce(&mut Self, ValueId) -> T,
+    ) -> T {
         let value = self.func.add_variable_set(variable, value);
         self.func.add_to_block(self.block, value);
-        next(self, value);
+        next(self, value)
     }
 
     pub fn add_jump(&mut self, to: BlockId) {
+        self.func.block_mut(self.block).successor_list.clear();
         let val = self.func.add_jump();
         self.func.add_to_block(self.block, val);
         self.func
             .block_mut(self.block)
             .set_successors((to, Frequency::Normal));
+        self.func.block_mut(to).add_predecessor(self.block);
+    }
+
+    pub fn add_branch(
+        &mut self,
+        condition: ValueId,
+        taken: BlockId,
+        not_taken: (BlockId, Frequency),
+    ) {
+        self.func.block_mut(self.block).successor_list.clear();
+        let val = self.func.add_branch(condition);
+        self.func.add_to_block(self.block, val);
+        self.func
+            .block_mut(self.block)
+            .set_successors2((taken, Frequency::Normal), not_taken);
+        self.func.block_mut(not_taken.0).add_predecessor(self.block);
+        self.func.block_mut(taken).add_predecessor(self.block);
     }
 }

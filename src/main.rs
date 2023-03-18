@@ -1,92 +1,79 @@
 use std::borrow::Cow;
 
 use scheme_compiler::{
-    block::BasicBlockBuilder, dominators::*, fix_ssa::fix_ssa, procedure::Procedure, typ::TypeKind,
+    block::{BasicBlockBuilder, Frequency},
+    dominators::*,
+    fix_ssa::{fix_ssa, demote_values, demoted_values},
+    opcode::Opcode,
+    procedure::Procedure,
+    typ::{Type, TypeKind},
 };
-
-#[derive(Debug)]
-pub struct Block {
-    id: usize,
-    pred: Vec<usize>,
-    succ: Vec<usize>,
-}
-
-#[derive(Debug)]
-pub struct CFG {
-    blocks: Vec<Block>,
-}
-
-impl CFG {
-    pub fn new() -> Self {
-        Self { blocks: vec![] }
-    }
-
-    pub fn add_block(&mut self) -> usize {
-        let id = self.blocks.len();
-        self.blocks.push(Block {
-            id,
-            pred: vec![],
-            succ: vec![],
-        });
-        id
-    }
-
-    pub fn add_block_succ(&mut self, block_id: usize, succ_id: usize) {
-        self.blocks[block_id].succ.push(succ_id);
-        self.blocks[succ_id].pred.push(block_id);
-    }
-
-    pub fn add_block_pred(&mut self, block_id: usize, pred_id: usize) {
-        self.blocks[block_id].pred.push(pred_id);
-        self.blocks[pred_id].succ.push(block_id);
-    }
-}
-
-impl Graph for CFG {
-    type Node = usize;
-    fn node_index(&self, node: Self::Node) -> usize {
-        node
-    }
-    fn node(&self, index: usize) -> Option<Self::Node> {
-        Some(self.blocks[index].id)
-    }
-
-    fn num_nodes(&self) -> usize {
-        self.blocks.len()
-    }
-
-    fn predecessors(&self, block: Self::Node) -> Cow<[Self::Node]> {
-        Cow::Borrowed(&self.blocks[block].pred)
-    }
-
-    fn successors(&self, block: Self::Node) -> Cow<[Self::Node]> {
-        Cow::Borrowed(&self.blocks[block].succ)
-    }
-
-    fn root(&self) -> Self::Node {
-        0
-    }
-}
 
 fn main() {
     let mut proc = Procedure::new();
 
+    // factorial_iterative (Int32) -> Int32
     let root = proc.add_block(1.0);
-    let next = proc.add_block(1.0);
-    let x = proc.add_variable(TypeKind::Int32.into());
+    let loop_footer = proc.add_block(1.0);
+    let loop_body = proc.add_block(1.0);
+    let exit = proc.add_block(1.0);
+    let n = proc.add_variable(Type::Int32);
+    let acc = proc.add_variable(Type::Int32);
+    let i = proc.add_variable(Type::Int32);
 
-    BasicBlockBuilder::new(&mut proc, root).add_argument(TypeKind::Int32.into(), 0, |inst, arg| {
-        inst.add_variable_set(x, arg, |inst, _| {
-            inst.add_jump(next);
+    BasicBlockBuilder::new(&mut proc, root).add_argument(Type::Int32, 0, |inst, arg| {
+        inst.add_variable_set(n, arg, |inst, _| {
+            inst.add_int_constant(Type::Int32, 2, |inst, iconst| {
+                inst.add_variable_set(i, iconst, |inst, _| {
+                    inst.add_int_constant(Type::Int32, 1, |inst, iconst| {
+                        inst.add_variable_set(acc, iconst, |inst, _| {
+                            inst.add_jump(loop_footer);
+                        })
+                    })
+                })
+            })
         })
     });
 
-    BasicBlockBuilder::new(&mut proc, next).add_variable_get(x, |inst, var| inst.add_return(var));
-    proc.block_mut(next).add_predecessor(root);
-    println!("{}", proc.display_());
-    proc.dominators_or_compute();
-    fix_ssa(&mut proc);
-    println!("after fix_ssa:");
+    BasicBlockBuilder::new(&mut proc, loop_footer).add_variable_get(i, |inst, ivar| {
+        inst.add_variable_get(n, |inst, nvar| {
+            inst.add_binary(Opcode::LessEqual, ivar, nvar, |inst, cmp| {
+                inst.add_branch(cmp, loop_body, (exit, Frequency::Normal));
+            })
+        })
+    });
+
+    BasicBlockBuilder::new(&mut proc, loop_body).add_variable_get(i, |inst, ivar| {
+        inst.add_variable_get(acc, |inst, accvar| {
+            inst.add_binary(Opcode::Mul, ivar, accvar, |inst, mul| {
+                inst.add_variable_set(acc, mul, |inst, _| {
+                    inst.add_variable_get(i, |inst, ivar| {
+                        inst.add_int_constant(Type::Int32, 1, |inst, iconst| {
+                            inst.add_binary(Opcode::Add, ivar, iconst, |inst, add| {
+                                inst.add_variable_set(i, add, |inst, _| {
+                                    inst.add_jump(loop_footer);
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+        })
+    });
+
+    BasicBlockBuilder::new(&mut proc, exit).add_variable_get(acc, |inst, accvar| {
+        inst.add_return(accvar);
+    });
 
     println!("{}", proc.display_());
+    
+    proc.dominators_or_compute();
+    println!("{}", proc.dominators().display(&proc));
+
+    fix_ssa(&mut proc);
+
+    println!("{}", proc.display_());
+
+    proc.compute_dominators();
+   
 }

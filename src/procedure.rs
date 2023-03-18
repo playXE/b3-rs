@@ -127,6 +127,10 @@ impl Procedure {
         self.dominators()
     }
 
+    pub fn compute_dominators(&mut self) {
+        self.dominators = Some(Dominators::new(self));
+    }
+
     pub fn natural_loops_or_compute(&mut self) -> &NaturalLoops<Self> {
         if self.natural_loops.is_none() {
             self.dominators_or_compute();
@@ -406,6 +410,16 @@ impl Procedure {
             TypeKind::Void.into(),
             NumChildren::Zero,
             &[],
+            ValueData::None,
+        ))
+    }
+
+    pub fn add_branch(&mut self, val: ValueId) -> ValueId {
+        self.add(Value::new(
+            Opcode::Branch,
+            TypeKind::Void.into(),
+            NumChildren::One,
+            &[val],
             ValueData::None,
         ))
     }

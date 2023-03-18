@@ -1060,6 +1060,10 @@ impl Value {
             ValueData::Variable(x) => write!(f, " var@{}", x.0)?,
             ValueData::MemoryValue { offset, .. } => write!(f, " ${:x}", offset)?,
             ValueData::Argument(x) => write!(f, "arg@{}", x)?,
+            ValueData::Upsilon(x) => match x {
+                Some(x) => write!(f, " phi=v@{}", x.0)?,
+                None => write!(f, " phi=none")?,
+            },
             _ => todo!()
         }
 

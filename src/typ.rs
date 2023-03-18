@@ -24,7 +24,16 @@ impl Default for TypeKind {
 pub struct Type {
     kind: u32,
 }
+#[allow(non_upper_case_globals)]
 impl Type {
+    pub const Int32: Self = Self::new(TypeKind::Int32);
+    pub const Int64: Self = Self::new(TypeKind::Int64);
+    pub const Float: Self = Self::new(TypeKind::Float);
+    pub const Double: Self = Self::new(TypeKind::Double);
+    pub const V128: Self = Self::new(TypeKind::V128);
+    pub const Void: Self = Self::new(TypeKind::Void);
+
+
     pub const fn new(kind: TypeKind) -> Self {
         Self { kind: kind as _ }
     }

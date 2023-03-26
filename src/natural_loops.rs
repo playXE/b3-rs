@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 
-use indexmap::IndexMap;
-
 use crate::dominators::{Dominators, Graph};
+use crate::utils::index_set::IndexMap;
 
 #[derive(Debug)]
 pub struct NaturalLoop<G: Graph> {
@@ -50,7 +49,7 @@ impl<G: Graph> NaturalLoop<G> {
 #[derive(Debug)]
 pub struct NaturalLoops<G: Graph> {
     loops: Vec<NaturalLoop<G>>,
-    inner_most_loop_indices: IndexMap<G::Node, [usize; 2]>,
+    inner_most_loop_indices: IndexMap<[usize; 2], G::Node>,
 }
 
 impl<G: Graph> NaturalLoops<G> {
@@ -166,7 +165,7 @@ impl<G: Graph> NaturalLoops<G> {
                             loop_index,
                             i,
                         );
-                        break;  
+                        break;
                     }
                 }
             }
@@ -177,7 +176,6 @@ impl<G: Graph> NaturalLoops<G> {
 
             loop_.outer_loop_index = this.inner_most_loop_indices.get(&loop_.header).unwrap()[1];
         }
-
 
         this
     }

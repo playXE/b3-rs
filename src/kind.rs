@@ -18,19 +18,15 @@ impl Kind {
     }
 
     pub fn with_traps(self, traps: bool) -> Self {
-        Self {
-            traps,
-            ..self
-        }
+        Self { traps, ..self }
     }
 
     pub fn set_sensitive_to_nan(&mut self, is_sensitive_to_nan: bool) {
         self.is_sensitive_to_nan = is_sensitive_to_nan;
     }
 
-
     pub const fn has_extra_bits(self) -> bool {
-        self.is_chill || self.traps 
+        self.is_chill || self.traps
     }
 
     pub fn set_opcode(&mut self, opcode: Opcode) {
@@ -47,19 +43,18 @@ impl Kind {
     /// constant-fold Div(x, 0) to any value or to replace it with any effectful operation.
     /// But when it's chill, that means that the semantics when it would have trapped are
     /// the JS semantics. For example, Div<Chill>(@a, @b) means:
-    ///
+    /// ```mustfail
     ///     ((a | 0) / (b | 0)) | 0
-    ///
+    /// ```
     /// And Mod<Chill>(a, b) means:
-    ///
+    /// ```mustfail
     ///     ((a | 0) % (b | 0)) | 0
-    ///
+    /// ```
     /// Note that Div<Chill> matches exactly how ARM handles integer division.
     pub const fn has_chill(&self) -> bool {
         match self.opcode {
-            Opcode::Div
-            | Opcode::Mod => true,
-            _ => false
+            Opcode::Div | Opcode::Mod => true,
+            _ => false,
         }
     }
     pub const fn is_chill(&self) -> bool {
@@ -73,10 +68,8 @@ impl Kind {
             | Opcode::Mul
             | Opcode::Div
             | Opcode::DoubleToFloat
-            | Opcode::FloatToDouble
-             => true,
+            | Opcode::FloatToDouble => true,
             _ => false,
-
         }
     }
 
@@ -86,20 +79,19 @@ impl Kind {
             | Opcode::Load8S
             | Opcode::Load16Z
             | Opcode::Load16S
-            | Opcode::Load 
+            | Opcode::Load
             | Opcode::Store8
             | Opcode::Store16
             | Opcode::Store
             | Opcode::AtomicWeakCAS
             | Opcode::AtomicStrongCAS
-            | Opcode::AtomicXchgAdd 
+            | Opcode::AtomicXchgAdd
             | Opcode::AtomicXchgSub
             | Opcode::AtomicXchgAnd
             | Opcode::AtomicXchgOr
             | Opcode::AtomicXchgXor
-            | Opcode::AtomicXchg
-            => true,
-            _ => false 
+            | Opcode::AtomicXchg => true,
+            _ => false,
         }
     }
 

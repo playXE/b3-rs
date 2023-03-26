@@ -1,113 +1,81 @@
-use crate::{block::BlockId, procedure::Procedure};
-
-#[derive(Debug, Clone, Copy)]
-pub struct BlockInsertion<T: Copy> {
-    pub index: usize,
-    pub block: T,
-}
-
-impl<T: Copy> PartialEq for BlockInsertion<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
-}
-
-impl<T: Copy> Eq for BlockInsertion<T> {}
-
-impl<T: Copy> PartialOrd for BlockInsertion<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T: Copy> Ord for BlockInsertion<T> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.index.cmp(&other.index)
-    }
-}
-
-pub fn execute_insertions<T: Copy>(
-    target: &mut Vec<T>,
-    insertions: &mut Vec<BlockInsertion<T>>,
-) -> usize {
-    let num_insertions = insertions.len();
-
-    if num_insertions == 0 {
-        return 0;
-    }
-
-    target.reserve(num_insertions);
-
-    let mut last_index = target.len();
-
-    for index_in_insertions in (0..num_insertions).rev() {
-        let first_index = insertions[index_in_insertions].index + index_in_insertions;
-        let index_offset = index_in_insertions + 1;
-
-        let mut i = last_index;
-
-        while {
-            i -= 1;
-            i > first_index
-        } {
-            target[i] = target[i - index_offset];
-        }
-
-        target[first_index] = insertions[index_in_insertions].block;
-
-        last_index = first_index;
-    }
-
-    insertions.truncate(0);
-
-    num_insertions
-}
+use crate::{
+    block::{BasicBlock, BlockId},
+    procedure::Procedure,
+    utils::insertion::{execute_insertions, Insertion},
+};
 
 pub struct GenericBlockInsertionSet {
     blocks: Vec<BlockId>,
-    insertions: Vec<BlockInsertion<BlockId>>,
+    insertions: Vec<Insertion<BlockId>>,
 }
 
 impl GenericBlockInsertionSet {
-    pub fn new() -> Self {
+    pub fn new(proc: &Procedure) -> Self {
         Self {
-            blocks: vec![],
+            blocks: proc.blocks.iter().map(|x| BlockId(x.index)).collect(),
             insertions: vec![],
         }
     }
 
-    pub fn insert(&mut self, insertion: BlockInsertion<BlockId>) {
+    pub fn insert_insertion(&mut self, insertion: Insertion<BlockId>) {
         self.insertions.push(insertion);
     }
 
-    pub fn insert_new(&mut self, index: usize) -> BlockId {
-        self.insert(BlockInsertion {
-            index,
-            block: BlockId(usize::MAX),
-        });
-        BlockId(usize::MAX)
+    pub fn insert(&mut self, proc: &mut Procedure, index: usize, frequency: f64) -> BlockId {
+        let block = BasicBlock::new(usize::MAX, frequency);
+        let id = BlockId(proc.blocks.len());
+        proc.blocks.push(block);
+        self.insert_insertion(Insertion::new(index, id));
+        id
     }
 
-    pub fn insert_before(&mut self, before: BlockId) -> BlockId {
-        self.insert_new(before.0)
+    pub fn insert_before(
+        &mut self,
+        proc: &mut Procedure,
+        before: BlockId,
+        frequency: Option<f64>,
+    ) -> BlockId {
+        self.insert(
+            proc,
+            before.0,
+            frequency.unwrap_or_else(|| proc.block(before).frequency()),
+        )
     }
 
-    pub fn insert_after(&mut self, after: BlockId) -> BlockId {
-        self.insert_new(after.0 + 1)
+    pub fn insert_after(
+        &mut self,
+        proc: &mut Procedure,
+        after: BlockId,
+        frequency: Option<f64>,
+    ) -> BlockId {
+        self.insert(
+            proc,
+            after.0 + 1,
+            frequency.unwrap_or_else(|| proc.block(after).frequency()),
+        )
     }
 
     pub fn execute(&mut self, proc: &mut Procedure) -> bool {
         if self.insertions.is_empty() {
             return false;
         }
-
+        // We allow insertions to be given to us in any order. So, we need to sort them before
+        // running `execute_insertions`. We strongly prefer a stable sort and we want it to be
+        // fast.
         self.insertions.sort();
 
         execute_insertions(&mut self.blocks, &mut self.insertions);
 
+        self.blocks.retain(|block| block.0 != usize::MAX);
+
         for i in 0..self.blocks.len() {
-            let block = self.blocks[i];
-            proc.block_mut(block).index = i;
+            println!(
+                "{} -> {:?} (from {})",
+                i,
+                self.blocks[i],
+                proc.block(self.blocks[i]).index
+            );
+            proc.block_mut(self.blocks[i]).index = i;
         }
 
         true

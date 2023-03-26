@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use indexmap::{IndexMap, IndexSet};
 
 use crate::{
     block::{blocks_in_pre_order, BlockId},
@@ -9,8 +8,9 @@ use crate::{
     liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
     opcode::Opcode,
     procedure::Procedure,
-    ssa_calculator::{SSACalculator, SSAVariableId},
+    ssa_calculator::{SSACalculator},
     typ::Type,
+    utils::index_set::{IndexMap, IndexSet},
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
     variable_liveness::{VariableLiveness, VariableLivenessAdapter},
@@ -22,15 +22,15 @@ pub fn demote_values(proc: &mut Procedure, values: &IndexSet<ValueId>) {
     let mut map = HashMap::new();
     let mut phi_map = HashMap::new();
 
-    for value in values.iter() {
-        let typ = proc.value(*value).typ();
+    for value in values.indices().map(ValueId) {
+        let typ = proc.value(value).typ();
 
         let variable = proc.add_variable(typ);
 
-        map.insert(*value, variable);
+        map.insert(value, variable);
 
-        if proc.value(*value).kind.opcode() == Opcode::Phi {
-            phi_map.insert(*value, variable);
+        if proc.value(value).kind.opcode() == Opcode::Phi {
+            phi_map.insert(value, variable);
         }
     }
 
@@ -128,8 +128,6 @@ pub fn demote_values(proc: &mut Procedure, values: &IndexSet<ValueId>) {
 
         insertion_set.execute(proc, block);
     }
-
-   
 }
 
 pub fn demoted_values(proc: &Procedure) -> IndexSet<ValueId> {
@@ -150,7 +148,6 @@ pub fn demoted_values(proc: &Procedure) -> IndexSet<ValueId> {
     }
     values
 }
-
 
 /// This fixes SSA for you. Use this after you have done [demote_values()](demote_values) and you have performed
 /// whatever evil transformation you needed.
@@ -214,8 +211,7 @@ fn fix_ssa_locally(proc: &mut Procedure) {
                     let variable = proc.value(value).as_variable().unwrap();
 
                     if let Some(replacement) = mapping.get(variable.0) {
-                        proc.value_mut(value)
-                            .replace_with_identity(replacement.1);
+                        proc.value_mut(value).replace_with_identity(replacement.1);
                     }
                 }
 
@@ -259,12 +255,13 @@ fn fix_ssa_globally(proc: &mut Procedure) {
     let mut ssa = SSACalculator::new(liveness.adapter.cfg);
 
     let mut calc_var_to_variable = vec![];
-    let mut variable_to_calc_var = vec![SSAVariableId(usize::MAX); liveness.adapter.cfg.variables.size()];
+    let mut variable_to_calc_var = IndexMap::with_capacity(liveness.adapter.cfg.variables.size());
+    //vec![SSAVariableId(usize::MAX); liveness.adapter.cfg.variables.size()];
 
     for var in (0..liveness.adapter.cfg.variables.size()).map(VariableId) {
         let calc_var = ssa.new_variable();
         calc_var_to_variable.push(var);
-        variable_to_calc_var[var.0] = calc_var;
+        variable_to_calc_var.insert(var, calc_var);
     }
 
     for block in (0..liveness.adapter.cfg.blocks.len()).map(BlockId) {
@@ -276,7 +273,7 @@ fn fix_ssa_globally(proc: &mut Procedure) {
             }
 
             let variable = value.as_variable().unwrap();
-            if let Some(calc_var) = variable_to_calc_var.get(variable.0) {
+            if let Some(calc_var) = variable_to_calc_var.get(&variable) {
                 ssa.new_def(*calc_var, block, value.children[0]);
             }
         }
@@ -288,7 +285,7 @@ fn fix_ssa_globally(proc: &mut Procedure) {
         ssa.compute_phis(liveness.adapter.cfg, |calc_var, block, proc| {
             let variable = calc_var_to_variable[calc_var.0];
 
-            if !live_at_head.is_live_at_head(block, variable) {
+            if !live_at_head.is_live_at_head(block, proc, variable) {
                 return None;
             }
             let typ = proc.variable(variable).typ();
@@ -320,14 +317,12 @@ fn fix_ssa_globally(proc: &mut Procedure) {
                               proc: &mut Procedure,
                               ssa: &mut SSACalculator|
          -> ValueId {
-            
-            if let Some(replacement) = mapping.get(variable.0) { 
+            if let Some(replacement) = mapping.get(variable.0) {
                 replacement.1
             } else {
-                let calc_var = variable_to_calc_var[variable.0];
+                let calc_var = variable_to_calc_var[variable];
                 let def = ssa.reaching_def_at_head(block, calc_var, proc);
                 if let Some(def) = def {
-                    
                     mapping.set(variable.0, def.value.get());
                     return def.value.get();
                 }
@@ -340,10 +335,7 @@ fn fix_ssa_globally(proc: &mut Procedure) {
             let variable = calc_var_to_variable[phi_def.variable.0];
             insertion_set.insert_value(0, phi_def.value.get());
             mapping.set(variable.0, phi_def.value.get());
-            println!("add to mapping {:?} -> {:?} in {:?}", variable, phi_def.value.get(), block);
         }
-
-        println!("mapping: {:?} in {:?}", mapping, block);
 
         for value_index in 0..proc.block(block).len() {
             let val = proc.block(block).values[value_index];

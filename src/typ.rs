@@ -11,7 +11,7 @@ pub enum TypeKind {
     Double,
     V128,
 
-    Tuple = 1 << 31
+    Tuple = 1 << 31,
 }
 
 impl Default for TypeKind {
@@ -32,7 +32,6 @@ impl Type {
     pub const Double: Self = Self::new(TypeKind::Double);
     pub const V128: Self = Self::new(TypeKind::V128);
     pub const Void: Self = Self::new(TypeKind::Void);
-
 
     pub const fn new(kind: TypeKind) -> Self {
         Self { kind: kind as _ }
@@ -57,14 +56,14 @@ impl Type {
     pub const fn is_int(&self) -> bool {
         match self.kind() {
             TypeKind::Int32 | TypeKind::Int64 => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub const fn is_float(&self) -> bool {
         match self.kind() {
             TypeKind::Float | TypeKind::Double => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -75,24 +74,24 @@ impl Type {
     pub fn is_vector(&self) -> bool {
         match self.kind() {
             TypeKind::V128 => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn is_tuple(&self) -> bool {
         match self.kind() {
             TypeKind::Tuple => true,
-            _ => false
+            _ => false,
         }
     }
 }
 
 pub const fn pointer_type() -> Type {
-    #[cfg(target_pointer_width="64")]
+    #[cfg(target_pointer_width = "64")]
     {
         Type::new(TypeKind::Int64)
     }
-    #[cfg(not(target_pointer_width="64"))]
+    #[cfg(not(target_pointer_width = "64"))]
     {
         Type::new(TypeKind::Int32)
     }

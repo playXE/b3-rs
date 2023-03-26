@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{value::ValueId, typ::Type, procedure::Procedure, block::BlockId};
+use crate::{block::BlockId, procedure::Procedure, typ::Type, value::ValueId};
 
 pub struct Insertion {
     pub index: usize,
@@ -33,7 +33,7 @@ pub fn execute_insertions(target: &mut Vec<ValueId>, insertions: &mut Vec<Insert
     if num_insertions == 0 {
         return 0;
     }
-    
+
     target.resize(target.len() + num_insertions, ValueId(usize::MAX));
 
     let mut last_index = target.len();
@@ -63,14 +63,14 @@ pub fn execute_insertions(target: &mut Vec<ValueId>, insertions: &mut Vec<Insert
 
 pub struct InsertionSet {
     insertions: Vec<Insertion>,
-    bottom_for_type: HashMap<Type, ValueId>
+    bottom_for_type: HashMap<Type, ValueId>,
 }
 
 impl InsertionSet {
     pub fn new() -> Self {
         Self {
             insertions: Vec::new(),
-            bottom_for_type: HashMap::new()
+            bottom_for_type: HashMap::new(),
         }
     }
 
@@ -87,25 +87,48 @@ impl InsertionSet {
         value
     }
 
-    pub fn insert_int_constant(&mut self, index: usize, typ: Type, value: i64, proc: &mut Procedure) -> ValueId {
+    pub fn insert_int_constant(
+        &mut self,
+        index: usize,
+        typ: Type,
+        value: i64,
+        proc: &mut Procedure,
+    ) -> ValueId {
         let x = proc.add_int_constant(typ, value);
         self.insert_value(index, x)
     }
 
-    pub fn insert_int_constant_like(&mut self, index: usize, like: ValueId, value: i64, proc: &mut Procedure) -> ValueId {
+    pub fn insert_int_constant_like(
+        &mut self,
+        index: usize,
+        like: ValueId,
+        value: i64,
+        proc: &mut Procedure,
+    ) -> ValueId {
         let like = proc.value(like).typ();
         let x = proc.add_int_constant(like, value);
         self.insert_value(index, x)
     }
 
     pub fn insert_bottom(&mut self, index: usize, typ: Type, proc: &mut Procedure) -> ValueId {
-        let x = *self.bottom_for_type.entry(typ).or_insert_with(|| proc.add_bits_constant(typ, 0u64));
+        let x = *self
+            .bottom_for_type
+            .entry(typ)
+            .or_insert_with(|| proc.add_bits_constant(typ, 0u64));
         self.insert_value(index, x)
     }
 
-    pub fn insert_bottom_like(&mut self, index: usize, like: ValueId, proc: &mut Procedure) -> ValueId {
+    pub fn insert_bottom_like(
+        &mut self,
+        index: usize,
+        like: ValueId,
+        proc: &mut Procedure,
+    ) -> ValueId {
         let like = proc.value(like).typ();
-        let x = *self.bottom_for_type.entry(like).or_insert_with(|| proc.add_bits_constant(like, 0u64));
+        let x = *self
+            .bottom_for_type
+            .entry(like)
+            .or_insert_with(|| proc.add_bits_constant(like, 0u64));
         self.insert_value(index, x)
     }
 
@@ -114,13 +137,12 @@ impl InsertionSet {
         self.insert_value(index, x)
     }
 
-    pub fn execute(&mut self, proc: &mut Procedure, block: BlockId)  {
-
+    pub fn execute(&mut self, proc: &mut Procedure, block: BlockId) {
         for insertion in self.insertions.iter() {
             proc.value_mut(insertion.value).owner = Some(block);
         }
         self.insertions.sort();
-        execute_insertions(&mut proc.block_mut(block).values, &  mut self.insertions);
+        execute_insertions(&mut proc.block_mut(block).values, &mut self.insertions);
 
         self.bottom_for_type.clear();
     }

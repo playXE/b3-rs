@@ -1,6 +1,6 @@
+use std::mem::size_of;
 
-
-use crate::width::Width;
+use crate::width::{width_for_bytes, Width};
 
 use super::typ::*;
 
@@ -33,4 +33,17 @@ impl std::fmt::Display for Bank {
             Bank::FP => write!(f, "FP"),
         }
     }
+}
+
+pub fn conservative_width_without_vectors(bank: Bank) -> Width {
+    if bank == Bank::FP {
+        Width::W64
+    } else {
+        width_for_bytes(size_of::<usize>())
+    }
+}
+
+pub fn for_each_bank<F: FnMut(Bank)>(mut f: F) {
+    f(Bank::GP);
+    f(Bank::FP);
 }

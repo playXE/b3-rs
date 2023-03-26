@@ -1,4 +1,10 @@
-use crate::{procedure::Procedure, liveness::{LivenessAdapter, Liveness}, variable::VariableId, block::BlockId, opcode::Opcode};
+use crate::{
+    block::BlockId,
+    liveness::{Liveness, LivenessAdapter},
+    opcode::Opcode,
+    procedure::Procedure,
+    variable::VariableId,
+};
 
 pub struct VariableLivenessAdapter<'a> {
     pub cfg: &'a mut Procedure,
@@ -16,30 +22,36 @@ impl<'a> LivenessAdapter for VariableLivenessAdapter<'a> {
     }
 
     fn for_each_def<F>(
-            &self,
-            block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
-            value_boundary_index: usize,
-            mut func: F,
-        ) where
-            F: FnMut(Self::Thing) {
-        let value = self.cfg.block(block).values.get(value_boundary_index.wrapping_sub(1));
+        &self,
+        block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
+        value_boundary_index: usize,
+        mut func: F,
+    ) where
+        F: FnMut(Self::Thing),
+    {
+        let value = self
+            .cfg
+            .block(block)
+            .values
+            .get(value_boundary_index.wrapping_sub(1));
 
         match value {
             Some(x) if self.cfg.value(*x).kind.opcode() == Opcode::Set => {
                 func(self.cfg.value(*x).as_variable().unwrap());
             }
 
-            _ => ()
+            _ => (),
         }
     }
 
     fn for_each_use<F>(
-            &self,
-            block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
-            value_boundary_index: usize,
-            mut func: F,
-        ) where
-            F: FnMut(Self::Thing) {
+        &self,
+        block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
+        value_boundary_index: usize,
+        mut func: F,
+    ) where
+        F: FnMut(Self::Thing),
+    {
         let value = self.cfg.block(block).values.get(value_boundary_index);
 
         match value {
@@ -47,16 +59,13 @@ impl<'a> LivenessAdapter for VariableLivenessAdapter<'a> {
                 func(self.cfg.value(*x).as_variable().unwrap());
             }
 
-            _ => ()
+            _ => (),
         }
-        
     }
 
-    fn prepare_to_compute(&mut self) {
-        
-    }
+    fn prepare_to_compute(&mut self) {}
 
-    fn index_to_value(index: usize) -> Self::Thing {
+    fn index_to_value(_: &Self::CFG, index: usize) -> Self::Thing {
         VariableId(index)
     }
 
@@ -64,7 +73,7 @@ impl<'a> LivenessAdapter for VariableLivenessAdapter<'a> {
         self.cfg.variables.size()
     }
 
-    fn value_to_index(thing: Self::Thing) -> usize {
+    fn value_to_index(_: &Self::CFG, thing: Self::Thing) -> usize {
         thing.0
     }
 }

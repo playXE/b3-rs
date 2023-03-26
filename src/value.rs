@@ -1,16 +1,22 @@
-use std::ops::Range;
+use std::{hash::Hash, ops::Range};
 
 use tinyvec::TinyVec;
 
 use crate::{
-    block::{BlockId, FrequentBlock, BasicBlock},
+    air::stack_slot::StackSlotId,
+    bank::{bank_for_type, Bank},
+    block::{BasicBlock, BlockId, FrequentBlock},
     effects::Effects,
+    jit::reg::Reg,
     kind::Kind,
     opcode::Opcode,
+    procedure::Procedure,
     sparse_collection::SparseElement,
+    stackmap_value::StackMapValue,
     typ::{Type, TypeKind},
     variable::VariableId,
-    *, procedure::Procedure, 
+    width::{width_for_type, Width},
+    *, utils::index_set::KeyIndex,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -35,7 +41,7 @@ pub struct Value {
     pub(crate) children: TinyVec<[ValueId; 3]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Ord, PartialOrd)]
 #[repr(C)]
 pub struct ValueId(pub usize);
 
@@ -75,13 +81,187 @@ pub enum ValueData {
         range: Range<usize>,
         fence_range: Range<usize>,
     },
-    Argument(usize),
+    Argument(Reg),
     CCallValue(Effects),
     Variable(VariableId),
     Upsilon(Option<ValueId>),
+    StackMap(StackMapValue),
+    SlotBase(StackSlotId),
 }
 
 impl Value {
+    pub fn argument_reg(&self) -> Option<Reg> {
+        match self.data {
+            ValueData::Argument(reg) => Some(reg),
+            _ => None,
+        }
+    }
+
+    pub fn is_int_of(&self, val: i64) -> bool {
+        match self.kind.opcode() {
+            Opcode::Const32 => self.as_int32() == Some(val as i32),
+            Opcode::Const64 => self.as_int64() == Some(val),
+            _ => false,
+        }
+    }
+    pub fn returns_bool(&self, proc: &Procedure) -> bool {
+        if self.typ().kind() != TypeKind::Int32 {
+            return false;
+        }
+
+        match self.kind.opcode() {
+            Opcode::Const32 => self.as_int32() == Some(0) || self.as_int32() == Some(1),
+
+            Opcode::BitAnd => {
+                proc.value(self.children[0]).returns_bool(proc)
+                    || proc.value(self.children[1]).returns_bool(proc)
+            }
+
+            Opcode::BitOr | Opcode::BitXor => {
+                proc.value(self.children[0]).returns_bool(proc)
+                    && proc.value(self.children[1]).returns_bool(proc)
+            }
+
+            Opcode::Select => {
+                proc.value(self.children[1]).returns_bool(proc)
+                    && proc.value(self.children[2]).returns_bool(proc)
+            }
+
+            Opcode::Equal
+            | Opcode::NotEqual
+            | Opcode::LessThan
+            | Opcode::LessEqual
+            | Opcode::GreaterThan
+            | Opcode::GreaterEqual
+            | Opcode::Above
+            | Opcode::AboveEqual
+            | Opcode::Below
+            | Opcode::BelowEqual
+            | Opcode::EqualOrUnordered
+            | Opcode::AtomicWeakCAS => true,
+
+            _ => false,
+        }
+    }
+
+    pub fn access_width(&self, proc: &Procedure) -> Width {
+        match self.kind.opcode() {
+            Opcode::Load8Z | Opcode::Load8S | Opcode::Store8 => Width::W8,
+
+            Opcode::Load16Z | Opcode::Load16S | Opcode::Store16 => Width::W16,
+
+            Opcode::Load => width_for_type(proc.value(self.children[0]).typ()),
+            Opcode::Store => width_for_type(self.typ()),
+
+            _ => Width::W8,
+        }
+    }
+
+    pub fn access_bank(&self, proc: &Procedure) -> Bank {
+        match self.kind.opcode() {
+            Opcode::Load8Z | Opcode::Load8S | Opcode::Store8 => Bank::GP,
+
+            Opcode::Load16Z | Opcode::Load16S | Opcode::Store16 => Bank::GP,
+
+            Opcode::Load => bank_for_type(proc.value(self.children[0]).typ()),
+            Opcode::Store => bank_for_type(self.typ()),
+
+            _ => Bank::GP,
+        }
+    }
+
+    pub fn slot_base_value(&self) -> Option<StackSlotId> {
+        match self.data {
+            ValueData::SlotBase(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    pub fn memory_value(&self) -> Option<(i32, Range<usize>, Range<usize>)> {
+        match self.data {
+            ValueData::MemoryValue {
+                offset,
+                ref range,
+                ref fence_range,
+            } => Some((offset, range.clone(), fence_range.clone())),
+            _ => None,
+        }
+    }
+
+    pub fn effects(&self) -> Effects {
+        let mut result = Effects::none();
+
+        match self.kind.opcode() {
+            Opcode::Div | Opcode::UDiv | Opcode::Mod | Opcode::UMod => {
+                result.control_dependant = true;
+            }
+
+            Opcode::Load8Z | Opcode::Load8S | Opcode::Load16S | Opcode::Load16Z | Opcode::Load => {
+                let (_offset, range, fence_range) = self.memory_value().unwrap();
+
+                result.reads = range;
+
+                if fence_range.start != 0 {
+                    result.writes = fence_range;
+                    result.fence = true;
+                }
+
+                result.control_dependant = true;
+            }
+
+            Opcode::CCall => match self.data {
+                ValueData::CCallValue(ref ccall) => result = ccall.clone(),
+                _ => unreachable!(),
+            },
+
+            Opcode::Patchpoint => {
+                todo!()
+            }
+
+            Opcode::Phi | Opcode::Upsilon => {
+                result.writes_local_state = true;
+            }
+
+            Opcode::Jump
+            | Opcode::Branch
+            | Opcode::Switch
+            | Opcode::Return
+            | Opcode::Oops
+            | Opcode::EntrySwitch => {
+                result.terminal = true;
+            }
+
+            _ => (),
+        }
+
+        result
+    }
+
+    pub fn stackmap(&self) -> Option<&StackMapValue> {
+        match self.data {
+            ValueData::StackMap(ref stackmap) => Some(stackmap),
+            _ => None,
+        }
+    }
+
+    pub fn stackmap_mut(&mut self) -> Option<&mut StackMapValue> {
+        match self.data {
+            ValueData::StackMap(ref mut stackmap) => Some(stackmap),
+            _ => None,
+        }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        match self.data {
+            ValueData::Const32(_) => true,
+            ValueData::Const64(_) => true,
+            ValueData::Const128(_) => true,
+            ValueData::Double(_) => true,
+            ValueData::Float(_) => true,
+            _ => false,
+        }
+    }
+
     pub(crate) fn build_adjacency_list(
         num_children: NumChildren,
         args: &[ValueId],
@@ -245,6 +425,13 @@ impl Value {
         }
     }
 
+    pub fn has_int(&self) -> bool {
+        match self.kind.opcode() {
+            Opcode::Const32 | Opcode::Const64 => true,
+            _ => false,
+        }
+    }
+
     pub fn has_int32(&self) -> bool {
         match self.kind.opcode() {
             Opcode::Const32 => true,
@@ -270,6 +457,20 @@ impl Value {
         match self.kind.opcode() {
             Opcode::Const32 | Opcode::Const64 | Opcode::ConstDouble | Opcode::ConstFloat => true,
             _ => false,
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self.kind.opcode() {
+            Opcode::Const32 => match self.data {
+                ValueData::Const32(value) => Some(value as i64),
+                _ => unreachable!(),
+            },
+            Opcode::Const64 => match self.data {
+                ValueData::Const64(value) => Some(value),
+                _ => unreachable!(),
+            },
+            _ => None,
         }
     }
 
@@ -1023,12 +1224,22 @@ impl Value {
         }
     }
 
-    pub fn fmt_successors<W: std::fmt::Write>(&self, f: &mut W, _proc: &Procedure, block: &BasicBlock) -> std::fmt::Result {
+    pub fn fmt_successors<W: std::fmt::Write>(
+        &self,
+        f: &mut W,
+        _proc: &Procedure,
+        block: &BasicBlock,
+    ) -> std::fmt::Result {
         if self.kind.opcode() == Opcode::Branch && block.successor_list().len() == 2 {
-            write!(f, "Then: block{}, Else: block{}", block.taken().0.0, block.not_taken().0.0)
+            write!(
+                f,
+                "Then: BB{}, Else: BB{}",
+                block.taken().0 .0,
+                block.not_taken().0 .0
+            )
         } else {
             for (i, succ) in block.successor_list().iter().enumerate() {
-                write!(f, "block{}", succ.0.0)?;
+                write!(f, "BB{}", succ.0 .0)?;
                 if i < block.successor_list().len() - 1 {
                     write!(f, ", ")?;
                 }
@@ -1046,12 +1257,11 @@ impl Value {
             write!(f, "v@{}", child.0)?;
             if i < self.children.len() - 1 {
                 write!(f, ", ")?;
-            }   
+            }
         }
 
-  
         match self.data {
-            ValueData::None => {},
+            ValueData::None => {}
             ValueData::Const128(x) => write!(f, " ${:x}", x)?,
             ValueData::Const64(x) => write!(f, " ${:x}", x)?,
             ValueData::Const32(x) => write!(f, " ${:x}", x)?,
@@ -1059,12 +1269,12 @@ impl Value {
             ValueData::Double(x) => write!(f, " ${:x}", x)?,
             ValueData::Variable(x) => write!(f, " var@{}", x.0)?,
             ValueData::MemoryValue { offset, .. } => write!(f, " ${:x}", offset)?,
-            ValueData::Argument(x) => write!(f, "arg@{}", x)?,
+            ValueData::Argument(x) => write!(f, "{:?}", x)?,
             ValueData::Upsilon(x) => match x {
                 Some(x) => write!(f, " phi=v@{}", x.0)?,
                 None => write!(f, " phi=none")?,
             },
-            _ => todo!()
+            _ => todo!(),
         }
 
         write!(f, ")")?;
@@ -1072,7 +1282,13 @@ impl Value {
         Ok(())
     }
 
-    pub fn replace_with_value(&mut self, kind: impl Into<Kind>, typ: Type, owner: Option<BlockId>, value: ValueId) {
+    pub fn replace_with_value(
+        &mut self,
+        kind: impl Into<Kind>,
+        typ: Type,
+        owner: Option<BlockId>,
+        value: ValueId,
+    ) {
         self.kind = kind.into();
         self.typ = typ;
         self.owner = owner;
@@ -1082,7 +1298,7 @@ impl Value {
         self.children.push(value);
     }
 
-    pub fn replace_with(&mut self, kind: impl Into<Kind>, typ: Type, owner: Option<BlockId>,) {
+    pub fn replace_with(&mut self, kind: impl Into<Kind>, typ: Type, owner: Option<BlockId>) {
         self.kind = kind.into();
         self.typ = typ;
         self.owner = owner;
@@ -1128,14 +1344,21 @@ impl Value {
             current = proc.value(current).children[0];
         }
 
-        current 
+        current
     }
 
     pub fn perform_substitution(val: ValueId, proc: &mut Procedure) -> bool {
         let mut result = false;
 
-        for (i,child) in proc.value(val).children.iter().copied().collect::<Vec<_>>().into_iter().enumerate() {
-            
+        for (i, child) in proc
+            .value(val)
+            .children
+            .iter()
+            .copied()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .enumerate()
+        {
             if proc.value(child).kind.opcode() == Opcode::Identity {
                 result = true;
                 proc.value_mut(val).children[i] = Value::fold_identity(child, proc);
@@ -1143,5 +1366,275 @@ impl Value {
         }
 
         result
+    }
+
+    pub fn constrained_child(&self, index: usize) -> ConstrainedValue {
+        assert!(self.stackmap().is_some());
+
+        let stackmap = self.stackmap().unwrap();
+
+        let rep = if index < stackmap.reps.len() {
+            stackmap.reps[index]
+        } else {
+            ValueRep::new(ValueRepKind::ColdAny)
+        };
+
+        ConstrainedValue::new(self.children[index], rep)
+    }
+
+    pub fn set_constraint(&mut self, index: usize, rep: ValueRep) {
+        assert!(self.stackmap().is_some());
+
+        if rep == ValueRep::new(ValueRepKind::ColdAny) {
+            return;
+        }
+
+        let stackmap = self.stackmap_mut().unwrap();
+
+        while stackmap.reps.len() <= index {
+            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+        }
+
+        stackmap.reps[index] = rep;
+    }
+
+    pub fn set_constrained_child(&mut self, index: usize, child: ConstrainedValue) {
+        assert!(self.stackmap().is_some());
+
+        self.children[index] = child.value;
+        self.set_constraint(index, child.rep);
+    }
+
+    pub fn result_width(&self) -> Width {
+        width_for_type(self.typ)
+    }
+
+    pub fn result_bank(&self) -> Bank {
+        bank_for_type(self.typ)
+    }
+}
+
+/// We use this class to describe value representations at stackmaps. It's used both to force a
+/// representation and to get the representation. When the B3 client forces a representation, we say
+/// that it's an input. When B3 tells the client what representation it picked, we say that it's an
+/// output.
+#[derive(Clone, Copy)]
+pub struct ValueRep {
+    u: ValueRepU,
+    kind: ValueRepKind,
+}
+
+impl std::fmt::Debug for ValueRep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ValueRep({:?}: {:x})", self.kind, unsafe {
+            self.u.value
+        })
+    }
+}
+
+impl Hash for ValueRep {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        unsafe {
+            self.u.value.hash(state);
+        }
+        self.kind.hash(state);
+    }
+}
+
+impl ValueRep {
+    pub fn new(kind: ValueRepKind) -> Self {
+        Self {
+            u: ValueRepU { value: 0 },
+            kind,
+        }
+    }
+
+    pub fn from_reg(reg: Reg) -> Self {
+        Self {
+            u: ValueRepU { reg },
+            kind: ValueRepKind::Register,
+        }
+    }
+
+    pub fn reg(reg: Reg) -> Self {
+        Self::from_reg(reg)
+    }
+
+    pub fn late_reg(reg: Reg) -> Self {
+        Self {
+            u: ValueRepU { reg },
+            kind: ValueRepKind::LateRegister,
+        }
+    }
+
+    pub fn stack(offset_from_fp: isize) -> Self {
+        Self {
+            u: ValueRepU { offset_from_fp },
+            kind: ValueRepKind::Stack,
+        }
+    }
+
+    pub fn stack_argument(offset_from_sp: isize) -> Self {
+        Self {
+            u: ValueRepU { offset_from_sp },
+            kind: ValueRepKind::StackArgument,
+        }
+    }
+
+    pub fn constant(value: i64) -> Self {
+        Self {
+            u: ValueRepU { value },
+            kind: ValueRepKind::Constant,
+        }
+    }
+
+    pub fn kind(&self) -> ValueRepKind {
+        self.kind
+    }
+
+    pub fn is_any(&self) -> bool {
+        self.kind == ValueRepKind::WarmAny
+            || self.kind == ValueRepKind::ColdAny
+            || self.kind == ValueRepKind::LateColdAny
+    }
+
+    pub fn is_reg(&self) -> bool {
+        self.kind == ValueRepKind::Register
+            || self.kind == ValueRepKind::LateRegister
+            || self.kind == ValueRepKind::SomeLateRegister
+    }
+
+    pub fn get_reg(&self) -> Reg {
+        assert!(self.is_reg());
+        unsafe { self.u.reg }
+    }
+
+    pub fn is_gpr(&self) -> bool {
+        self.is_reg() && self.get_reg().is_gpr()
+    }
+
+    pub fn is_fpr(&self) -> bool {
+        self.is_reg() && self.get_reg().is_fpr()
+    }
+
+    pub fn gpr(&self) -> u8 {
+        assert!(self.is_gpr());
+        self.get_reg().gpr()
+    }
+
+    pub fn fpr(&self) -> u8 {
+        assert!(self.is_fpr());
+        self.get_reg().fpr()
+    }
+
+    pub fn is_stack(&self) -> bool {
+        self.kind == ValueRepKind::Stack
+    }
+    pub fn is_stack_arguments(&self) -> bool {
+        self.kind == ValueRepKind::StackArgument
+    }
+
+    pub fn is_constant(&self) -> bool {
+        self.kind == ValueRepKind::Constant
+    }
+
+    pub fn value(&self) -> i64 {
+        assert!(self.is_constant());
+        unsafe { self.u.value }
+    }
+
+    pub fn with_offset(&self, offset: isize) -> ValueRep {
+        match self.kind {
+            ValueRepKind::Stack => ValueRep::stack(unsafe { self.u.offset_from_fp + offset }),
+            ValueRepKind::StackArgument => {
+                ValueRep::stack_argument(unsafe { self.u.offset_from_sp + offset })
+            }
+            _ => *self,
+        }
+    }
+}
+
+impl PartialEq for ValueRep {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && unsafe { self.u.value == other.u.value }
+    }
+}
+
+#[derive(Clone, Copy)]
+union ValueRepU {
+    reg: Reg,
+    offset_from_fp: isize,
+    offset_from_sp: isize,
+    value: i64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+pub enum ValueRepKind {
+    /// As an input representation, this means that B3 can pick any representation. As an output
+    /// representation, this means that we don't know. This will only arise as an output
+    /// representation for the active arguments of Check/CheckAdd/CheckSub/CheckMul.
+    WarmAny,
+
+    /// Same as WarmAny, but implies that the use is cold. A cold use is not counted as a use for
+    /// computing the priority of the used temporary.
+    ColdAny,
+
+    /// Same as ColdAny, but also implies that the use occurs after all other effects of the stackmap
+    /// value.
+    LateColdAny,
+
+    /// As an input representation, this means that B3 should pick some register. It could be a
+    /// register that this claims to clobber!
+    SomeRegister,
+
+    /// As an input representation, this means that B3 should pick some register but that this
+    /// register is then cobbered with garbage. This only works for patchpoints.
+    SomeRegisterWithClobber,
+
+    /// As an input representation, this tells us that B3 should pick some register, but implies
+    /// that the def happens before any of the effects of the stackmap. This is only valid for
+    /// the result constraint of a Patchpoint.
+    SomeEarlyRegister,
+
+    /// As an input representation, this tells us that B3 should pick some register, but implies
+    /// the use happens after any defs. This is only works for patchpoints.
+    SomeLateRegister,
+
+    /// As an input representation, this forces a particular register. As an output
+    /// representation, this tells us what register B3 picked.
+    Register,
+
+    /// As an input representation, this forces a particular register and states that
+    /// the register is used late. This means that the register is used after the result
+    /// is defined (i.e, the result will interfere with this as an input).
+    /// It's not a valid output representation.
+    LateRegister,
+
+    /// As an output representation, this tells us what stack slot B3 picked. It's not a valid
+    /// input representation.
+    Stack,
+
+    /// As an input representation, this forces the value to end up in the argument area at some
+    /// offset. As an output representation this tells us what offset from SP B3 picked.
+    StackArgument,
+
+    /// As an output representation, this tells us that B3 constant-folded the value.
+    Constant,
+}
+
+pub struct ConstrainedValue {
+    pub value: ValueId,
+    pub rep: ValueRep,
+}
+
+impl ConstrainedValue {
+    pub fn new(value: ValueId, rep: ValueRep) -> Self {
+        Self { value, rep }
+    }
+}
+
+impl KeyIndex for ValueId {
+    fn index(&self) -> usize {
+        self.0
     }
 }

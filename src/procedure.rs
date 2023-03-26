@@ -1,15 +1,16 @@
 use std::ops::Range;
 
 use crate::{
-    block::{BasicBlock, BlockId, FrequentBlock},
+    block::{is_block_dead, recompute_predecessors, BasicBlock, BlockId, FrequentBlock},
     dominators::{Dominators, Graph},
+    jit::reg::Reg,
     kind::Kind,
     natural_loops::NaturalLoops,
     opcode::Opcode,
     sparse_collection::SparseCollection,
     typ::{Type, TypeKind},
     value::{NumChildren, Value, ValueData, ValueId},
-    variable::{Variable, VariableId},
+    variable::{Variable, VariableId}, air::stack_slot::{StackSlot, StackSlotKind, StackSlotId},
 };
 
 pub struct Procedure {
@@ -18,6 +19,7 @@ pub struct Procedure {
     pub(crate) variables: SparseCollection<Variable>,
     pub(crate) dominators: Option<Dominators<Self>>,
     pub(crate) natural_loops: Option<NaturalLoops<Self>>,
+    pub(crate) stack_slots: Vec<StackSlot>
 }
 
 impl Graph for Procedure {
@@ -62,7 +64,21 @@ impl Procedure {
             variables: SparseCollection::new(),
             dominators: None,
             natural_loops: None,
+            stack_slots: vec![],
         }
+    }
+
+    pub fn add_stack_slot(&mut self, size: usize, stack_slot_kind: StackSlotKind) -> StackSlotId {
+        let slot = StackSlot {
+            byte_size: size as _,
+            kind: stack_slot_kind,
+            index: self.stack_slots.len(),
+            offset_from_fp: 0
+        };
+
+        self.stack_slots.push(slot);
+
+        StackSlotId(self.stack_slots.len() - 1)
     }
 
     pub fn clone(&mut self, id: ValueId) -> ValueId {
@@ -145,6 +161,11 @@ impl Procedure {
         self.natural_loops
             .as_ref()
             .expect("Natural loops not computed")
+    }
+
+    pub fn invalidate_cfg(&mut self) {
+        self.dominators = None;
+        self.natural_loops = None;
     }
 
     pub fn add_block(&mut self, frequency: f64) -> BlockId {
@@ -327,13 +348,13 @@ impl Procedure {
         ))
     }
 
-    pub fn add_argument(&mut self, typ: Type, ix: usize) -> ValueId {
+    pub fn add_argument(&mut self, typ: Type, reg: Reg) -> ValueId {
         self.add(Value::new(
             Opcode::ArgumentReg,
             typ,
             NumChildren::Zero,
             &[],
-            ValueData::Argument(ix),
+            ValueData::Argument(reg),
         ))
     }
 
@@ -389,6 +410,48 @@ impl Procedure {
         }
     }
 
+    pub fn reset_reachability(&mut self) {
+        recompute_predecessors(&mut self.blocks);
+
+        let mut found_dead = false;
+
+        for block in self.blocks.iter() {
+            if is_block_dead(block) {
+                found_dead = true;
+                break;
+            }
+        }
+
+        if !found_dead {
+            return;
+        }
+
+        for value_id in (0..self.values.size()).map(ValueId) {
+            if let ValueData::Upsilon(ref phi) = self.value(value_id).data {
+                let phi_id = phi.unwrap();
+                let phi = self.value(phi_id);
+
+                if is_block_dead(self.block(phi.owner.expect("Owners should be computed"))) {
+                    self.values.at_mut(value_id).unwrap().replace_with_nop();
+                }
+            }
+        }
+
+        for block_id in (0..self.blocks.len()).map(BlockId) {
+            if is_block_dead(self.block(block_id)) {
+                for value_id in std::mem::take(&mut self.block_mut(block_id).values) {
+                    self.delete_value(value_id);
+                }
+                self.blocks[block_id.0].index = usize::MAX;
+                self.blocks[block_id.0].clear();
+            }
+        }
+    }
+
+    pub fn delete_value(&mut self, value_id: ValueId) {
+        self.values.remove(value_id);
+    }
+
     pub fn add_return(&mut self, value: ValueId) -> ValueId {
         self.add(Value::new(
             Opcode::Return,
@@ -398,7 +461,6 @@ impl Procedure {
             ValueData::None,
         ))
     }
-
 
     pub fn display_(&self) -> ProcedureDisplay<'_> {
         ProcedureDisplay { procedure: &self }

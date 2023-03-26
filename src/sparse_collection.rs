@@ -1,4 +1,4 @@
-use std::{ptr::NonNull, marker::PhantomData};
+use std::{marker::PhantomData, ptr::NonNull};
 
 pub struct SparseCollection<T: SparseElement> {
     vector: Vec<Option<T>>,
@@ -111,7 +111,7 @@ impl<T: SparseElement> SparseCollection<T> {
         }
     }
 
-    pub fn remove(&mut self, id: T::Id)  {
+    pub fn remove(&mut self, id: T::Id) {
         self.index_free_list.push(id.into());
         self.vector[id.into()] = None;
     }
@@ -131,8 +131,6 @@ impl<'a, T: SparseElement> Iterator for SparseCollectionIter<'a, T> {
             if let Some(element) = &self.collection.vector[index] {
                 return Some(element);
             }
-
-            
         }
 
         None
@@ -142,7 +140,7 @@ impl<'a, T: SparseElement> Iterator for SparseCollectionIter<'a, T> {
 pub struct SparseCollectionIterMut<'a, T: SparseElement> {
     ptr: NonNull<Option<T>>,
     end: *mut Option<T>,
-    _marker: PhantomData<&'a mut T>
+    _marker: PhantomData<&'a mut T>,
 }
 
 impl<'a, T: SparseElement> Iterator for SparseCollectionIterMut<'a, T> {

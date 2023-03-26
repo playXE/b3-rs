@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashSet, fmt::Debug, hash::Hash, marker::PhantomData, rc::Rc};
 
-use indexmap::{IndexMap, IndexSet};
+use crate::utils::index_set::{IndexMap, IndexSet, KeyIndex};
 
 pub trait Graph {
     type Node: Copy
@@ -12,7 +12,8 @@ pub trait Graph {
         + Hash
         + Debug
         + From<usize>
-        + Into<usize>;
+        + Into<usize>
+        + KeyIndex;
 
     fn num_nodes(&self) -> usize;
     fn node(&self, index: usize) -> Option<Self::Node>;
@@ -71,7 +72,7 @@ impl<G: Graph> BlockData<G> {
 /// list" (see http://dl.acm.org/citation.cfm?id=802184).
 pub struct LengauerTarjan<'a, G: Graph> {
     graph: &'a G,
-    data: IndexMap<G::Node, BlockData<G>>,
+    data: IndexMap<BlockData<G>, G::Node>,
     block_by_pre_number: Vec<G::Node>,
 }
 
@@ -158,7 +159,7 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
 
     fn compute_semi_dominators_and_implicit_immediate_dominators(&mut self) {
         let mut current_pre_number = self.block_by_pre_number.len();
-        
+
         while {
             let res = current_pre_number > 1;
             current_pre_number -= 1;
@@ -166,7 +167,7 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
             res
         } {
             let block = self.block_by_pre_number[current_pre_number];
-    
+
             for predecessor_block in self.graph.predecessors(block).iter().copied() {
                 let intermediate_block = self.eval(predecessor_block);
 
@@ -305,15 +306,15 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
     }
 }
 
-pub struct GraphNodeWorklist<Node: Copy + Clone + PartialEq + Eq + Hash> {
-    seen: HashSet<Node>,
+pub struct GraphNodeWorklist<Node: Copy + Clone + PartialEq + Eq + Hash + KeyIndex> {
+    seen: IndexSet<Node>,
     stack: Vec<Node>,
 }
 
-impl<Node: Copy + Clone + PartialEq + Eq + Hash> GraphNodeWorklist<Node> {
+impl<Node: Copy + Clone + PartialEq + Eq + Hash + KeyIndex> GraphNodeWorklist<Node> {
     pub fn new() -> Self {
         Self {
-            seen: HashSet::new(),
+            seen: IndexSet::new(),
             stack: Vec::new(),
         }
     }
@@ -349,7 +350,7 @@ impl<Node: Copy + Clone + PartialEq + Eq + Hash> GraphNodeWorklist<Node> {
         self.seen.contains(&node)
     }
 
-    pub fn seen(&self) -> &HashSet<Node> {
+    pub fn seen(&self) -> &IndexSet<Node> {
         &self.seen
     }
 
@@ -476,7 +477,7 @@ impl<G: Graph> DomBlockData<G> {
 }
 
 pub struct Dominators<G: Graph + 'static> {
-    data: Rc<IndexMap<G::Node, DomBlockData<G>>>,
+    data: Rc<IndexMap<DomBlockData<G>, G::Node>>,
     marker: PhantomData<&'static G>,
 }
 
@@ -844,7 +845,6 @@ impl<G: Graph> Dominators<G> {
                 block,
                 graph,
                 |graph, other_block| {
-                   
                     if f(graph, other_block) {
                         worklist.push(other_block);
                     }
@@ -866,9 +866,9 @@ pub struct DominatorsDisplay<'a, G: Graph + 'static> {
 impl<'a, G: Graph> std::fmt::Display for DominatorsDisplay<'a, G> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for block_index in 0..self.tree.data.len() {
-            let data = &self.tree.data.get_index(block_index).unwrap();
+            let data = &self.tree.data.at(block_index).unwrap();
 
-            if data.1.pre_number == usize::MAX {
+            if data.pre_number == usize::MAX {
                 continue;
             }
 
@@ -876,16 +876,16 @@ impl<'a, G: Graph> std::fmt::Display for DominatorsDisplay<'a, G> {
                 f,
                 "    Block #{}: idom = {}, idomKids = [",
                 {
-                    let x: usize = (*data.0).into();
+                    let x: usize = block_index;
                     x
                 },
-                self.graph.display(data.1.idom_parent)
+                self.graph.display(data.idom_parent)
             )?;
 
-            for i in 0..data.1.idom_kids.len() {
-                write!(f, "{}", self.graph.display(Some(data.1.idom_kids[i])))?;
+            for i in 0..data.idom_kids.len() {
+                write!(f, "{}", self.graph.display(Some(data.idom_kids[i])))?;
 
-                if i != data.1.idom_kids.len() - 1 {
+                if i != data.idom_kids.len() - 1 {
                     write!(f, ", ")?;
                 }
             }
@@ -893,7 +893,7 @@ impl<'a, G: Graph> std::fmt::Display for DominatorsDisplay<'a, G> {
             write!(
                 f,
                 "], pre/post = {}/{}\n",
-                data.1.pre_number, data.1.post_number
+                data.pre_number, data.post_number
             )?;
         }
 
@@ -1049,7 +1049,7 @@ impl<'a, G: Graph> Graph for BackwardsGraph<'a, G> {
 
 pub struct SpanningTree<'a, G: Graph> {
     graph: &'a G,
-    data: IndexMap<G::Node, (usize, usize)>,
+    data: IndexMap<(usize, usize), G::Node>,
 }
 
 impl<'a, G: Graph> SpanningTree<'a, G> {
@@ -1109,6 +1109,14 @@ pub struct SingleGraphNode<
     is_root: bool,
 }
 
+impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize> + KeyIndex> KeyIndex
+    for SingleGraphNode<N>
+{
+    fn index(&self) -> usize {
+        self.node.index()
+    }
+}
+
 impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>> Into<usize>
     for SingleGraphNode<N>
 {
@@ -1117,7 +1125,7 @@ impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>>
     }
 }
 
-impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>> From<usize> 
+impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>> From<usize>
     for SingleGraphNode<N>
 {
     fn from(node: usize) -> Self {
@@ -1128,7 +1136,9 @@ impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>>
     }
 }
 
-impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>> SingleGraphNode<N> {
+impl<N: Copy + Clone + PartialEq + Eq + Hash + Copy + From<usize> + Into<usize>>
+    SingleGraphNode<N>
+{
     pub fn new(node: N) -> Self {
         Self {
             node,

@@ -1,5 +1,4 @@
 use std::ops::{Deref, DerefMut};
-
 use crate::{
     dominators::{GraphNodeWorklist, GraphVisitOrder, PostOrderGraphNodeWorklist},
     kind::Kind,
@@ -7,7 +6,7 @@ use crate::{
     sparse_collection::SparseElement,
     typ::Type,
     value::ValueId,
-    variable::VariableId,
+    variable::VariableId, jit::reg::Reg, utils::index_set::KeyIndex,
 };
 
 pub struct BasicBlock {
@@ -169,15 +168,11 @@ impl BasicBlock {
     }
 
     pub(crate) fn fmt<W: std::fmt::Write>(&self, f: &mut W, proc: &Procedure) -> std::fmt::Result {
-        write!(
-            f,
-            "block{}: ; frequency = {}:\n",
-            self.index, self.frequency
-        )?;
+        write!(f, "BB{}: ; frequency = {}:\n", self.index, self.frequency)?;
         if !self.predecessor_list.is_empty() {
             write!(f, "  Predecessors: ")?;
             for (i, pred) in self.predecessor_list.iter().enumerate() {
-                write!(f, "block{}", pred.0)?;
+                write!(f, "BB{}", pred.0)?;
 
                 if i < self.predecessor_list.len() - 1 {
                     write!(f, ", ")?;
@@ -202,7 +197,7 @@ impl BasicBlock {
                     .fmt_successors(f, proc, self)?;
             } else {
                 for (i, succ) in self.successor_list.iter().enumerate() {
-                    write!(f, "block{}", succ.0 .0)?;
+                    write!(f, "BB{}", succ.0 .0)?;
 
                     if i < self.successor_list.len() - 1 {
                         write!(f, ", ")?;
@@ -277,6 +272,18 @@ impl DerefMut for BasicBlock {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub usize);
 
+impl KeyIndex for BlockId {
+    fn index(&self) -> usize {
+        self.0
+    }
+}
+
+impl Default for BlockId {
+    fn default() -> Self {
+        Self(usize::MAX)
+    }
+}
+
 impl Into<usize> for BlockId {
     fn into(self) -> usize {
         self.0
@@ -312,6 +319,12 @@ pub enum Frequency {
     /// this happens, never choose Rare; always go with Normal. This is necessary because we
     /// really do punish Rare code very badly.
     Rare,
+}
+
+impl Default for Frequency {
+    fn default() -> Self {
+        Self::Normal
+    }
 }
 
 pub fn max_frequency(a: Frequency, b: Frequency) -> Frequency {
@@ -364,10 +377,10 @@ impl<'a> BasicBlockBuilder<'a> {
     pub fn add_argument<T>(
         &mut self,
         typ: Type,
-        ix: usize,
+        reg: Reg,
         next: impl FnOnce(&mut Self, ValueId) -> T,
     ) -> T {
-        let value = self.func.add_argument(typ, ix);
+        let value = self.func.add_argument(typ, reg);
         self.func.add_to_block(self.block, value);
         next(self, value)
     }
@@ -423,4 +436,37 @@ impl<'a> BasicBlockBuilder<'a> {
         self.func.block_mut(not_taken.0).add_predecessor(self.block);
         self.func.block_mut(taken).add_predecessor(self.block);
     }
+}
+
+pub fn clear_predecessors(blocks: &mut Vec<BasicBlock>) {
+    for block in blocks {
+        block.predecessor_list.clear();
+    }
+}
+
+pub fn recompute_predecessors(blocks: &mut Vec<BasicBlock>) {
+    clear_predecessors(blocks);
+    update_predecessors_after(BlockId(0), blocks)
+}
+
+pub fn update_predecessors_after(root: BlockId, blocks: &mut Vec<BasicBlock>) {
+    let mut worklist = Vec::with_capacity(16);
+
+    worklist.push(root);
+
+    while let Some(block) = worklist.pop() {
+        for (succ, _freq) in blocks[block.0].successor_list.clone().iter().copied() {
+            if blocks[succ.0].add_predecessor(block) {
+                worklist.push(succ);
+            }
+        }
+    }
+}
+
+pub fn is_block_dead(block: &BasicBlock) -> bool {
+    if block.index == usize::MAX {
+        return true;
+    }
+
+    block.predecessor_list.is_empty()
 }

@@ -1,4 +1,4 @@
-use crate::{bank::Bank, typ::Type, width::Width, kind::Kind};
+use crate::{bank::Bank, kind::Kind, typ::Type, width::Width};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -101,7 +101,7 @@ pub enum Opcode {
     ZExt32,
     /// Does a bitwise truncation of Int64->Int32 and Double->Float:
     Trunc,
-    /// Takes ints and returns floating point value. 
+    /// Takes ints and returns floating point value.
     IToD,
     IToF,
     FToI,
@@ -421,37 +421,35 @@ impl Opcode {
         use Opcode::*;
         matches!(
             self,
-            Add 
-            | Sub
-            | Mul
-            | Div
-            | UDiv 
-            | Mod
-            | UMod
-            | BitAnd
-            | BitOr
-            | BitXor
-            | Shl
-            | SShr
-            | ZShr
-            | RotR
-            | RotL
-            | Equal
-            | NotEqual
-            | LessThan
-            | GreaterThan
-            | LessEqual
-            | GreaterEqual
-            | Below
-            | Above
-            | BelowEqual
-            | AboveEqual
-            | EqualOrUnordered
-            | Select
-
+            Add | Sub
+                | Mul
+                | Div
+                | UDiv
+                | Mod
+                | UMod
+                | BitAnd
+                | BitOr
+                | BitXor
+                | Shl
+                | SShr
+                | ZShr
+                | RotR
+                | RotL
+                | Equal
+                | NotEqual
+                | LessThan
+                | GreaterThan
+                | LessEqual
+                | GreaterEqual
+                | Below
+                | Above
+                | BelowEqual
+                | AboveEqual
+                | EqualOrUnordered
+                | Select
         )
     }
-    
+
     pub const fn is_check_math(self) -> bool {
         matches!(self, Self::CheckAdd | Self::CheckSub | Self::CheckMul)
     }

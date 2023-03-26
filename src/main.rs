@@ -1,15 +1,14 @@
-use std::borrow::Cow;
-
-use scheme_compiler::{
+use b3::{
     block::{BasicBlockBuilder, Frequency},
-    dominators::*,
-    fix_ssa::{fix_ssa, demote_values, demoted_values},
+    fix_ssa::fix_ssa,
     opcode::Opcode,
     procedure::Procedure,
-    typ::{Type, TypeKind},
+    typ::Type, jit::reg::Reg, lower_to_air::lower_to_air, air::{liveness_adapter::{TmpLiveness, TmpLivenessAdapter}, arg::ArgTemperature, eliminate_dead_code, lsra::allocate_registers_and_stack_by_linear_scan}, bank::Bank,
 };
+use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
-fn main() {
+#[allow(dead_code)]
+fn factorial() {
     let mut proc = Procedure::new();
 
     // factorial_iterative (Int32) -> Int32
@@ -21,7 +20,7 @@ fn main() {
     let acc = proc.add_variable(Type::Int32);
     let i = proc.add_variable(Type::Int32);
 
-    BasicBlockBuilder::new(&mut proc, root).add_argument(Type::Int32, 0, |inst, arg| {
+    BasicBlockBuilder::new(&mut proc, root).add_argument(Type::Int32, Reg::new_gpr(ARGUMENT_GPR0), |inst, arg| {
         inst.add_variable_set(n, arg, |inst, _| {
             inst.add_int_constant(Type::Int32, 2, |inst, iconst| {
                 inst.add_variable_set(i, iconst, |inst, _| {
@@ -65,15 +64,21 @@ fn main() {
         inst.add_return(accvar);
     });
 
-    println!("{}", proc.display_());
-    
     proc.dominators_or_compute();
-    println!("{}", proc.dominators().display(&proc));
-
     fix_ssa(&mut proc);
 
-    println!("{}", proc.display_());
 
-    proc.compute_dominators();
-   
+    let mut code = lower_to_air(&mut proc);
+    println!("Assembly IR before RA:\n{}", code);
+    eliminate_dead_code::eliminate_dead_code(&mut code);
+    code.reset_reachability();
+
+    allocate_registers_and_stack_by_linear_scan(&mut code);
+
+    println!("Assembly IR after RA:\n{}", code);
+    
+}
+
+fn main() {
+    factorial();
 }

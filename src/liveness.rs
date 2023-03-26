@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use indexmap::{IndexMap, IndexSet};
+use crate::utils::index_set::*;
 
 use crate::dominators::Graph;
 
@@ -14,8 +14,8 @@ pub trait LivenessAdapter {
     fn cfg(&self) -> &Self::CFG;
     fn prepare_to_compute(&mut self);
     fn num_indices(&self) -> usize;
-    fn value_to_index(thing: Self::Thing) -> usize;
-    fn index_to_value(index: usize) -> Self::Thing;
+    fn value_to_index(cfg: &Self::CFG, thing: Self::Thing) -> usize;
+    fn index_to_value(cfg: &Self::CFG, index: usize) -> Self::Thing;
 
     fn for_each_use<F>(
         &self,
@@ -39,18 +39,27 @@ pub trait LivenessAdapter {
 pub struct Liveness<'a, A: LivenessAdapter> {
     pub adapter: &'a mut A,
     pub workset: IndexSparseSet<DefaultIndexSparseSetEntry>,
-    pub live_at_head: IndexMap<<A::CFG as Graph>::Node, Vec<usize>>,
-    pub live_at_tail: IndexMap<<A::CFG as Graph>::Node, Vec<usize>>,
+    pub live_at_head: IndexMap<Vec<usize>, <A::CFG as Graph>::Node>,
+    pub live_at_tail: IndexMap<Vec<usize>, <A::CFG as Graph>::Node>,
 }
 
 impl<'a, A: LivenessAdapter> Liveness<'a, A> {
     pub fn new(adapter: &'a mut A) -> Self {
-        let this = Liveness {
+        let mut this = Liveness {
             workset: IndexSparseSet::new(adapter.num_indices()),
             adapter,
             live_at_head: IndexMap::new(),
             live_at_tail: IndexMap::new(),
         };
+
+        for block_index in 0..this.adapter.cfg().num_nodes() {
+            let block = this.adapter.cfg().node(block_index);
+
+            if let Some(block) = block {
+                this.live_at_head.insert(block, Vec::new());
+                this.live_at_tail.insert(block, Vec::new());
+            }
+        }
 
         this
     }
@@ -97,7 +106,7 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
 
                 self.adapter
                     .for_each_use(block, self.adapter.block_size(block), |index| {
-                        live_at_tail.push(A::value_to_index(index));
+                        live_at_tail.push(A::value_to_index(self.adapter.cfg(), index));
                     });
 
                 live_at_tail.sort();
@@ -133,7 +142,8 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
                     }
 
                     self.adapter.for_each_def(block, 0, |index| {
-                        self.workset.remove(A::value_to_index(index));
+                        self.workset
+                            .remove(A::value_to_index(self.adapter.cfg(), index));
                     });
 
                     let live_at_head = self.live_at_head.entry(block).or_insert_with(Vec::new);
@@ -216,7 +226,7 @@ impl<'a, A: LivenessAdapter> LiveAtHead<'a, A> {
         block: <<A as LivenessAdapter>::CFG as Graph>::Node,
         value: A::Thing,
     ) -> bool {
-        let index = A::value_to_index(value);
+        let index = A::value_to_index(self.liveness.adapter.cfg(), value);
         self.liveness
             .live_at_head
             .get(&block)
@@ -227,7 +237,7 @@ impl<'a, A: LivenessAdapter> LiveAtHead<'a, A> {
 }
 
 pub struct LiveAtHeadCloned<A: LivenessAdapter> {
-    live_at_head: IndexMap<<<A as LivenessAdapter>::CFG as Graph>::Node, Vec<usize>>,
+    live_at_head: IndexMap<Vec<usize>, <<A as LivenessAdapter>::CFG as Graph>::Node>,
 }
 
 impl<A: LivenessAdapter> LiveAtHeadCloned<A> {
@@ -249,9 +259,10 @@ impl<A: LivenessAdapter> LiveAtHeadCloned<A> {
     pub fn is_live_at_head(
         &self,
         block: <<A as LivenessAdapter>::CFG as Graph>::Node,
+        cfg: &A::CFG,
         value: A::Thing,
     ) -> bool {
-        let index = A::value_to_index(value);
+        let index = A::value_to_index(cfg, value);
         self.live_at_head
             .get(&block)
             .unwrap()
@@ -269,13 +280,15 @@ impl<'a, A: LivenessAdapter> Iterator for LiveIterable<'a, A> {
     type Item = A::Thing;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|&index| A::index_to_value(index))
+        self.iter
+            .next()
+            .map(|&index| A::index_to_value(self.liveness.adapter.cfg(), index))
     }
 }
 
 impl<'a, A: LivenessAdapter> LiveIterable<'a, A> {
     pub fn contains(&self, value: A::Thing) -> bool {
-        let index = A::value_to_index(value);
+        let index = A::value_to_index(self.liveness.adapter.cfg(), value);
         self.liveness.workset.contains(index)
     }
 }
@@ -317,13 +330,13 @@ impl<'a, 'b, A: LivenessAdapter> LocalCalc<'a, 'b, A> {
         self.liveness
             .adapter
             .for_each_def(self.block, inst_index + 1, |index| {
-                workset.remove(A::value_to_index(index));
+                workset.remove(A::value_to_index(self.liveness.adapter.cfg(), index));
             });
 
         self.liveness
             .adapter
             .for_each_use(self.block, inst_index, |index| {
-                workset.add(A::value_to_index(index), ());
+                workset.add(A::value_to_index(self.liveness.adapter.cfg(), index), ());
             });
     }
 }
@@ -338,7 +351,7 @@ impl<'a, A: LivenessAdapter> Iterable<'a, A> {
     }
 
     pub fn contains(&self, value: A::Thing) -> bool {
-        let index = A::value_to_index(value);
+        let index = A::value_to_index(self.liveness.adapter.cfg(), value);
         self.liveness.workset.contains(index)
     }
 
@@ -379,7 +392,6 @@ impl<T: Copy + Clone> IndexSparseSetEntry for (usize, T) {
         self.0
     }
 }
-
 
 /// IndexSparseSet is an efficient set of integers that can only be valued
 /// between zero and size() - 1.

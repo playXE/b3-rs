@@ -4,11 +4,9 @@ use std::{
     rc::Rc,
 };
 
-use indexmap::IndexMap;
+use crate::utils::index_set::IndexMap;
 
-use crate::{
-    block::BlockId, dominators::Dominators, procedure::Procedure, value::ValueId,
-};
+use crate::{block::BlockId, dominators::Dominators, procedure::Procedure, value::ValueId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SSAVariableId(pub usize);
@@ -48,13 +46,13 @@ pub struct SSACalculator {
     pub variables: Vec<SSAVariable>,
     pub defs: LinkedList<Rc<SSADef>>,
     pub phis: LinkedList<Rc<SSADef>>,
-    pub data: IndexMap<BlockId, SSABlockData>,
+    pub data: IndexMap<SSABlockData, BlockId>,
     pub dominators: Option<Dominators<Procedure>>,
 }
 
 impl SSACalculator {
     pub fn phis_for_block(&self, block: BlockId) -> &[Rc<SSADef>] {
-        &self.data[&block].phis
+        &self.data[block].phis
     }
 
     pub fn variable(&self, index: SSAVariableId) -> &SSAVariable {
@@ -89,8 +87,8 @@ impl SSACalculator {
         self.phis.clear();
 
         for block_index in 0..self.data.len() {
-            self.data[block_index].defs.clear();
-            self.data[block_index].phis.clear();
+            self.data.at_mut(block_index).unwrap().defs.clear();
+            self.data.at_mut(block_index).unwrap().phis.clear();
         }
     }
 
@@ -114,7 +112,7 @@ impl SSACalculator {
 
         self.defs.push_back(def.clone());
 
-        match self.data[&block].defs.insert(variable, def.clone()) {
+        match self.data[block].defs.insert(variable, def.clone()) {
             Some(r) => {
                 r.value.set(value);
             }
@@ -134,14 +132,14 @@ impl SSACalculator {
     ) -> Option<Rc<SSADef>> {
         let mut block = Some(starting_block);
         while let Some(b) = block {
-            if let Some(def) = self.data[&b].defs.get(&variable).cloned() {
+            if let Some(def) = self.data[b].defs.get(&variable).cloned() {
                 let mut other_block = Some(starting_block);
 
                 while other_block != block {
-                    self.data[&b].defs.insert(variable, def.clone());
+                    self.data[b].defs.insert(variable, def.clone());
                     other_block = self.dominators.as_ref().unwrap().idom(other_block.unwrap());
                 }
-                
+
                 return Some(def.clone());
             }
 
@@ -180,12 +178,11 @@ impl SSACalculator {
             let blocks_with_defs = &self.variables[i].blocks_with_defs;
             // this `clone` is cheap, `Dominators` internally uses `Rc` to share the dominator tree
             let dominators = proc.dominators().clone();
-            
+
             dominators.for_all_blocks_in_pruned_iterated_dominance_frontier_of_mut(
                 &blocks_with_defs,
                 proc,
                 |proc, block| {
-
                     let phi = f(var, block, proc);
 
                     match phi {
@@ -212,7 +209,10 @@ impl SSACalculator {
     }
 
     pub fn display<'a>(&'a self, proc: &'a Procedure) -> SSACalculatorDisplay<'_> {
-        SSACalculatorDisplay { calculator: self, proc }
+        SSACalculatorDisplay {
+            calculator: self,
+            proc,
+        }
     }
 }
 
@@ -238,7 +238,7 @@ impl<'a> std::fmt::Display for SSACalculatorDisplay<'a> {
         for def in self.calculator.defs.iter() {
             write!(
                 f,
-                "def(var{}, block{}, v@{})",
+                "def(var{}, BB{}, v@{})",
                 def.variable.0,
                 def.block.0,
                 def.value.get().0
@@ -250,7 +250,7 @@ impl<'a> std::fmt::Display for SSACalculatorDisplay<'a> {
         for block_index in 0..self.proc.blocks.len() {
             let block = &self.proc.blocks[block_index];
 
-            write!(f, "block{}=>(", block.index)?;
+            write!(f, "BB{}=>(", block.index)?;
             write!(f, "Defs: {{")?;
 
             for (i, entry) in self
@@ -263,7 +263,7 @@ impl<'a> std::fmt::Display for SSACalculatorDisplay<'a> {
                 .enumerate()
             {
                 write!(f, "{}->{}", entry.0 .0, entry.1.value.get().0)?;
-                if i != self.calculator.data[&BlockId(block.index)].defs.len() - 1 {
+                if i != self.calculator.data[BlockId(block.index)].defs.len() - 1 {
                     write!(f, ", ")?;
                 }
             }
@@ -280,12 +280,12 @@ impl<'a> std::fmt::Display for SSACalculatorDisplay<'a> {
             {
                 write!(
                     f,
-                    "def(var{}, block{}, v@{})",
+                    "def(var{}, BB{}, v@{})",
                     def.variable.0,
                     def.block.0,
                     def.value.get().0
                 )?;
-                if i != self.calculator.data[&BlockId(block.index)].phis.len() - 1 {
+                if i != self.calculator.data[BlockId(block.index)].phis.len() - 1 {
                     write!(f, ", ")?;
                 }
             }
@@ -307,7 +307,7 @@ impl std::fmt::Display for SSAVariable {
 
             for (i, block) in self.blocks_with_defs.iter().enumerate() {
                 let block: usize = (*block).into();
-                write!(f, "block{}", block)?;
+                write!(f, "BB{}", block)?;
                 if i != self.blocks_with_defs.len() - 1 {
                     write!(f, ",")?;
                 }
@@ -319,4 +319,3 @@ impl std::fmt::Display for SSAVariable {
         Ok(())
     }
 }
-

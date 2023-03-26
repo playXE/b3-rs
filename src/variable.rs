@@ -1,9 +1,14 @@
-use crate::{bank::{bank_for_type, Bank}, typ::Type, width::{Width, width_for_type}, sparse_collection::SparseElement};
+use crate::{
+    bank::{bank_for_type, Bank},
+    sparse_collection::SparseElement,
+    typ::Type,
+    width::{width_for_type, Width},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Variable {
     index: usize,
-    typ: Type,
+    pub typ: Type,
 }
 
 impl Variable {
@@ -33,9 +38,15 @@ impl std::fmt::Display for Variable {
         write!(f, "{} var{}", self.typ, self.index)
     }
 }
-    
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VariableId(pub usize);
+
+impl crate::utils::index_set::KeyIndex for VariableId {
+    fn index(&self) -> usize {
+        self.0
+    }
+}
 
 impl From<usize> for VariableId {
     fn from(x: usize) -> Self {

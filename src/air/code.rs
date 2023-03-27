@@ -1,19 +1,22 @@
 use tinyvec::TinyVec;
 
 use crate::{
-    bank::{Bank, for_each_bank},
+    bank::{for_each_bank, Bank},
+    block::Frequency,
+    dominators::Graph,
     jit::{
         reg::Reg,
+        register_at_offset::{round_up_to_multiple_of, RegisterAtOffsetList},
         register_set::{RegisterSet, RegisterSetBuilder, ScalarRegisterSet},
     },
     procedure::Procedure,
-    sparse_collection::SparseCollection, block::Frequency, dominators::Graph,
+    sparse_collection::SparseCollection,
 };
 
 use super::{
-    basic_block::{BasicBlock, BasicBlockId, update_predecessors_after},
+    basic_block::{update_predecessors_after, BasicBlock, BasicBlockId},
     special::Special,
-    stack_slot::{StackSlot, StackSlotId},
+    stack_slot::{StackSlot, StackSlotId, StackSlotKind},
     tmp::Tmp,
 };
 
@@ -29,9 +32,15 @@ pub struct Code<'a> {
     pub pinned_regs: ScalarRegisterSet,
     pub num_gp_tmps: usize,
     pub num_fp_tmps: usize,
+    pub frame_size: usize,
+    pub call_arg_area_size: usize,
+    pub stack_is_allocated: bool,
     pub specials: SparseCollection<Special>,
     pub blocks: Vec<BasicBlock>,
-    pub entrypoints: Vec<(BasicBlockId, Frequency)>
+    pub entrypoints: Vec<(BasicBlockId, Frequency)>,
+    pub callee_save_stack_slot: Option<StackSlotId>,
+    pub uncorrected_callee_save_registers_at_offset_list: RegisterAtOffsetList,
+    pub callee_save_registers: RegisterSetBuilder,
 }
 
 impl<'a> Code<'a> {
@@ -47,6 +56,12 @@ impl<'a> Code<'a> {
             specials: SparseCollection::new(),
             blocks: Vec::new(),
             entrypoints: vec![],
+            frame_size: 0,
+            call_arg_area_size: 0,
+            stack_is_allocated: false,
+            callee_save_stack_slot: None,
+            uncorrected_callee_save_registers_at_offset_list: Default::default(),
+            callee_save_registers: RegisterSetBuilder::new(),
         };
 
         for_each_bank(|bank| {
@@ -81,7 +96,7 @@ impl<'a> Code<'a> {
             this.set_regs_in_priority_order(bank, &result);
         });
 
-        this 
+        this
     }
 
     fn set_regs_in_priority_order(&mut self, bank: Bank, regs: &[Reg]) {
@@ -152,7 +167,7 @@ impl<'a> Code<'a> {
             predecessors: TinyVec::new(),
             frequency,
         });
-        
+
         self.block_mut(id).index = id.0;
         id
     }
@@ -195,6 +210,52 @@ impl<'a> Code<'a> {
             }
         }
     }
+
+    pub fn add_stack_slot(&mut self, byte_size: usize, kind: StackSlotKind) -> StackSlotId {
+        let result = self.proc.add_stack_slot(byte_size, kind);
+
+        if self.stack_is_allocated {
+            let extent = round_up_to_multiple_of(
+                self.proc.stack_slots[result.0].alignment() as _,
+                self.frame_size as isize + byte_size as isize,
+            );
+            self.proc.stack_slots[result.0].offset_from_fp = -(extent as isize);
+            self.frame_size = round_up_to_multiple_of(16, extent) as _;
+        }
+
+        result
+    }
+
+    pub fn set_callee_save_registers_at_offset_list(
+        &mut self,
+        register_at_offset_list: RegisterAtOffsetList,
+        slot: StackSlotId,
+    ) {
+        self.uncorrected_callee_save_registers_at_offset_list = register_at_offset_list;
+
+        for i in 0..self.uncorrected_callee_save_registers_at_offset_list.len() {
+            let register_at_offset = self.uncorrected_callee_save_registers_at_offset_list
+               [i];
+
+            let reg = register_at_offset.reg();
+            let width = register_at_offset.width();
+            self.callee_save_registers.add(reg, width);
+        }
+
+        self.callee_save_stack_slot = Some(slot);
+    }
+
+    pub fn callee_save_registers_at_offset_list(&self) -> RegisterAtOffsetList {
+        let mut result = self.uncorrected_callee_save_registers_at_offset_list.clone();
+
+        if let Some(slot) = self.callee_save_stack_slot {
+            let offset = self.stack_slot(slot).offset_from_fp;
+            let byte_size = self.stack_slot(slot).byte_size();
+            result.adjust_offsets(byte_size as isize + offset);
+        }
+
+        result
+    }
 }
 
 impl<'a> std::fmt::Display for Code<'a> {
@@ -225,7 +286,7 @@ impl<'a> std::fmt::Display for Code<'a> {
                     if i != 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "BB{}", succ.0.0)?;
+                    write!(f, "BB{}", succ.0 .0)?;
                 }
 
                 writeln!(f)?;
@@ -235,7 +296,6 @@ impl<'a> std::fmt::Display for Code<'a> {
         Ok(())
     }
 }
-
 
 impl<'a> Graph for Code<'a> {
     type Node = BasicBlockId;
@@ -252,7 +312,7 @@ impl<'a> Graph for Code<'a> {
     }
 
     fn node_index(&self, node: Self::Node) -> usize {
-        node.0 
+        node.0
     }
 
     fn num_nodes(&self) -> usize {
@@ -264,7 +324,13 @@ impl<'a> Graph for Code<'a> {
     }
 
     fn successors(&self, block: Self::Node) -> std::borrow::Cow<[Self::Node]> {
-        std::borrow::Cow::Owned(self.block(block).successors.iter().map(|(id, _)| *id).collect())
+        std::borrow::Cow::Owned(
+            self.block(block)
+                .successors
+                .iter()
+                .map(|(id, _)| *id)
+                .collect(),
+        )
     }
 
     fn root(&self) -> Self::Node {

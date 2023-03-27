@@ -1,9 +1,12 @@
 use b3::{
+    air::{eliminate_dead_code, lsra::allocate_registers_and_stack_by_linear_scan},
     block::{BasicBlockBuilder, Frequency},
     fix_ssa::fix_ssa,
+    jit::reg::Reg,
+    lower_to_air::lower_to_air,
     opcode::Opcode,
     procedure::Procedure,
-    typ::Type, jit::reg::Reg, lower_to_air::lower_to_air, air::{liveness_adapter::{TmpLiveness, TmpLivenessAdapter}, arg::ArgTemperature, eliminate_dead_code, lsra::allocate_registers_and_stack_by_linear_scan}, bank::Bank,
+    typ::Type,
 };
 use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
@@ -20,19 +23,23 @@ fn factorial() {
     let acc = proc.add_variable(Type::Int32);
     let i = proc.add_variable(Type::Int32);
 
-    BasicBlockBuilder::new(&mut proc, root).add_argument(Type::Int32, Reg::new_gpr(ARGUMENT_GPR0), |inst, arg| {
-        inst.add_variable_set(n, arg, |inst, _| {
-            inst.add_int_constant(Type::Int32, 2, |inst, iconst| {
-                inst.add_variable_set(i, iconst, |inst, _| {
-                    inst.add_int_constant(Type::Int32, 1, |inst, iconst| {
-                        inst.add_variable_set(acc, iconst, |inst, _| {
-                            inst.add_jump(loop_footer);
+    BasicBlockBuilder::new(&mut proc, root).add_argument(
+        Type::Int32,
+        Reg::new_gpr(ARGUMENT_GPR0),
+        |inst, arg| {
+            inst.add_variable_set(n, arg, |inst, _| {
+                inst.add_int_constant(Type::Int32, 2, |inst, iconst| {
+                    inst.add_variable_set(i, iconst, |inst, _| {
+                        inst.add_int_constant(Type::Int32, 1, |inst, iconst| {
+                            inst.add_variable_set(acc, iconst, |inst, _| {
+                                inst.add_jump(loop_footer);
+                            })
                         })
                     })
                 })
             })
-        })
-    });
+        },
+    );
 
     BasicBlockBuilder::new(&mut proc, loop_footer).add_variable_get(i, |inst, ivar| {
         inst.add_variable_get(n, |inst, nvar| {
@@ -67,7 +74,6 @@ fn factorial() {
     proc.dominators_or_compute();
     fix_ssa(&mut proc);
 
-
     let mut code = lower_to_air(&mut proc);
     println!("Assembly IR before RA:\n{}", code);
     eliminate_dead_code::eliminate_dead_code(&mut code);
@@ -76,7 +82,6 @@ fn factorial() {
     allocate_registers_and_stack_by_linear_scan(&mut code);
 
     println!("Assembly IR after RA:\n{}", code);
-    
 }
 
 fn main() {

@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    arg::{ArgRole, ArgTiming},
+    arg::{Arg, ArgRole, ArgTiming},
     basic_block::BasicBlockId,
     code::Code,
     insertion_set::phased::PhasedInsertionSet,
@@ -24,7 +24,7 @@ use super::{
     reg_liveness::LocalCalcForUnifiedTmpLiveness,
     stack_slot::{StackSlotId, StackSlotKind},
     tmp::Tmp,
-    tmp_set::TmpMap,
+    tmp_set::TmpMap, fix_spills_after_terminals::fix_spills_after_terminals, handle_callee_saves::handle_callee_saves, stack_allocation::{allocate_escaped_stack_slots, update_frame_size_based_on_stack_slots},
 };
 
 /// This implements the Poletto and Sarkar register allocator called "linear scan":
@@ -64,7 +64,7 @@ struct LinearScan<'a, 'b> {
 
 impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     fn new(code: &'a mut Code<'b>) -> Self {
-        let this = Self {
+        let mut this = Self {
             start_index: IndexMap::with_capacity(code.blocks.len()),
             map: TmpMap::with_capacity(code.num_gp_tmps + code.num_fp_tmps),
             insertion_sets: IndexMap::with_capacity(code.blocks.len()),
@@ -79,6 +79,10 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             used_spillslots: BitVec::new(),
             did_spill: false,
         };
+
+        for block_id in (0..this.code.blocks.len()).map(BasicBlockId) {
+            this.insertion_sets.insert(block_id, PhasedInsertionSet::new());
+        }
 
         this
     }
@@ -99,9 +103,19 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             if !self.did_spill {
                 break;
             }
+
+            self.emit_spill_code();
         }
 
+        self.insert_spill_code();
         self.assign_registers();
+        fix_spills_after_terminals(self.code);
+        handle_callee_saves(self.code);
+        allocate_escaped_stack_slots(self.code);
+        self.prepare_intervals_for_scan_for_stack();
+        self.scan_for_stack();
+        update_frame_size_based_on_stack_slots(self.code);
+        self.code.stack_is_allocated = true;
     }
 
     fn build_register_set_builder(&mut self) {
@@ -154,6 +168,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
         index_of_early..index_of_early + 1
     }
 
+    #[allow(dead_code)]
     fn interval(timing: ArgTiming) -> Range<usize> {
         match timing {
             ArgTiming::OnlyEarly => Self::early_interval(0),
@@ -244,7 +259,12 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                           inst_index: usize| {
                 let regs = local_calc.live();
 
-                if let Some(prev) = this.code.block(block_id).insts.get(inst_index.wrapping_sub(1)) {
+                if let Some(prev) = this
+                    .code
+                    .block(block_id)
+                    .insts
+                    .get(inst_index.wrapping_sub(1))
+                {
                     let mut prev_regs = RegisterSetBuilder::from_regs(regs);
 
                     prev.for_each_reg(|reg, role, _, width| {
@@ -413,7 +433,6 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 self.map[tmp].did_build_possible_regs = true;
             }
 
-            println!("{}", self.active_regs);
             if self.active.len() != self.allowed_registers_in_priority_order[bank as usize].len() {
                 let mut did_assign = false;
 
@@ -492,7 +511,6 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     fn spill(&mut self, tmp: Tmp) {
         let slot = self
             .code
-            .proc
             .add_stack_slot(size_of::<usize>(), StackSlotKind::Spill);
 
         let entry = &mut self.map[tmp];
@@ -501,25 +519,175 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
         self.did_spill = true;
     }
 
+    fn emit_spill_code(&mut self) {
+        for block_id in (0..self.code.blocks.len()).map(BasicBlockId) {
+            let index_of_head = self.index_of_head(block_id);
+
+            for inst_index in 0..self.code.block(block_id).insts.len() {
+                let index_of_early = index_of_head + inst_index * 2;
+
+                // first try to spill directly
+                for i in 0..self.code.block(block_id).insts[inst_index].args.len() {
+                    let arg = &self.code.block(block_id).insts[inst_index].args[i];
+
+                    if !arg.is_tmp() {
+                        continue;
+                    }
+
+                    if arg.is_reg() {
+                        continue;
+                    }
+
+                    let spilled = self.map[arg.tmp()].spilled;
+
+                    if spilled.is_none() {
+                        continue;
+                    }
+
+                    if !self.code.block(block_id).insts[inst_index].admits_stack(i, self.code) {
+                        continue;
+                    }
+
+                    self.code.block_mut(block_id).insts[inst_index].args[i] =
+                        Arg::new_stack(spilled.unwrap(), 0);
+                }
+
+                // TODO: How do I make this safe?
+                let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
+
+                code2.block_mut(block_id).insts[inst_index].for_each_tmp_mut(
+                    |tmp, role, bank, _| {
+                        if tmp.is_reg() {
+                            return;
+                        }
+
+                        let spilled = self.map[*tmp].spilled;
+                        if let Some(spilled) = spilled {
+                            let mov = if bank == Bank::GP {
+                                Opcode::Move
+                            } else {
+                                Opcode::MoveDouble
+                            };
+
+                            *tmp = self.add_spill_tmp_with_interval(
+                                bank,
+                                Self::interval_for_spill(index_of_early, role),
+                            );
+
+                            if role == ArgRole::Scratch {
+                                return;
+                            }
+
+                            if role.is_any_use() {
+                                self.insertion_sets[block_id].insert_inst(
+                                    inst_index,
+                                    1,
+                                    Inst::new(
+                                        mov.into(),
+                                        self.code.block(block_id).insts[inst_index].origin,
+                                        &[Arg::new_stack(spilled, 0), Arg::new_tmp(*tmp)],
+                                    ),
+                                );
+                            }
+
+                            if role.is_any_def() {
+                                self.insertion_sets[block_id].insert_inst(
+                                    inst_index + 1,
+                                    0,
+                                    Inst::new(
+                                        mov.into(),
+                                        self.code.block(block_id).insts[inst_index].origin,
+                                        &[Arg::new_tmp(*tmp), Arg::new_stack(spilled, 0)],
+                                    ),
+                                );
+                            }
+                        }
+                    },
+                );
+            }
+        }
+    }
+
+    fn scan_for_stack(&mut self) {
+        // This is loosely modeled after LinearScanRegisterAllocation in Fig. 1 in
+        // http://dl.acm.org/citation.cfm?id=330250.
+
+        self.active.clear();
+        self.used_spillslots.clear();
+
+        for i in 0..self.tmps.len() {
+            let tmp = self.tmps[i];
+
+            if let Some(spilled) = self.map[tmp].spilled {
+                let index = self.map[tmp].interval.start;
+
+                while !self.active.is_empty() {
+                    let tmp = self.active.front().unwrap();
+
+                    let expired = self.map[*tmp].interval.end <= index;
+
+                    if !expired {
+                        break;
+                    }
+
+                    let spill_index = self.map[*tmp].spill_index;
+                    self.active.pop_front();
+                    self.used_spillslots.remove(spill_index);
+                }
+
+                self.map[tmp].spill_index = self
+                    .used_spillslots
+                    .iter()
+                    .enumerate()
+                    .find(|i| i.1 == false)
+                    .map(|x| x.0)
+                    .unwrap_or_else(|| self.used_spillslots.len());
+
+                let slot_size = 64;
+
+                let offset = -(self.code.frame_size as isize)
+                    - (self.map[tmp].spill_index as isize) * (slot_size as isize)
+                    - (slot_size as isize);
+
+                self.code.proc.stack_slots[spilled.0].offset_from_fp = offset;
+                if self.map[tmp].spill_index >= self.used_spillslots.len() {
+                    self.used_spillslots
+                        .resize(self.map[tmp].spill_index + 1, false);
+                }
+                self.used_spillslots.set(self.map[tmp].spill_index, true);
+                self.active.push_back(tmp);
+            }
+        }
+    }
+
+    fn insert_spill_code(&mut self) {
+        for block_id in (0..self.code.blocks.len()).map(BasicBlockId) {
+            self.insertion_sets[block_id].execute(&mut self.code.block_mut(block_id).insts);
+        }
+    }
 
     fn assign_registers(&mut self) {
         for block_id in 0..self.code.blocks.len() {
             let block_id = BasicBlockId(block_id);
 
-            self.code.block_mut(block_id).insts.iter_mut().for_each(|inst| {
-                inst.for_each_tmp_fast_mut(|tmp| {
-                    if tmp.is_reg() {
-                        return;
-                    }
+            self.code
+                .block_mut(block_id)
+                .insts
+                .iter_mut()
+                .for_each(|inst| {
+                    inst.for_each_tmp_fast_mut(|tmp| {
+                        if tmp.is_reg() {
+                            return;
+                        }
 
-                    let reg = self.map[*tmp].assigned;
-                    if reg == Reg::default() {
-                        panic!("Failed to allocate reg for: {}", tmp);
-                    }
-                   
-                    *tmp = Tmp::from_reg(reg);
-                });
-            })
+                        let reg = self.map[*tmp].assigned;
+                        if reg == Reg::default() {
+                            panic!("Failed to allocate reg for: {}", tmp);
+                        }
+
+                        *tmp = Tmp::from_reg(reg);
+                    });
+                })
         }
     }
 }
@@ -540,6 +708,7 @@ struct Clobber {
     regs: RegisterSet,
 }
 
+#[allow(dead_code)]
 fn add_interval(this: &Range<usize>, other: &Range<usize>) -> Range<usize> {
     if this.start == this.end {
         return other.clone();

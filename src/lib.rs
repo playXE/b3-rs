@@ -1,7 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
 
-pub mod utils;
 pub mod air;
 pub mod bank;
 pub mod block;
@@ -19,6 +18,7 @@ pub mod liveness;
 pub mod lower_to_air;
 pub mod natural_loops;
 pub mod opcode;
+pub mod patchpoint_special;
 pub mod phi_children;
 pub mod procedure;
 pub mod pure_cse;
@@ -30,6 +30,7 @@ pub mod stackmap_special;
 pub mod stackmap_value;
 pub mod typ;
 pub mod use_counts;
+pub mod utils;
 pub mod value;
 pub mod variable;
 pub mod variable_liveness;

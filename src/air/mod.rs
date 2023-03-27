@@ -3,8 +3,13 @@ pub mod basic_block;
 pub mod code;
 pub mod custom;
 pub mod eliminate_dead_code;
+pub mod fix_spills_after_terminals;
 pub mod form_table;
+pub mod ccall_special;
+pub mod generate;
+pub mod handle_callee_saves;
 pub mod helpers;
+pub mod generation_context;
 pub mod insertion_set;
 pub mod inst;
 pub mod kind;
@@ -13,7 +18,9 @@ pub mod lsra;
 pub mod pad_interference;
 pub mod reg_liveness;
 pub mod rpo;
+pub mod simplify_cfg;
 pub mod special;
+pub mod stack_allocation;
 pub mod stack_slot;
 pub mod tmp;
 pub mod tmp_set;
@@ -24,7 +31,7 @@ pub mod opcode {
 }
 
 pub mod opcode_utils {
-    #![allow(unused_imports, unused_braces)]
+    #![allow(unused_imports, unused_braces, unreachable_patterns)]
     use super::arg::*;
     use super::code::*;
     use super::custom::*;
@@ -39,7 +46,7 @@ pub mod opcode_utils {
 }
 
 pub mod opcode_generated {
-    #![allow(unused_imports, unused_braces, unreachable_code)]
+    #![allow(unused_imports, unused_braces, unreachable_code, unreachable_patterns)]
     use super::arg::*;
     use super::code::*;
     use super::custom::*;

@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use macroassembler::assembler::{TargetAssembler, x86assembler::{ebx, r15, r14, r13, ebp}, TargetMacroAssembler};
 
 use crate::{width::Width, bitmap};
@@ -211,6 +213,16 @@ impl RegisterSet {
             false
         })
     }
+    pub fn for_each_with_width(&self, mut f: impl FnMut(Reg, Width)) {
+        self.bits.for_each_set_bit(|index| {
+            let reg = Reg::from_index(index as _);
+            f(reg, Width::W64);
+            false
+        });
+    }
+    pub fn byte_size_of_set_registers(&self) -> usize {
+        (self.bits.count() + self.upper_bits.count()) * size_of::<usize>()
+    }
 
     pub fn include_whole_register_width(&mut self) -> &mut Self {
         self.upper_bits.merge(&self.bits);
@@ -222,8 +234,12 @@ impl RegisterSet {
         self.upper_bits.clear(reg.index());
     }
 
+    pub fn number_of_set_registers(&self) -> usize {
+        self.bits.count() + self.upper_bits.count()
+    }
+
     pub fn contains(&self, reg: Reg, width: Width) -> bool {
-        if width < reg.conservative_width_without_vectors() {
+        if width <= reg.conservative_width_without_vectors() {
             self.bits.get(reg.index())
         } else {
             self.upper_bits.get(reg.index()) && self.bits.get(reg.index())
@@ -233,7 +249,7 @@ impl RegisterSet {
     pub fn add(&mut self, reg: Reg, width: Width) {
         self.bits.set(reg.index());
 
-        if width >= reg.conservative_width_without_vectors() {
+        if width > reg.conservative_width_without_vectors() {
             self.upper_bits.set(reg.index());
         }
     }

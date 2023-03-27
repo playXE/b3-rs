@@ -12,6 +12,28 @@ pub enum Width {
     W128,
 }
 
+impl Width {
+    pub fn alignment(self) -> usize {
+        match self {
+            Width::W8 => 1,
+            Width::W16 => 2,
+            Width::W32 => 4,
+            Width::W64 => 8,
+            Width::W128 => 16,
+        }
+    }
+
+    pub fn bytes(self) -> usize {
+        match self {
+            Width::W8 => 1,
+            Width::W16 => 2,
+            Width::W32 => 4,
+            Width::W64 => 8,
+            Width::W128 => 16,
+        }
+    }
+}
+
 pub const fn pointer_width() -> Width {
     #[cfg(target_pointer_width = "64")]
     {

@@ -8,7 +8,7 @@ pub fn move_for_type(typ: Type) -> Opcode {
         TypeKind::Int64 => Opcode::Move,
         TypeKind::Float => Opcode::MoveFloat,
         TypeKind::Double => Opcode::MoveDouble,
-        TypeKind::V128 => Opcode::MoveVector,
+        TypeKind::V128 => todo!(),
         _ => Opcode::Oops,
     }
 }
@@ -35,7 +35,7 @@ pub fn relaxed_move_for_type(typ: Type) -> Opcode {
         }
         TypeKind::Float => Opcode::MoveFloat,
         TypeKind::Double => Opcode::MoveDouble,
-        TypeKind::V128 => Opcode::MoveVector,
+        TypeKind::V128 => todo!(),
         _ => Opcode::Oops,
     }
 }

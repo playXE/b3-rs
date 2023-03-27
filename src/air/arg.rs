@@ -10,9 +10,9 @@ use macroassembler::{
 };
 
 use crate::{
-    bank::Bank,
+    bank::{Bank, bank_for_type},
     jit::reg::Reg,
-    width::{bytes_for_width, width_for_bytes, Width},
+    width::{bytes_for_width, width_for_bytes, Width}, typ::Type,
 };
 
 use super::{
@@ -310,6 +310,12 @@ impl Default for Arg {
 }
 
 impl Arg {
+    pub fn can_represent(&self, typ: Type) -> bool {
+        self.bank() == bank_for_type(typ)
+    }
+
+    
+
     /// This is smart enough to know that an address arg in a Def or UseDef rule will use its
     /// tmps and never def them. For example, this:
     ///

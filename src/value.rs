@@ -1368,6 +1368,31 @@ impl Value {
         result
     }
 
+    pub fn stackmap_append_with_rep(&mut self, value: ValueId, rep: ValueRep) {
+        assert!(self.stackmap().is_some());
+        if rep.kind == ValueRepKind::ColdAny {
+            self.children.push(value);
+            return;
+        }
+        let nchild = self.children.len();
+        let stackmap = self.stackmap_mut().unwrap();
+
+        while stackmap.reps.len() < nchild {
+            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+        }   
+        stackmap.reps.push(rep);
+        self.children.push(value);
+        
+    }
+
+    pub fn stackmap_append_some_register(&mut self, value: ValueId,) {
+        self.stackmap_append_with_rep(value, ValueRep::new(ValueRepKind::SomeRegister))
+    }
+
+    pub fn stackmap_append_some_register_with_clobber(&mut self, value: ValueId) {
+        self.stackmap_append_with_rep(value, ValueRep::new(ValueRepKind::SomeRegisterWithClobber))
+    }
+
     pub fn constrained_child(&self, index: usize) -> ConstrainedValue {
         assert!(self.stackmap().is_some());
 
@@ -1530,7 +1555,7 @@ impl ValueRep {
     pub fn is_stack(&self) -> bool {
         self.kind == ValueRepKind::Stack
     }
-    pub fn is_stack_arguments(&self) -> bool {
+    pub fn is_stack_argument(&self) -> bool {
         self.kind == ValueRepKind::StackArgument
     }
 
@@ -1551,6 +1576,11 @@ impl ValueRep {
             }
             _ => *self,
         }
+    }
+
+    pub fn offset_from_fp(&self) -> isize {
+        assert!(self.is_stack_argument());
+        unsafe { self.u.offset_from_fp }
     }
 }
 

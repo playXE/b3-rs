@@ -1,4 +1,6 @@
-use crate::{sparse_collection::SparseElement, stackmap_special::StackMapSpecial};
+use crate::{sparse_collection::SparseElement, stackmap_special::StackMapSpecial, bank::Bank, width::Width};
+
+use super::{arg::{Arg, ArgRole}, inst::Inst, code::Code};
 
 pub struct Special {
     pub index: usize,
@@ -6,7 +8,14 @@ pub struct Special {
 }
 
 pub enum SpecialKind {
-    StackMap(StackMapSpecial),
+    
+}
+
+
+impl Special {
+    pub fn for_each_arg(&self, code: &Code<'_>, inst: &Inst, lambda: impl FnMut(&Arg, ArgRole, Bank, Width)) {
+        
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]

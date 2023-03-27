@@ -5,7 +5,7 @@ use macroassembler::assembler::TargetAssembler;
 use crate::width::{width_for_bytes, Width};
 
 /// Reg is a polymorphic register structure. It can refer to either integer or float registers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Reg {
     index: u8,
 }

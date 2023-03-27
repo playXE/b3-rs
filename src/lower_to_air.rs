@@ -1344,7 +1344,7 @@ impl<'a> LowerToAir<'a> {
             Width::W128 => {
                 assert_eq!(bank, Bank::FP);
 
-                AirOpcode::MoveVector
+                todo!()
             }
         }
     }

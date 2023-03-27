@@ -16,7 +16,7 @@ pub fn pad_interference(code: &mut Code<'_>) {
     for block_id in 0..code.blocks.len() {
         let block = &code.blocks[block_id];
         for inst_index in 1..block.insts.len() {
-            if Inst::needs_padding(&block[inst_index - 1], &block[inst_index]) {
+            if Inst::needs_padding(code, &block[inst_index - 1], &block[inst_index]) {
                 insertion_set.insert_inst(inst_index, Inst::new(Opcode::Nop.into(), ValueId(0), &[]));
             }
         }

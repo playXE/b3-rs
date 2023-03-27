@@ -235,7 +235,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 let inst = &self.code.block(block_id).insts[inst_index];
                 let index_of_early = index_of_head + inst_index * 2;
 
-                inst.for_each_tmp(|tmp, role, _, _| {
+                inst.for_each_tmp(self.code, |tmp, role, _, _| {
                     if tmp.is_reg() {
                         return;
                     }
@@ -267,7 +267,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 {
                     let mut prev_regs = RegisterSetBuilder::from_regs(regs);
 
-                    prev.for_each_reg(|reg, role, _, width| {
+                    prev.for_each_reg(this.code, |reg, role, _, width| {
                         if role.is_late_def() {
                             prev_regs.add(reg, width);
                         }
@@ -295,7 +295,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 if let Some(next) = this.code.block(block_id).insts.get(inst_index) {
                     let mut next_regs = RegisterSetBuilder::from_regs(regs);
 
-                    next.for_each_reg(|reg, role, _, width| {
+                    next.for_each_reg(this.code, |reg, role, _, width| {
                         if role.is_early_def() {
                             next_regs.add(reg, width);
                         }
@@ -554,9 +554,9 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
 
                 // TODO: How do I make this safe?
                 let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
-
+                let code3 = unsafe { &mut *(code2 as *const Code as *mut Code) };
                 code2.block_mut(block_id).insts[inst_index].for_each_tmp_mut(
-                    |tmp, role, bank, _| {
+                    code3, |tmp, role, bank, _| {
                         if tmp.is_reg() {
                             return;
                         }
@@ -669,13 +669,13 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     fn assign_registers(&mut self) {
         for block_id in 0..self.code.blocks.len() {
             let block_id = BasicBlockId(block_id);
-
+            let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
             self.code
                 .block_mut(block_id)
                 .insts
                 .iter_mut()
                 .for_each(|inst| {
-                    inst.for_each_tmp_fast_mut(|tmp| {
+                    inst.for_each_tmp_fast_mut(code2, |tmp| {
                         if tmp.is_reg() {
                             return;
                         }

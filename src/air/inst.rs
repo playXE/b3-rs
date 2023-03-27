@@ -8,7 +8,7 @@ use super::{
     kind::Kind,
     opcode::Opcode,
     opcode_generated::G_FORM_TABLE,
-    tmp::Tmp, stack_slot::StackSlotId,
+    tmp::Tmp, stack_slot::StackSlotId, code::Code,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -32,39 +32,39 @@ impl Default for Inst {
 
 impl Inst {
 
-    pub fn has_late_use_or_def(&self) -> bool {
+    pub fn has_late_use_or_def(&self, code: &Code<'_>) -> bool {
         if self.kind.opcode == Opcode::Patch {
             todo!()
         }
         let mut result = false;
 
-        self.for_each_arg(|_arg, role, _, _| {
+        self.for_each_arg(code, |_arg, role, _, _| {
             result |= role.is_late_use() || role.is_late_def();
         });
 
         result
     }
 
-    pub fn has_early_def(&self) -> bool {
+    pub fn has_early_def(&self, code: &Code<'_>) -> bool {
         if self.kind.opcode == Opcode::Patch {
             todo!()
         }
         let mut result = false;
 
-        self.for_each_arg(|_arg, role, _, _| {
+        self.for_each_arg(code, |_arg, role, _, _| {
             result |= role.is_early_def();
         });
 
         result
     }
 
-    pub fn needs_padding(prev: &Self, next: &Self) -> bool {
-        prev.has_late_use_or_def() && next.has_early_def()
+    pub fn needs_padding(code: &Code<'_>, prev: &Self, next: &Self) -> bool {
+        prev.has_late_use_or_def(code) && next.has_early_def(code)
     }
 
     pub fn for_each_arg_simple<F>(&self, mut f: F)
     where
-        F: FnMut(Arg, ArgRole, Bank, Width),
+        F: FnMut(&Arg, ArgRole, Bank, Width),
     {
         let num_operands = self.args.len();
         
@@ -74,7 +74,7 @@ impl Inst {
         for i in 0..num_operands {
             let form = form_base[i];
             f(
-                self.args[i],
+                &self.args[i],
                 decode_form_role(form),
                 decode_form_bank(form),
                 decode_form_width(form),
@@ -111,7 +111,7 @@ impl Inst {
         }
     }
 
-    pub fn for_each_arg(&self, f: impl FnMut(Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg(&self, code: &Code<'_>, f: impl FnMut(&Arg, ArgRole, Bank, Width)) {
         match self.kind.opcode {
             Opcode::EntrySwitch => {
                 todo!()
@@ -141,7 +141,7 @@ impl Inst {
         }
     }
 
-    pub fn for_each_arg_mut(&mut self, f: impl FnMut(&mut Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg_mut(&mut self, code: &mut Code<'_>, f: impl FnMut(&mut Arg, ArgRole, Bank, Width)) {
         match self.kind.opcode {
             Opcode::EntrySwitch => {
                 todo!()
@@ -171,96 +171,96 @@ impl Inst {
         }
     }
 
-    pub fn for_each_tmp(&self, mut f: impl FnMut(Tmp, ArgRole, Bank, Width)) {
-        self.for_each_arg(|arg, role, bank, width| {
+    pub fn for_each_tmp(&self, code: &Code<'_>, mut f: impl FnMut(Tmp, ArgRole, Bank, Width)) {
+        self.for_each_arg(code, |arg, role, bank, width| {
             arg.for_each_tmp(role, bank, width, |tmp, role, bank, width| {
                 f(tmp, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_tmp_mut(&mut self, mut f: impl FnMut(&mut Tmp, ArgRole, Bank, Width)) {
-        self.for_each_arg_mut(|arg, role, bank, width| {
+    pub fn for_each_tmp_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp, ArgRole, Bank, Width)) {
+        self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_tmp_mut(role, bank, width, |tmp, role, bank, width| {
                 f(tmp, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_tmp_fast(&self, mut f: impl FnMut(Tmp)) {
-        self.for_each_arg(|arg, _, _, _| {
+    pub fn for_each_tmp_fast(&self, code: &Code<'_>, mut f: impl FnMut(Tmp)) {
+        self.for_each_arg(code, |arg, _, _, _| {
             arg.for_each_tmp_fast(|tmp| {
                 f(tmp)
             })
         })
     }
 
-    pub fn for_each_tmp_fast_mut(&mut self, mut f: impl FnMut(&mut Tmp)) {
-        self.for_each_arg_mut(|arg, _, _, _| {
+    pub fn for_each_tmp_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp)) {
+        self.for_each_arg_mut(code, |arg, _, _, _| {
             arg.for_each_tmp_fast_mut(|tmp| {
                 f(tmp)
             })
         })
     }
 
-    pub fn for_each_reg(&self, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
-        self.for_each_arg(|arg, role, bank, width| {
+    pub fn for_each_reg(&self, code: &Code<'_>, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
+        self.for_each_arg(code, |arg, role, bank, width| {
             arg.for_each_reg(role, bank, width, |reg, role, bank, width| {
                 f(reg, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_reg_mut(&mut self, mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width)) {
-        self.for_each_arg_mut(|arg, role, bank, width| {
+    pub fn for_each_reg_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width)) {
+        self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_reg_mut(role, bank, width, |reg, role, bank, width| {
                 f(reg, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_reg_fast(&self, mut f: impl FnMut(Reg)) {
-        self.for_each_arg(|arg, _, _, _| {
+    pub fn for_each_reg_fast(&self,code: &Code<'_>, mut f: impl FnMut(Reg)) {
+        self.for_each_arg(code, |arg, _, _, _| {
             arg.for_each_reg_fast(|reg| {
                 f(reg)
             })
         })
     }
 
-    pub fn for_each_reg_fast_mut(&mut self, mut f: impl FnMut(&mut Reg)) {
-        self.for_each_arg_mut(|arg, _, _, _| {
+    pub fn for_each_reg_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg)) {
+        self.for_each_arg_mut(code, |arg, _, _, _| {
             arg.for_each_reg_fast_mut(|reg| {
                 f(reg)
             })
         })
     }
 
-    pub fn for_each_stack_slot(&self, mut f: impl FnMut(StackSlotId, ArgRole, Bank, Width)) {
-        self.for_each_arg(|arg, role, bank, width| {
+    pub fn for_each_stack_slot(&self,code: &Code<'_>, mut f: impl FnMut(StackSlotId, ArgRole, Bank, Width)) {
+        self.for_each_arg(code, |arg, role, bank, width| {
             arg.for_each_stack_slot(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_stack_slot_mut(&mut self, mut f: impl FnMut(&mut StackSlotId, ArgRole, Bank, Width)) {
-        self.for_each_arg_mut(|arg, role, bank, width| {
+    pub fn for_each_stack_slot_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut StackSlotId, ArgRole, Bank, Width)) {
+        self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_stack_slot_mut(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
             })
         })
     }
 
-    pub fn for_each_stack_slot_fast(&self, mut f: impl FnMut(StackSlotId)) {
-        self.for_each_arg(|arg, _, _, _| {
+    pub fn for_each_stack_slot_fast(&self, code: &Code<'_>, mut f: impl FnMut(StackSlotId)) {
+        self.for_each_arg(code, |arg, _, _, _| {
             arg.for_each_stack_slot_fast(|stack_slot| {
                 f(stack_slot)
             })
         })
     }
 
-    pub fn for_each_stack_slot_fast_mut(&mut self, mut f: impl FnMut(&mut StackSlotId)) {
-        self.for_each_arg_mut(|arg, _, _, _| {
+    pub fn for_each_stack_slot_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut StackSlotId)) {
+        self.for_each_arg_mut(code, |arg, _, _, _| {
             arg.for_each_stack_slot_fast_mut(|stack_slot| {
                 f(stack_slot)
             })

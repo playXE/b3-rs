@@ -45,7 +45,7 @@ impl RegLiveness {
             let actions_for_boundary = &mut actions[BasicBlockId(i)];
 
             for (inst_index, inst) in code.blocks[i].insts.iter().rev().enumerate() {
-                inst.for_each_reg(|reg, role, _bank, width| {
+                inst.for_each_reg(code, |reg, role, _bank, width| {
                     if role.is_early_use() {
                         actions_for_boundary[inst_index].use_.add(reg, width);
                     }
@@ -71,7 +71,7 @@ impl RegLiveness {
             code.block(BasicBlockId(i))
                 .last()
                 .unwrap()
-                .for_each_reg(|reg, role, _bank, width| {
+                .for_each_reg(code, |reg, role, _bank, width| {
                     if role.is_late_use() {
                         live_at_tail.add(reg, width);
                     }
@@ -109,7 +109,7 @@ impl RegLiveness {
                 code.block(BasicBlockId(block_index))
                     .first()
                     .unwrap()
-                    .for_each_reg(|reg, role, _bank, _width| {
+                    .for_each_reg(code, |reg, role, _bank, _width| {
                         if role.is_early_def() {
                             local_calc.workset.remove(reg);
                         }

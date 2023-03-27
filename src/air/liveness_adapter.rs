@@ -120,7 +120,7 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Ad
             for inst_index in (0..self.code.block(block).len()).rev() {
                 let inst = &self.code.block(block).insts[inst_index];
                 let code = &self.code;
-                inst.for_each_tmp(|thing, role, bank, _width| {
+                inst.for_each_tmp(self.code, |thing, role, bank, _width| {
                     if !Self::accepts_bank(bank) || !Self::accepts_role(role) {
                         return;
                     }   
@@ -259,7 +259,7 @@ impl<'a> Adapter for UnifiedTmpLivenessAdapter<'a> {
             for inst_index in (0..self.code.block(block).len()).rev() {
                 let inst = &self.code.block(block).insts[inst_index];
                 let code = &self.code;
-                inst.for_each_tmp(|thing, role, _bank, _width| {
+                inst.for_each_tmp(self.code, |thing, role, _bank, _width| {
                     
                     let index = Self::value_to_index(code, thing);
 

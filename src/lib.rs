@@ -19,6 +19,7 @@ pub mod lower_to_air;
 pub mod natural_loops;
 pub mod opcode;
 pub mod patchpoint_special;
+pub mod patchpoint_value;
 pub mod phi_children;
 pub mod procedure;
 pub mod pure_cse;
@@ -35,6 +36,7 @@ pub mod value;
 pub mod variable;
 pub mod variable_liveness;
 pub mod width;
+pub mod check_special;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TriState {

@@ -54,7 +54,6 @@ impl StackMapSpecial {
 
 
     pub fn for_each_arg_impl_mut(
-        &self,
         num_ignored_b3_args: usize,
         num_ignored_air_args: usize,
         inst: &mut Inst,
@@ -151,7 +150,6 @@ impl StackMapSpecial {
     }
 
     pub fn for_each_arg_impl(
-        &self,
         num_ignored_b3_args: usize,
         num_ignored_air_args: usize,
         inst: &Inst,
@@ -247,7 +245,6 @@ impl StackMapSpecial {
     }
 
     pub fn is_valid_impl(
-        &self,
         code: &Code<'_>,
         num_ignored_b3_args: usize,
         num_ignored_air_args: usize,
@@ -283,7 +280,6 @@ impl StackMapSpecial {
     }
 
     pub fn admits_stack_impl(
-        &self,
         code: &Code<'_>,
         num_ignored_b3_args: usize,
         num_ignored_air_args: usize,

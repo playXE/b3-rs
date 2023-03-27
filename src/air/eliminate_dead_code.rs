@@ -49,7 +49,7 @@ pub fn eliminate_dead_code(code: &mut Code<'_>) -> bool {
 
             let mut stores_to_live = false;
 
-            inst.for_each_arg(|arg, role, _, _width| {
+            inst.for_each_arg(code, |arg, role, _, _width| {
                 if !role.is_any_def() {
                     return;
                 }

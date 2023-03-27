@@ -17,6 +17,22 @@ pub struct RegisterSetBuilder {
     upper_bits: RegisterBitmap,
 }
 
+impl std::fmt::Display for RegisterSetBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut i = 0;
+        let count = self.to_register_set().number_of_set_registers();
+        self.to_register_set().for_each(|reg| {
+            write!(f, "{}", reg).unwrap();
+            if i < count - 1 {
+                write!(f, ",").unwrap();
+            }
+            i += 1;
+        });
+
+        Ok(())
+    }
+}
+
 impl RegisterSetBuilder {
     pub fn from_regs(set: &RegisterSet) -> Self {
         Self {
@@ -169,6 +185,15 @@ impl RegisterSetBuilder {
         result.add(Reg::new_gpr(TargetMacroAssembler::STACK_POINTER_REGISTER), Width::W64);
         result.add(Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER), Width::W64);
 
+        result
+    }
+
+    pub fn registers_to_save_for_ccall(live_registers: RegisterSet) -> Self {
+        let mut result = Self::from_regs(&live_registers);
+
+        result.exclude_regs(&Self::callee_saved_registers());
+        result.exclude_regs(&Self::stack_registers());
+        
         result
     }
 }

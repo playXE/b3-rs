@@ -16,7 +16,7 @@ use crate::{
     typ::{Type, TypeKind},
     variable::VariableId,
     width::{width_for_type, Width},
-    *, utils::index_set::KeyIndex,
+    *, utils::index_set::KeyIndex, patchpoint_value::PatchpointValue,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -86,6 +86,7 @@ pub enum ValueData {
     Variable(VariableId),
     Upsilon(Option<ValueId>),
     StackMap(StackMapValue),
+    Patchpoint(PatchpointValue),
     SlotBase(StackSlotId),
 }
 
@@ -240,6 +241,7 @@ impl Value {
     pub fn stackmap(&self) -> Option<&StackMapValue> {
         match self.data {
             ValueData::StackMap(ref stackmap) => Some(stackmap),
+            ValueData::Patchpoint(ref patchpoint) => Some(&patchpoint.base),
             _ => None,
         }
     }
@@ -247,6 +249,21 @@ impl Value {
     pub fn stackmap_mut(&mut self) -> Option<&mut StackMapValue> {
         match self.data {
             ValueData::StackMap(ref mut stackmap) => Some(stackmap),
+            ValueData::Patchpoint(ref mut patchpoint) => Some(&mut patchpoint.base),
+            _ => None,
+        }
+    }
+
+    pub fn patchpoint(&self) -> Option<&PatchpointValue> {
+        match self.data {
+            ValueData::Patchpoint(ref patchpoint) => Some(patchpoint),
+            _ => None,
+        }
+    }
+
+    pub fn patchpoint_mut(&mut self) -> Option<&mut PatchpointValue> {
+        match self.data {
+            ValueData::Patchpoint(ref mut patchpoint) => Some(patchpoint),
             _ => None,
         }
     }
@@ -1451,9 +1468,14 @@ pub struct ValueRep {
 
 impl std::fmt::Debug for ValueRep {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ValueRep({:?}: {:x})", self.kind, unsafe {
-            self.u.value
-        })
+        write!(f, "{:?}", self.kind)?;
+        match self.kind() {
+            ValueRepKind::Register => write!(f, "({})", self.get_reg()),
+            ValueRepKind::Stack => write!(f, "({})", self.offset_from_fp()),
+            ValueRepKind::StackArgument => write!(f, "({})", self.offset_from_sp()),
+            ValueRepKind::Constant => write!(f, "({})", self.value()),
+            _ => Ok(())
+        }
     }
 }
 
@@ -1463,6 +1485,12 @@ impl Hash for ValueRep {
             self.u.value.hash(state);
         }
         self.kind.hash(state);
+    }
+}
+
+impl Default for ValueRep {
+    fn default() -> Self {
+        Self::new(ValueRepKind::ColdAny)
     }
 }
 
@@ -1579,9 +1607,15 @@ impl ValueRep {
     }
 
     pub fn offset_from_fp(&self) -> isize {
-        assert!(self.is_stack_argument());
+        assert!(self.is_stack());
         unsafe { self.u.offset_from_fp }
     }
+
+    pub fn offset_from_sp(&self) -> isize {
+        assert!(self.is_stack_argument());
+        unsafe { self.u.offset_from_sp }
+    }
+
 }
 
 impl PartialEq for ValueRep {
@@ -1589,6 +1623,9 @@ impl PartialEq for ValueRep {
         self.kind == other.kind && unsafe { self.u.value == other.u.value }
     }
 }
+
+impl Eq for ValueRep {}
+
 
 #[derive(Clone, Copy)]
 union ValueRepU {
@@ -1655,6 +1692,12 @@ pub enum ValueRepKind {
 pub struct ConstrainedValue {
     pub value: ValueId,
     pub rep: ValueRep,
+}
+
+impl std::fmt::Display for ConstrainedValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{:?}", self.value.0, self.rep)
+    }
 }
 
 impl ConstrainedValue {

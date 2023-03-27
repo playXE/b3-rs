@@ -1,6 +1,6 @@
 use std::{hash::Hash, rc::Rc};
 
-use crate::{jit::register_set::RegisterSetBuilder, value::{ValueRep}};
+use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep};
 
 #[derive(Clone)]
 pub struct StackMapValue {
@@ -105,9 +105,7 @@ impl StackMapValue {
         self.clobber_early(set);
         self.clobber_late(set);
     }
-
 }
-
 
 impl PartialEq for StackMapValue {
     fn eq(&self, other: &Self) -> bool {
@@ -144,5 +142,22 @@ impl Hash for StackMapValue {
         self.early_clobbered.hash(state);
         self.late_clobbered.hash(state);
         self.used_registers.hash(state);
+    }
+}
+
+impl std::fmt::Display for StackMapValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "generator = ")?;
+        if let Some(generator) = &self.generator {
+            write!(f, "{:p}", generator.as_ref())?;
+        } else {
+            write!(f, "<none>")?;
+        }
+
+        write!(
+            f,
+            "earlyClobbered = {}, lateClobbered = {}, usedRegisters = {}",
+            self.early_clobbered, self.late_clobbered, self.used_registers
+        )
     }
 }

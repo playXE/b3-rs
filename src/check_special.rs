@@ -53,20 +53,23 @@ impl CheckSpecial {
         &self,
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
     ) {
         let mut optional_def_arg_width = None;
         let hidden = self.hidden_branch(code, inst);
+        let lambda: &mut dyn FnMut(&Arg, ArgRole, Bank, Width) = &mut lambda;
 
-        hidden.for_each_arg(code, |arg, role, bank, width| {
+        let hidden_lambda: &mut dyn FnMut(&Arg, ArgRole, Bank, Width) = &mut |arg, role: ArgRole, bank, width| {
             if role.is_any_def() && role != ArgRole::Scratch {
                 assert!(optional_def_arg_width.is_none(), "only one def arg allowed");
                 optional_def_arg_width = Some(width);
             }
             let index = (arg as *const Arg as usize - hidden.args.as_ptr() as usize)
                 / std::mem::size_of::<Arg>();
-            lambda(inst.args[1 + index], role, bank, width);
-        });
+            lambda(&inst.args[1 + index], role, bank, width);
+        };
+
+        hidden.for_each_arg(code, hidden_lambda);
 
         let mut first_recoverable_index = None;
         if self.check_kind.opcode == AirOpcode::BranchAdd32

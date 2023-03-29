@@ -25,17 +25,18 @@ impl InsertionSet {
         self.append_insertion(Insertion::new(index, inst))
     }
 
-    pub fn insert_insts(&mut self, index: usize, insts: Vec<Inst>) {
-        for inst in insts {
+    pub fn insert_insts(&mut self, index: usize, insts: impl IntoIterator<Item = Inst>) {
+        for inst in insts.into_iter() {
             self.insert_inst(index, inst)
         }
     }
 
     pub fn execute(&mut self, code: &mut Code<'_>, block: BasicBlockId) {
         self.insertions.sort();
+        
         execute_insertions(&mut code.block_mut(block).insts, &mut self.insertions);
-
-        code.block_mut(block).retain(|x| x.index != usize::MAX)
+        code.block_mut(block).retain(|x| x.index != usize::MAX);
+        self.insertions.clear();
     }
 }
 
@@ -120,6 +121,7 @@ pub mod phased {
         pub fn execute(&mut self, block: &mut Vec<T>) {
             self.insertions.sort();
             execute_insertions(block, &mut self.insertions);
+            self.insertions.clear();
         }
     }
 
@@ -140,6 +142,13 @@ pub mod phased {
         let mut last_index = target.len();
 
         for index_in_insertion in (0..num_insertions).rev() {
+            assert!(
+                index_in_insertion == 0
+                    || insertions[index_in_insertion].index()
+                        >= insertions[index_in_insertion - 1].index()
+            );
+
+            assert!(insertions[index_in_insertion].index() <= original_target_size);
             let first_index = insertions[index_in_insertion].index() + index_in_insertion;
             let index_offset = index_in_insertion + 1;
 

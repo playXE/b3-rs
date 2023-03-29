@@ -6,7 +6,7 @@ use crate::{
     sparse_collection::SparseElement,
     typ::Type,
     value::ValueId,
-    variable::VariableId, jit::reg::Reg, utils::index_set::KeyIndex,
+    variable::VariableId, jit::reg::Reg, utils::index_set::KeyIndex, effects::Effects,
 };
 
 pub struct BasicBlock {
@@ -272,6 +272,44 @@ impl DerefMut for BasicBlock {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockId(pub usize);
 
+impl BlockId {
+    pub fn value(self, proc: &Procedure, index: usize) -> ValueId {
+        proc.block(self)[index]
+    }
+
+    pub fn value_mut(self, proc: &mut Procedure, index: usize) -> &mut ValueId {
+        &mut proc.block_mut(self)[index]
+    }
+
+    pub fn size(self, proc: &Procedure) -> usize {
+        proc.block(self).len()
+    }
+
+    pub fn is_empty(self, proc: &Procedure) -> bool {
+        proc.block(self).is_empty()
+    }
+
+    pub fn first(self, proc: &Procedure) -> Option<ValueId> {
+        proc.block(self).first().copied()
+    }
+
+    pub fn last(self, proc: &Procedure) -> Option<ValueId> {
+        proc.block(self).last().copied()
+    }
+
+    pub fn predecessor_list(self, proc: &Procedure) -> &[BlockId] {
+        proc.block(self).predecessor_list()
+    }
+
+    pub fn successor_list(self, proc: &Procedure) -> &Vec<(BlockId, Frequency)> {
+        proc.block(self).successor_list()
+    }
+
+    pub fn add_predecessor(self, proc: &mut Procedure, predecessor: BlockId) {
+        proc.block_mut(self).add_predecessor(predecessor);
+    }
+}
+
 impl KeyIndex for BlockId {
     fn index(&self) -> usize {
         self.0
@@ -361,6 +399,17 @@ impl<'a> BasicBlockBuilder<'a> {
         self.func.add_to_block(self.block, value);
         next(self, value)
     }
+    pub fn add_bits_constant<T>(
+        &mut self,
+        typ: Type,
+        value: impl Into<u64>,
+        next: impl FnOnce(&mut Self, ValueId) -> T,
+    ) -> T {
+        let value = self.func.add_bits_constant(typ, value);
+        self.func.add_to_block(self.block, value);
+        next(self, value)
+    }
+
 
     pub fn add_binary<T>(
         &mut self,
@@ -398,6 +447,12 @@ impl<'a> BasicBlockBuilder<'a> {
         let value = self.func.add_variable_get(variable);
         self.func.add_to_block(self.block, value);
         next(self, value);
+    }
+
+    pub fn add_ccall<T>(&mut self, ret: Type, callee: ValueId, args: &[ValueId], effeects: Effects, next: impl FnOnce(&mut Self, ValueId) -> T) -> T {
+        let value = self.func.add_ccall(ret, callee, args, effeects);
+        self.func.add_to_block(self.block, value);
+        next(self, value)
     }
 
     pub fn add_variable_set<T>(
@@ -466,6 +521,10 @@ pub fn update_predecessors_after(root: BlockId, blocks: &mut Vec<BasicBlock>) {
 pub fn is_block_dead(block: &BasicBlock) -> bool {
     if block.index == usize::MAX {
         return true;
+    }
+
+    if block.index == 0 {
+        return false;
     }
 
     block.predecessor_list.is_empty()

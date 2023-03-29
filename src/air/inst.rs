@@ -1,6 +1,6 @@
 use tinyvec::TinyVec;
 
-use crate::{bank::Bank, sparse_collection::SparseElement, value::ValueId, width::Width, jit::reg::Reg};
+use crate::{bank::Bank, sparse_collection::SparseElement, value::ValueId, width::Width, jit::{reg::Reg, register_set::RegisterSetBuilder}};
 
 use super::{
     arg::{Arg, ArgRole},
@@ -8,7 +8,7 @@ use super::{
     kind::Kind,
     opcode::Opcode,
     opcode_generated::G_FORM_TABLE,
-    tmp::Tmp, stack_slot::StackSlotId, code::Code,
+    tmp::Tmp, stack_slot::StackSlotId, code::Code, custom::{EntrySwitchCustom, ShuffleCustom, PatchCustom, CCallCustom, ColdCCallCustom},
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -32,9 +32,19 @@ impl Default for Inst {
 
 impl Inst {
 
+    pub fn extra_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
+        assert!(self.kind.opcode == Opcode::Patch);
+        code.special(self.args[0].special()).extra_clobbered_regs(code, self)
+    }
+
+    pub fn extra_early_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
+        assert!(self.kind.opcode == Opcode::Patch);
+        code.special(self.args[0].special()).extra_early_clobbered_regs(code, self)
+    }
+
     pub fn has_late_use_or_def(&self, code: &Code<'_>) -> bool {
-        if self.kind.opcode == Opcode::Patch {
-            todo!()
+        if self.kind.opcode == Opcode::Patch && !self.extra_clobbered_regs(code).is_empty() {
+            return true;
         }
         let mut result = false;
 
@@ -46,8 +56,8 @@ impl Inst {
     }
 
     pub fn has_early_def(&self, code: &Code<'_>) -> bool {
-        if self.kind.opcode == Opcode::Patch {
-            todo!()
+        if self.kind.opcode == Opcode::Patch && !self.extra_early_clobbered_regs(code).is_empty() {
+            return true;
         }
         let mut result = false;
 
@@ -111,31 +121,30 @@ impl Inst {
         }
     }
 
-    pub fn for_each_arg(&self, code: &Code<'_>, f: impl FnMut(&Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg<F>(&self, code: &Code<'_>, f: F)
+    where F: FnMut(&Arg, ArgRole, Bank, Width)
+     {
         match self.kind.opcode {
             Opcode::EntrySwitch => {
-                todo!()
+                EntrySwitchCustom::for_each_arg(code, self, f)
             }
 
             Opcode::Shuffle => {
-                todo!()
+                ShuffleCustom::for_each_arg(code, self, f)
             }
 
             Opcode::Patch => {
-                todo!()
+                PatchCustom::for_each_arg(code, self, f)
             }
 
             Opcode::CCall => {
-                todo!()
+                CCallCustom::for_each_arg(code, self, f)
             }
 
             Opcode::ColdCCall => {
-                todo!()
+                ColdCCallCustom::for_each_arg(code, self, f)
             }
 
-            Opcode::WasmBoundsCheck => {
-                todo!()
-            }
 
             _ => self.for_each_arg_simple(f),
         }
@@ -144,27 +153,23 @@ impl Inst {
     pub fn for_each_arg_mut(&mut self, code: &mut Code<'_>, f: impl FnMut(&mut Arg, ArgRole, Bank, Width)) {
         match self.kind.opcode {
             Opcode::EntrySwitch => {
-                todo!()
+                EntrySwitchCustom::for_each_arg_mut(code, self, f)
             }
 
             Opcode::Shuffle => {
-                todo!()
+                ShuffleCustom::for_each_arg_mut(code, self, f)
             }
 
             Opcode::Patch => {
-                todo!()
+                PatchCustom::for_each_arg_mut(code, self, f)
             }
 
             Opcode::CCall => {
-                todo!()
+                CCallCustom::for_each_arg_mut(code, self, f)
             }
 
             Opcode::ColdCCall => {
-                todo!()
-            }
-
-            Opcode::WasmBoundsCheck => {
-                todo!()
+                ColdCCallCustom::for_each_arg_mut(code, self, f)
             }
 
             _ => self.for_each_arg_simple_mut(f),
@@ -305,6 +310,13 @@ impl std::fmt::Display for Inst {
                 write!(f, ", ")?;
             }
         }
+        Ok(())
+    }
+}
+
+impl std::fmt::Debug for Inst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)?;
         Ok(())
     }
 }

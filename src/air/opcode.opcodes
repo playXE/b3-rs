@@ -110,18 +110,18 @@ Nop
 Breakpoint
 
 Add32 U:G:32, U:G:32, ZD:G:32
-    Imm, Tmp, Tmp
-    Tmp, Tmp, Tmp
+    Imm, Tmp, Tmp as add32_rrr
+    Tmp, Tmp, Tmp as add32_rrr 
 
 Add32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    Imm, Tmp
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
+    Tmp, Tmp as add32
+    x86: Imm, Addr as add32
+    x86: Imm, Index as add32
+    Imm, Tmp as add32
+    x86: Addr, Tmp as add32
+    x86: Index, Tmp as add32
+    x86: Tmp, Addr as add32
+    x86: Tmp, Index as add32
 
 arm64: AddZeroExtend64 U:G:64, U:G:32, D:G:64
     Tmp, Tmp*, Tmp
@@ -130,30 +130,30 @@ arm64: AddSignExtend64 U:G:64, U:G:32, D:G:64
     Tmp, Tmp*, Tmp
 
 x86: Add8 U:G:8, UD:G:8
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
+    Imm, Addr as add8
+    Imm, Index as add8
+    Tmp, Addr as add8
+    Tmp, Index as add8
 
 x86: Add16 U:G:16, UD:G:16
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
+    Imm, Addr as add16
+    Imm, Index as add16
+    Tmp, Addr as add16
+    Tmp, Index as add16
 
 64: Add64 U:G:64, UD:G:64
-    Tmp, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    Imm, Tmp
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
+    Tmp, Tmp as add64
+    x86: Imm, Addr as add64
+    x86: Imm, Index as add64
+    Imm, Tmp as add64
+    x86: Addr, Tmp as add64
+    x86: Index, Tmp as add64
+    x86: Tmp, Addr as add64
+    x86: Tmp, Index as add64
 
 64: Add64 U:G:64, U:G:64, D:G:64
-    Imm, Tmp, Tmp
-    Tmp, Tmp, Tmp
+    Imm, Tmp, Tmp as add64_rrr 
+    Tmp, Tmp, Tmp as add64_rrr
 
 # note that this pseudoinstruction (and others like it) exist right now because
 # air doesn't track live flags: we do support 64-bit addition on e.g. armv7
@@ -165,532 +165,532 @@ x86: Add16 U:G:16, UD:G:16
     Tmp, Tmp, Tmp, Tmp, Tmp, Tmp
 
 AddDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
-    x86: Addr, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Index, Tmp, Tmp
+    Tmp, Tmp, Tmp as add_double
+    x86: Addr, Tmp, Tmp as add_double 
+    x86: Tmp, Addr, Tmp as add_double
+    x86: Index, Tmp, Tmp as add_double 
 
 x86: AddDouble U:F:64, UD:F:64
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as add_double_rr
+    Addr, Tmp as add_double_rr
 
 AddFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
-    x86: Addr, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Index, Tmp, Tmp
+    Tmp, Tmp, Tmp as add_float
+    x86: Addr, Tmp, Tmp as add_float 
+    x86: Tmp, Addr, Tmp as add_float 
+    x86: Index, Tmp, Tmp as add_float 
 
 x86: AddFloat U:F:32, UD:F:32
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as add_Float_rr 
+    Addr, Tmp as add_float_rr
 
 Sub32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    Imm, Tmp
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
+    Tmp, Tmp as sub32
+    x86: Imm, Addr as sub32 
+    x86: Imm, Index as sub32 
+    Imm, Tmp as sub32 
+    x86: Addr, Tmp as sub32 
+    x86: Index, Tmp as sub32 
+    x86: Tmp, Addr as sub32 
+    x86: Tmp, Index as sub32
 
 arm: Sub32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as sub32_rrr
+    Tmp, Imm, Tmp as sub32_rrr
 
 64: Sub64 U:G:64, UD:G:64
-    Tmp, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    Imm, Tmp
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
+    Tmp, Tmp as sub64
+    x86: Imm, Addr as sub64
+    x86: Imm, Index as sub64
+    Imm, Tmp as sub64
+    x86: Addr, Tmp as sub64
+    x86: Index, Tmp as sub64
+    x86: Tmp, Addr as sub64
+    x86: Tmp, Index as sub64
 
 arm64: Sub64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as sub64_rrr 
+    Tmp, Imm, Tmp as sub64_rrr
 
 # note see note above, on Add64
 32: Sub64 U:G:32, U:G:32, U:G:32, U:G:32, D:G:32, D:G:32
-    Tmp, Tmp, Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp, Tmp, Tmp 
 
 SubDouble U:F:64, U:F:64, D:F:64
-    arm x86_64_avx: Tmp, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Tmp, Index, Tmp
+    arm x86_64_avx: Tmp, Tmp, Tmp as sub_double
+    x86: Tmp, Addr, Tmp as sub_double 
+    x86: Tmp, Index, Tmp as sub_double
 
 x86: SubDouble U:F:64, UD:F:64
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as sub_double_rr
+    Addr, Tmp as sub_double_rr
 
 SubFloat U:F:32, U:F:32, D:F:32
-    arm x86_64_avx: Tmp, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Tmp, Index, Tmp
+    arm x86_64_avx: Tmp, Tmp, Tmp as sub_float
+    x86: Tmp, Addr, Tmp as sub_float 
+    x86: Tmp, Index, Tmp as sub_float 
 
 x86: SubFloat U:F:32, UD:F:32
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as sub_float_rr
+    Addr, Tmp as sub_float_rr
 
 Neg32 UZD:G:32
-    Tmp
-    x86: Addr
-    x86: Index
+    Tmp as neg32 
+    x86: Addr as neg32 
+    x86: Index as neg32
 
 64: Neg64 UD:G:64
-    Tmp
-    x86: Addr
-    x86: Index
+    Tmp as neg64 
+    x86: Addr as neg64 
+    x86: Index as neg64
 
 arm: NegateDouble U:F:64, D:F:64
-    Tmp, Tmp
+    Tmp, Tmp as negate_float
 
 arm: NegateFloat U:F:32, D:F:32
-    Tmp, Tmp
+    Tmp, Tmp as negate_float
 
 Mul32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as mul32
+    x86: Addr, Tmp as mul32 
 
 Mul32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    x86: Addr, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Imm, Tmp, Tmp
+    Tmp, Tmp, Tmp as mul32_rrr 
+    x86: Addr, Tmp, Tmp as mul32_rrr 
+    x86: Tmp, Addr, Tmp as mul32_rrr 
+    x86: Imm, Tmp, Tmp as mul32_rrr
 
 32: UMull32 U:G:32, U:G:32, ZD:G:32, ZD:G:32
     Tmp, Tmp, Tmp, Tmp
 
 64: Mul64 U:G:64, UD:G:64
-    Tmp, Tmp
+    Tmp, Tmp as mul64
 
 64: Mul64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as mul64_rrr
 
 arm64: MultiplyAdd32 U:G:32, U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_add32_rrrr
 
 arm64: MultiplyAdd64 U:G:64, U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_add64_rrrr
 
 arm64: MultiplyAddSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_add_sign_extend32_rrrr
 
 arm64: MultiplyAddZeroExtend32 U:G:32, U:G:32, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_add_zero_extend32_rrrr
 
 arm64: MultiplySub32 U:G:32, U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_sub32_rrrr
 
 arm64: MultiplySub64 U:G:64, U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_sub64_rrrr
 
 arm64: MultiplySubSignExtend32 U:G:32, U:G:32, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_sub_sign_extend32_rrrr
 
 arm64: MultiplySubZeroExtend32 U:G:32, U:G:32, U:G:64, D:G:64
-    Tmp, Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp, Tmp as multiply_sub_zero_extend32_rrrr
 
 arm64: MultiplyNeg32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_neg32_rrr
 
 arm64: MultiplyNeg64 U:G:64, U:G:64, ZD:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_neg64_rrr
 
 arm64: MultiplyNegSignExtend32 U:G:32, U:G:32, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_neg_sign_extend32_rrr
 
 arm64: MultiplyNegZeroExtend32 U:G:32, U:G:32, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_neg_zero_extend32_rrr
 
 arm64: MultiplySignExtend32 U:G:32, U:G:32, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_sign_extend32_rrr
 
 arm64: MultiplyZeroExtend32 U:G:32, U:G:32, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as multiply_zero_extend32_rrr
 
 arm64: Div32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as div32_rrr
 
 arm64: UDiv32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as udiv32_rrr
 
 arm64: Div64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as div64_rrr
 
 arm64: UDiv64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as udiv64_rrr
 
 MulDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
-    x86: Addr, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Index, Tmp, Tmp
+    Tmp, Tmp, Tmp as mul_double
+    x86: Addr, Tmp, Tmp as mul_double
+    x86: Tmp, Addr, Tmp as mul_double
+    x86: Index, Tmp, Tmp as mul_double
 
 x86: MulDouble U:F:64, UD:F:64
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as mul_double_rr 
+    Addr, Tmp as mul_double_rr
 
 MulFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
-    x86: Addr, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Index, Tmp, Tmp
+    Tmp, Tmp, Tmp as mul_float
+    x86: Addr, Tmp, Tmp as mul_float
+    x86: Tmp, Addr, Tmp as mul_float
+    x86: Index, Tmp, Tmp as mul_float
 
 x86: MulFloat U:F:32, UD:F:32
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as mul_float_rr
+    Addr, Tmp as mul_float_rr
 
 arm x86_64_avx: DivDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as div_double_rrr
 
 x86: DivDouble U:F:64, UD:F:64
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as div_double 
+    Addr, Tmp as div_double
 
 arm x86_64_avx: DivFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as div_float_rrr
 
 x86: DivFloat U:F:32, UD:F:32
-    Tmp, Tmp
-    Addr, Tmp
+    Tmp, Tmp as div_float
+    Addr, Tmp as div_float
 
 x86: X86ConvertToDoubleWord32 U:G:32, ZD:G:32
-    Tmp*, Tmp*
+    Tmp*, Tmp* as x86_convert_to_double_word32_rr
 
 x86_64: X86ConvertToQuadWord64 U:G:64, D:G:64
-    Tmp*, Tmp*
+    Tmp*, Tmp* as x86_convert_to_quad_word64_rr
 
 x86: X86Div32 UZD:G:32, UZD:G:32, U:G:32
-    Tmp*, Tmp*, Tmp
+    Tmp*, Tmp*, Tmp as x86div32_rrr
 
 x86: X86UDiv32 UZD:G:32, UZD:G:32, U:G:32
-    Tmp*, Tmp*, Tmp
+    Tmp*, Tmp*, Tmp as x86udiv32_rrr
 
 x86_64: X86Div64 UZD:G:64, UZD:G:64, U:G:64
-    Tmp*, Tmp*, Tmp
+    Tmp*, Tmp*, Tmp as x86div64_rrr
 
 x86_64: X86UDiv64 UZD:G:64, UZD:G:64, U:G:64
-    Tmp*, Tmp*, Tmp
+    Tmp*, Tmp*, Tmp as x86udiv64_rrr
 
 # If we add other things like Lea that are UA, we may need to lower
 # them on arm64 similarly to how we do for Lea. In lowerStackArgs,
 # we lower Lea to add on arm64.
 Lea32 UA:G:32, D:G:32
-    Addr, Tmp
-    x86: Index, Tmp as x86Lea32
+    Addr, Tmp as lea32
+    x86: Index, Tmp as x86_lea32
 
 64: Lea64 UA:G:64, D:G:64
-    Addr, Tmp
-    x86: Index, Tmp as x86Lea64
+    Addr, Tmp as lea64
+    x86: Index, Tmp as x86_lea64
 
 And32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    arm64: BitImm, Tmp, Tmp
-    32:  Imm, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Addr, Tmp, Tmp
+    Tmp, Tmp, Tmp as and32_rrr
+    arm64: BitImm, Tmp, Tmp as and32_rrr
+    32:  Imm, Tmp, Tmp as and32_rr
+    x86: Tmp, Addr, Tmp as and32_rrr
+    x86: Addr, Tmp, Tmp as and32_rrr
 
 And32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Imm, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
+    Tmp, Tmp as and32 
+    x86: Imm, Tmp as and32
+    x86: Tmp, Addr as and32
+    x86: Tmp, Index as and32
+    x86: Addr, Tmp as and32
+    x86: Index, Tmp as and32
+    x86: Imm, Addr as and32
+    x86: Imm, Index as and32
 
 64: And64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    arm64: BitImm64, Tmp, Tmp
+    Tmp, Tmp, Tmp as and64_rrr
+    arm64: BitImm64, Tmp, Tmp as and64_rrr
 
 x86_64: And64 U:G:64, UD:G:64
-    Tmp, Tmp
-    Imm, Tmp
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-    Addr, Tmp
-    Index, Tmp
+    Tmp, Tmp as and64 
+    Imm, Tmp as and64
+    Imm, Addr as and64
+    Imm, Index as and64
+    Tmp, Addr as and64
+    Tmp, Index as and64
+    Addr, Tmp as and64
+    Index, Tmp as and64
 
 AndDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as and_double
 
 x86: AndDouble U:F:64, UD:F:64
-    Tmp, Tmp
+    Tmp, Tmp as and_double_rr
 
 AndFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as and_float
 
 x86: AndFloat U:F:32, UD:F:32
-    Tmp, Tmp
+    Tmp, Tmp as and_float_rr
 
 OrDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as or_double_rrr
 
 x86: OrDouble U:F:64, UD:F:64
-    Tmp, Tmp
+    Tmp, Tmp as or_double
 
 OrFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as or_float_rrr
 
 x86: OrFloat U:F:32, UD:F:32
-    Tmp, Tmp
+    Tmp, Tmp as or_float
 
 x86: XorDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as xor_double
 
 x86: XorDouble U:F:64, UD:F:64
-    Tmp, Tmp
+    Tmp, Tmp as xor_double_rr
 
 x86: XorFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp
+    Tmp, Tmp, Tmp as xor_float
 
 x86: XorFloat U:F:32, UD:F:32
-    Tmp, Tmp
+    Tmp, Tmp as xor_float_rr
 
 arm: Lshift32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as lshift32_rrr
+    Tmp, Imm, Tmp as lshift32_rrr
 
 x86:Lshift32 U:G:32, UZD:G:32
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as lshift32
+    Imm, Tmp as lshift32
 
 arm64: Lshift64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as lshift64_rrr
+    Tmp, Imm, Tmp as lshift64_rrr
 
 x86_64: Lshift64 U:G:64, UD:G:64
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as lshift64
+    Imm, Tmp as lshift64
 
 arm: Rshift32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as rshift32_rrr
+    Tmp, Imm, Tmp as rshift32_rrr
 
 x86: Rshift32 U:G:32, UZD:G:32
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rshift32
+    Imm, Tmp as rshift32 
 
 arm64: Rshift64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as rshift64_rrr
+    Tmp, Imm, Tmp as rshift64_rrr
 
 x86_64: Rshift64 U:G:64, UD:G:64
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rshift64
+    Imm, Tmp as rshift64
 
 arm: Urshift32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as urshift32_rrr
+    Tmp, Imm, Tmp as urshift32_rrr
 
 x86: Urshift32 U:G:32, UZD:G:32
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as urshift32
+    Imm, Tmp as urshift32
 
 arm64: Urshift64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as urshift64_rrr
+    Tmp, Imm, Tmp as urshift64_rrr
 
 x86_64: Urshift64 U:G:64, UD:G:64
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as urshift64
+    Imm, Tmp as urshift64
 
 x86_64: RotateRight32 U:G:32, UZD:G:32
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rotate_right32
+    Imm, Tmp as rotate_right32
 
 arm: RotateRight32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as rotate_right32_rrr
+    Tmp, Imm, Tmp as rotate_right32_rrr
 
 x86_64: RotateRight64 U:G:64, UD:G:64
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rotate_right64
+    Imm, Tmp as rotate_right64
 
 arm64: RotateRight64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    Tmp, Imm, Tmp
+    Tmp, Tmp, Tmp as rotate_right64_rrr
+    Tmp, Imm, Tmp as rotate_right64_rrr
 
 x86_64: RotateLeft32 U:G:32, UZD:G:32
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rotate_left32 
+    Imm, Tmp as rotate_left32
 
 x86_64: RotateLeft64 U:G:64, UD:G:64
-    Tmp*, Tmp
-    Imm, Tmp
+    Tmp*, Tmp as rotate_left64
+    Imm, Tmp as rotate_left64
 
 Or32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    arm64: BitImm, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Addr, Tmp, Tmp
+    Tmp, Tmp, Tmp as or32_rrr
+    arm64: BitImm, Tmp, Tmp as or32_rrr 
+    x86: Tmp, Addr, Tmp as or32_rrr 
+    x86: Addr, Tmp, Tmp as or32_rrr
 
 Or32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Imm, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
+    Tmp, Tmp as or32 
+    x86: Imm, Tmp as or32 
+    x86: Tmp, Addr as or32 
+    x86: Tmp, Index as or32 
+    x86: Addr, Tmp as or32 
+    x86: Index, Tmp as or32 
+    x86: Imm, Addr as or32 
+    x86: Imm, Index as or32
 
 64: Or64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    arm64: BitImm64, Tmp, Tmp
+    Tmp, Tmp, Tmp as or64_rrr
+    arm64: BitImm64, Tmp, Tmp as or64_rrr
 
 64: Or64 U:G:64, UD:G:64
-    Tmp, Tmp
-    x86: Imm, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    x86: Tmp, Addr
-    x86: Tmp, Index
-    x86: Addr, Tmp
-    x86: Index, Tmp
+    Tmp, Tmp as or64 
+    x86: Imm, Tmp as or64 
+    x86: Imm, Addr as or64 
+    x86: Imm, Index as or64 
+    x86: Tmp, Addr as or64 
+    x86: Tmp, Index as or64 
+    x86: Addr, Tmp as or64 
+    x86: Index, Tmp as or64
 
 Xor32 U:G:32, U:G:32, ZD:G:32
-    Tmp, Tmp, Tmp
-    arm64: BitImm, Tmp, Tmp
-    x86: Tmp, Addr, Tmp
-    x86: Addr, Tmp, Tmp
+    Tmp, Tmp, Tmp as xor32_rrr
+    arm64: BitImm, Tmp, Tmp as xor32_rrr
+    x86: Tmp, Addr, Tmp as xor32_rrr
+    x86: Addr, Tmp, Tmp as xor32_rrr
 
 Xor32 U:G:32, UZD:G:32
-    Tmp, Tmp
-    x86: Imm, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
+    Tmp, Tmp as xor32 
+    x86: Imm, Tmp as xor32 
+    x86: Tmp, Addr as xor32 
+    x86: Tmp, Index as xor32 
+    x86: Addr, Tmp as xor32 
+    x86: Index, Tmp as xor32 
+    x86: Imm, Addr as xor32 
+    x86: Imm, Index as xor32
 
 64: Xor64 U:G:64, U:G:64, D:G:64
-    Tmp, Tmp, Tmp
-    arm64: BitImm64, Tmp, Tmp
+    Tmp, Tmp, Tmp as xor64_rrr
+    arm64: BitImm64, Tmp, Tmp as xor64_rrr
 
 64: Xor64 U:G:64, UD:G:64
-    Tmp, Tmp
-    x86: Tmp, Addr
-    x86: Tmp, Index
-    x86: Addr, Tmp
-    x86: Index, Tmp
-    x86: Imm, Addr
-    x86: Imm, Index
-    x86: Imm, Tmp
+    Tmp, Tmp as xor64 
+    x86: Tmp, Addr as xor64 
+    x86: Tmp, Index as xor64 
+    x86: Addr, Tmp as xor64 
+    x86: Index, Tmp as xor64 
+    x86: Imm, Addr as xor64 
+    x86: Imm, Index as xor64 
+    x86: Imm, Tmp as xor64
 
 arm: Not32 U:G:32, ZD:G:32
-    Tmp, Tmp
+    Tmp, Tmp as not32
 
 x86: Not32 UZD:G:32
-    Tmp
-    Addr
-    Index
+    Tmp as not32 
+    Addr as not32 
+    Index as not32
 
 arm64: Not64 U:G:64, D:G:64
-    Tmp, Tmp
+    Tmp, Tmp as not64
 
 x86_64: Not64 UD:G:64
-    Tmp
-    Addr
-    Index
+    Tmp as not64 
+    Addr as not64 
+    Index as not64
 
 arm: AbsDouble U:F:64, D:F:64
-    Tmp, Tmp
+    Tmp, Tmp as abs_double
 
 arm: AbsFloat U:F:32, D:F:32
-    Tmp, Tmp
+    Tmp, Tmp as abs_float
 
 CeilDouble U:F:64, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as ceil_double
+    x86: Addr, Tmp as ceil_double
 
 CeilFloat U:F:32, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as ceil_float
+    x86: Addr, Tmp as ceil_float
 
 FloorDouble U:F:64, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as floor_double
+    x86: Addr, Tmp as floor_double
 
 FloorFloat U:F:32, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as floor_float
+    x86: Addr, Tmp as floor_float
 
 SqrtDouble U:F:64, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as sqrt_double 
+    x86: Addr, Tmp as sqrt_double
 
 SqrtFloat U:F:32, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as sqrt_float
+    x86: Addr, Tmp as sqrt_float
 
 ConvertInt32ToDouble U:G:32, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as convert_int32_to_double
+    x86: Addr, Tmp as convert_int32_to_double
 
 64: ConvertInt64ToDouble U:G:64, D:F:64
-    Tmp, Tmp
-    x86_64: Addr, Tmp
+    Tmp, Tmp as convert_int64_to_double
+    x86_64: Addr, Tmp as convert_int64_to_double
 
 ConvertInt32ToFloat U:G:32, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as convert_int32_to_float
+    x86: Addr, Tmp as convert_int32_to_float
 
 64: ConvertInt64ToFloat U:G:64, D:F:32
-    Tmp, Tmp
-    x86_64: Addr, Tmp
+    Tmp, Tmp as convert_int64_to_float
+    x86_64: Addr, Tmp as convert_int64_to_float
 
 CountLeadingZeros32 U:G:32, ZD:G:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as count_leading_zeros32
+    x86: Addr, Tmp as count_leading_zeros32
 
 64: CountLeadingZeros64 U:G:64, D:G:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as count_leading_zeros64
+    x86: Addr, Tmp as count_leading_zeros64
 
 ConvertDoubleToFloat U:F:64, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as convert_double_to_float
+    x86: Addr, Tmp as convert_double_to_float
 
 ConvertFloatToDouble U:F:32, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp
+    Tmp, Tmp as convert_float_to_double 
+    x86: Addr, Tmp as convert_float_to_double
 
 # Note that Move operates over the full register size, which is either 32-bit or 64-bit depending on
 # the platform. I'm not entirely sure that this is a good thing; it might be better to just have a
 # Move64 instruction. OTOH, our MacroAssemblers already have this notion of "move()" that basically
 # means movePtr.
 Move U:G:Ptr, D:G:Ptr
-    Tmp, Tmp
-    Imm, Tmp as signExtend32ToPtr
-    BigImm, Tmp
-    Addr, Tmp as loadPtr # This means that "Move Addr, Tmp" is code-generated as "load" not "move".
-    Index, Tmp as loadPtr
-    Tmp, Addr as storePtr
-    Tmp, Index as storePtr
-    x86: Imm, Addr as storePtr
-    arm64: ZeroReg, Tmp
-    arm64: ZeroReg, Addr as storePtr
-    arm64: ZeroReg, Index as storePtr
+    Tmp, Tmp as mov 
+    Imm, Tmp as sign_extend32_to_64
+    BigImm, Tmp as mov
+    Addr, Tmp as load64 # This means that "Move Addr, Tmp" is code-generated as "load" not "move".
+    Index, Tmp as load64
+    Tmp, Addr as store64
+    Tmp, Index as store64
+    x86: Imm, Addr as store64
+    arm64: ZeroReg, Tmp as mov
+    arm64: ZeroReg, Addr as store64
+    arm64: ZeroReg, Index as store64
 
 # This is for moving between spill slots.
 Move U:G:Ptr, D:G:Ptr, S:G:Ptr
-    Addr, Addr, Tmp
+    Addr, Addr, Tmp as move_rrr
 
 x86: Swap32 UD:G:32, UD:G:32
-    Tmp, Tmp
-    Tmp, Addr
+    Tmp, Tmp as swap32 
+    Tmp, Addr as swap32
 
 x86_64: Swap64 UD:G:64, UD:G:64
-    Tmp, Tmp
-    Tmp, Addr
+    Tmp, Tmp as swap64 
+    Tmp, Addr as swap64
 
 arm64: MoveWithIncrement64 UD:G:64, D:G:64
     PreIndex, Tmp as load64
@@ -699,12 +699,12 @@ arm64: MoveWithIncrement64 UD:G:64, D:G:64
     Tmp, PostIndex as store64
 
 Move32 U:G:32, ZD:G:32
-    Tmp, Tmp as zeroExtend32ToWord
+    Tmp, Tmp as zero_extend32_to_word
     Addr, Tmp as load32
     Index, Tmp as load32
     Tmp, Addr as store32
     Tmp, Index as store32
-    x86: Imm, Tmp as zeroExtend32ToWord
+    x86: Imm, Tmp as zero_extend32_to_word
     x86 armv7: Imm, Addr as store32
     x86: Imm, Index as store32
 
@@ -716,7 +716,7 @@ arm64: MoveWithIncrement32 UD:G:32, ZD:G:32
 
 # This is for moving between spill slots.
 Move32 U:G:32, ZD:G:32, S:G:32
-    Addr, Addr, Tmp
+    Addr, Addr, Tmp as move32_rrr
 
 arm64: Store32 U:G:32, ZD:G:32
     ZeroReg, Addr
@@ -727,64 +727,64 @@ arm64: Store64 U:G:64, D:G:64
     ZeroReg, Index
 
 64: SignExtend8To64 U:G:8, D:G:64
-    Tmp, Tmp
+    Tmp, Tmp as sign_extend8_to_64
 
 64: SignExtend16To64 U:G:16, D:G:64
-    Tmp, Tmp
+    Tmp, Tmp as sign_extend16_to_64
 
 64: SignExtend32To64 U:G:32, D:G:64
-    Tmp, Tmp
+    Tmp, Tmp as sign_extend32_to_64
 
 ZeroExtend8To32 U:G:8, ZD:G:32
-    Tmp, Tmp
+    Tmp, Tmp as zero_extend8_to_32
     x86: Addr, Tmp as load8
     x86: Index, Tmp as load8
 
 SignExtend8To32 U:G:8, ZD:G:32
-    Tmp, Tmp
-    x86: Addr, Tmp as load8SignedExtendTo32
-    x86: Index, Tmp as load8SignedExtendTo32
+    Tmp, Tmp as sign_extend8_to_32
+    x86: Addr, Tmp as load8_signed_extend_to_32
+    x86: Index, Tmp as load8_signed_extend_to_32
 
 ZeroExtend16To32 U:G:16, ZD:G:32
-    Tmp, Tmp
+    Tmp, Tmp as zero_extend16_to_32
     x86: Addr, Tmp as load16
     x86: Index, Tmp as load16
 
 SignExtend16To32 U:G:16, ZD:G:32
-    Tmp, Tmp
-    x86: Addr, Tmp as load16SignedExtendTo32
-    x86: Index, Tmp as load16SignedExtendTo32
+    Tmp, Tmp as sign_extend16_to_32
+    x86: Addr, Tmp as load16_signed_extend_to_32
+    x86: Index, Tmp as load16_signed_extend_to_32
 
 MoveFloat U:F:32, D:F:32
-    Tmp, Tmp as moveDouble
-    Addr, Tmp as loadFloat
-    Index, Tmp as loadFloat
-    Tmp, Addr as storeFloat
-    Tmp, Index as storeFloat
+    Tmp, Tmp as move_double
+    Addr, Tmp as load_float
+    Index, Tmp as load_float
+    Tmp, Addr as store_float
+    Tmp, Index as store_float
 
 MoveFloat U:F:32, D:F:32, S:F:32
-    Addr, Addr, Tmp
+    Addr, Addr, Tmp as move_float_rrr
 
 MoveDouble U:F:64, D:F:64
-    Tmp, Tmp
-    Addr, Tmp as loadDouble
-    Index, Tmp as loadDouble
-    Tmp, Addr as storeDouble
-    Tmp, Index as storeDouble
+    Tmp, Tmp as move_double 
+    Addr, Tmp as load_double
+    Index, Tmp as load_double
+    Tmp, Addr as store_double
+    Tmp, Index as store_double
 
 MoveDouble U:F:64, D:F:64, S:F:64
-    Addr, Addr, Tmp
+    Addr, Addr, Tmp as move_double_rrr
     
 MoveZeroToDouble D:F:64
-    Tmp
+    Tmp as move_zero_to_double
 
 MoveZeroToFloat D:F:32
-    Tmp
+    Tmp as move_zero_to_float
 
 64: Move64ToDouble U:G:64, D:F:64
-    Tmp, Tmp
-    x86: Addr, Tmp as loadDouble
-    Index, Tmp as loadDouble
+    Tmp, Tmp as move64_to_double
+    x86: Addr, Tmp as load_double
+    Index, Tmp as load_double
 
 32: Move64ToDouble U:G:32, U:G:32, D:F:64
     Tmp, Tmp, Tmp
@@ -793,12 +793,12 @@ MoveZeroToFloat D:F:32
     Tmp, Tmp
 
 Move32ToFloat U:G:32, D:F:32
-    Tmp, Tmp
-    x86: Addr, Tmp as loadFloat
-    Index, Tmp as loadFloat
+    Tmp, Tmp as move32_to_float
+    x86: Addr, Tmp as load_float
+    Index, Tmp as load_float
 
 64: MoveDoubleTo64 U:F:64, D:G:64
-    Tmp, Tmp
+    Tmp, Tmp as move_double_to64
     Addr, Tmp as load64
     Index, Tmp as load64
 
@@ -809,43 +809,43 @@ Move32ToFloat U:G:32, D:F:32
     Tmp, Tmp
 
 MoveFloatTo32 U:F:32, D:G:32
-    Tmp, Tmp
+    Tmp, Tmp as move_float_to32
     Addr, Tmp as load32
     Index, Tmp as load32
 
 Load8 U:G:8, ZD:G:32
-    Addr, Tmp
-    Index, Tmp
+    Addr, Tmp as load8 
+    Index, Tmp as load8
 
 arm64: LoadAcq8 U:G:8, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Store8 U:G:8, D:G:8
-    Tmp, Index
-    Tmp, Addr
-    x86: Imm, Index
-    x86: Imm, Addr
+    Tmp, Index as store8 
+    Tmp, Addr as store8 
+    x86: Imm, Index as store8 
+    x86: Imm, Addr as store8
 
 arm64: StoreRel8 U:G:8, D:G:8 /effects
     Tmp, SimpleAddr
 
 Load8SignedExtendTo32 U:G:8, ZD:G:32
-    Addr, Tmp
-    Index, Tmp
+    Addr, Tmp as load8_signed_extend_to_32
+    Index, Tmp as load8_signed_extend_to_32
 
 arm64: LoadAcq8SignedExtendTo32 U:G:8, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Load16 U:G:16, ZD:G:32
-    Addr, Tmp
-    Index, Tmp
+    Addr, Tmp as load16 
+    Index, Tmp as load16
 
 arm64: LoadAcq16 U:G:16, ZD:G:32 /effects
     SimpleAddr, Tmp
 
 Load16SignedExtendTo32 U:G:16, ZD:G:32
-    Addr, Tmp
-    Index, Tmp
+    Addr, Tmp as load16_signed_extend_to_32
+    Index, Tmp as load16_signed_extend_to_32
 
 arm64: LoadAcq16SignedExtendTo32 U:G:16, ZD:G:32 /effects
     SimpleAddr, Tmp
@@ -872,20 +872,20 @@ arm64: StoreRel64 U:G:64, ZD:G:64 /effects
     Tmp, SimpleAddr
 
 x86: Xchg8 UD:G:8, UD:G:8 /effects
-    Tmp, Addr
-    Tmp, Index
+    Tmp, Addr as xchg8 
+    Tmp, Index as xchg8 
 
 x86: Xchg16 UD:G:16, UD:G:16 /effects
-    Tmp, Addr
-    Tmp, Index
+    Tmp, Addr as xchg16
+    Tmp, Index as xchg16 
 
 x86: Xchg32 UD:G:32, UD:G:32 /effects
-    Tmp, Addr
-    Tmp, Index
+    Tmp, Addr as xchg32 
+    Tmp, Index as xchg32
 
 x86_64: Xchg64 UD:G:64, UD:G:64 /effects
-    Tmp, Addr
-    Tmp, Index
+    Tmp, Addr as xchg64 
+    Tmp, Index as xchg64
 
 arm64: ExtractUnsignedBitfield32 U:G:32, U:G:32, U:G:32, ZD:G:32
     Tmp, Imm, Imm, Tmp
@@ -1079,367 +1079,6 @@ arm64: DoubleMax U:F:64, U:F:64, D:F:64
 arm64: DoubleMin U:F:64, U:F:64, D:F:64
     Tmp, Tmp, Tmp
 
-# The first operand is rax.
-# FIXME: This formulation means that the boolean result cannot be put in eax, even though all users
-# of this would be OK with that.
-# https://bugs.webkit.org/show_bug.cgi?id=169254
-x86: AtomicStrongCAS8 U:G:32, UD:G:8, U:G:8, UD:G:8, ZD:G:8 /effects
-    StatusCond, Tmp*, Tmp, Addr, Tmp
-    StatusCond, Tmp*, Tmp, Index, Tmp
-
-x86: AtomicStrongCAS16 U:G:32, UD:G:16, U:G:32, UD:G:16, ZD:G:8 /effects
-    StatusCond, Tmp*, Tmp, Addr, Tmp
-    StatusCond, Tmp*, Tmp, Index, Tmp
-
-x86: AtomicStrongCAS32 U:G:32, UD:G:32, U:G:32, UD:G:32, ZD:G:8 /effects
-    StatusCond, Tmp*, Tmp, Addr, Tmp
-    StatusCond, Tmp*, Tmp, Index, Tmp
-
-x86_64: AtomicStrongCAS64 U:G:32, UD:G:64, U:G:64, UD:G:64, ZD:G:8 /effects
-    StatusCond, Tmp*, Tmp, Addr, Tmp
-    StatusCond, Tmp*, Tmp, Index, Tmp
-
-x86 arm64_lse: AtomicStrongCAS8 UD:G:8, U:G:8, UD:G:8 /effects
-    x86: Tmp*, Tmp, Addr
-    x86: Tmp*, Tmp, Index
-    arm64_lse: Tmp, Tmp, SimpleAddr
-
-x86 arm64_lse: AtomicStrongCAS16 UD:G:16, U:G:32, UD:G:16 /effects
-    x86: Tmp*, Tmp, Addr
-    x86: Tmp*, Tmp, Index
-    arm64_lse: Tmp, Tmp, SimpleAddr
-
-x86 arm64_lse: AtomicStrongCAS32 UD:G:32, U:G:32, UD:G:32 /effects
-    x86: Tmp*, Tmp, Addr
-    x86: Tmp*, Tmp, Index
-    arm64_lse: Tmp, Tmp, SimpleAddr
-
-x86_64 arm64_lse: AtomicStrongCAS64 UD:G:64, U:G:64, UD:G:64 /effects
-    x86_64: Tmp*, Tmp, Addr
-    x86_64: Tmp*, Tmp, Index
-    arm64_lse: Tmp, Tmp, SimpleAddr
-
-x86: BranchAtomicStrongCAS8 U:G:32, UD:G:8, U:G:8, UD:G:8 /branch /effects
-    StatusCond, Tmp*, Tmp, Addr
-    StatusCond, Tmp*, Tmp, Index
-
-x86: BranchAtomicStrongCAS16 U:G:32, UD:G:16, U:G:32, UD:G:16 /branch /effects
-    StatusCond, Tmp*, Tmp, Addr
-    StatusCond, Tmp*, Tmp, Index
-
-x86: BranchAtomicStrongCAS32 U:G:32, UD:G:32, U:G:32, UD:G:32 /branch /effects
-    StatusCond, Tmp*, Tmp, Addr
-    StatusCond, Tmp*, Tmp, Index
-
-x86_64: BranchAtomicStrongCAS64 U:G:32, UD:G:64, U:G:64, UD:G:64 /branch /effects
-    StatusCond, Tmp*, Tmp, Addr
-    StatusCond, Tmp*, Tmp, Index
-
-x86: AtomicAdd8 U:G:8, UD:G:8 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicAdd16 U:G:16, UD:G:16 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicAdd32 U:G:32, UD:G:32 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicAdd64 U:G:64, UD:G:64 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicSub8 U:G:8, UD:G:8 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicSub16 U:G:16, UD:G:16 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicSub32 U:G:32, UD:G:32 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicSub64 U:G:64, UD:G:64 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicAnd8 U:G:8, UD:G:8 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicAnd16 U:G:16, UD:G:16 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicAnd32 U:G:32, UD:G:32 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicAnd64 U:G:64, UD:G:64 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicOr8 U:G:8, UD:G:8 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicOr16 U:G:16, UD:G:16 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicOr32 U:G:32, UD:G:32 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicOr64 U:G:64, UD:G:64 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXor8 U:G:8, UD:G:8 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXor16 U:G:16, UD:G:16 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXor32 U:G:32, UD:G:32 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicXor64 U:G:64, UD:G:64 /effects
-    Imm, Addr
-    Imm, Index
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicNeg8 UD:G:8 /effects
-    Addr
-    Index
-
-x86: AtomicNeg16 UD:G:16 /effects
-    Addr
-    Index
-
-x86: AtomicNeg32 UD:G:32 /effects
-    Addr
-    Index
-
-x86_64: AtomicNeg64 UD:G:64 /effects
-    Addr
-    Index
-
-x86: AtomicNot8 UD:G:8 /effects
-    Addr
-    Index
-
-x86: AtomicNot16 UD:G:16 /effects
-    Addr
-    Index
-
-x86: AtomicNot32 UD:G:32 /effects
-    Addr
-    Index
-
-x86_64: AtomicNot64 UD:G:64 /effects
-    Addr
-    Index
-
-x86: AtomicXchgAdd8 UD:G:8, UD:G:8 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXchgAdd16 UD:G:16, UD:G:16 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXchgAdd32 UD:G:32, UD:G:32 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicXchgAdd64 UD:G:64, UD:G:64 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXchg8 UD:G:8, UD:G:8 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXchg16 UD:G:16, UD:G:16 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86: AtomicXchg32 UD:G:32, UD:G:32 /effects
-    Tmp, Addr
-    Tmp, Index
-
-x86_64: AtomicXchg64 UD:G:64, UD:G:64 /effects
-    Tmp, Addr
-    Tmp, Index
-
-arm: LoadLink8 U:G:8, ZD:G:8 /effects
-    SimpleAddr, Tmp
-
-arm64: LoadLinkAcq8 U:G:8, ZD:G:8 /effects
-    SimpleAddr, Tmp
-
-# Super confusing fact: this returns 0 to mean success, 1 to mean failure.
-arm: StoreCond8 U:G:8, D:G:8, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64: StoreCondRel8 U:G:8, D:G:8, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm: LoadLink16 U:G:16, ZD:G:16 /effects
-    SimpleAddr, Tmp
-
-arm64: LoadLinkAcq16 U:G:16, ZD:G:16 /effects
-    SimpleAddr, Tmp
-
-arm: StoreCond16 U:G:16, D:G:16, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64: StoreCondRel16 U:G:16, D:G:16, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm: LoadLink32 U:G:32, ZD:G:32 /effects
-    SimpleAddr, Tmp
-
-arm64: LoadLinkAcq32 U:G:32, ZD:G:32 /effects
-    SimpleAddr, Tmp
-
-arm: StoreCond32 U:G:32, D:G:32, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64: StoreCondRel32 U:G:32, D:G:32, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-armv7: LoadLinkPair32 U:G:64, D:G:32, D:G:32 /effects
-    SimpleAddr, Tmp, Tmp
-
-arm64: LoadLink64 U:G:64, ZD:G:64 /effects
-    SimpleAddr, Tmp
-
-arm64: LoadLinkAcq64 U:G:64, ZD:G:64 /effects
-    SimpleAddr, Tmp
-
-armv7: StoreCondPair32 U:G:32, U:G:32, D:G:64, EZD:G:8 /effects
-    Tmp, Tmp, SimpleAddr, Tmp
-
-arm64: StoreCond64 U:G:64, D:G:64, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64: StoreCondRel64 U:G:64, D:G:64, EZD:G:8 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64: Depend32 U:G:32, ZD:G:32
-    Tmp, Tmp
-
-arm64: Depend64 U:G:64, ZD:G:64
-    Tmp, Tmp
-
-arm64_lse: AtomicXchgAdd8 U:G:8, UD:G:8, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgAdd16 U:G:16, UD:G:16, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgAdd32 U:G:32, UD:G:32, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgAdd64 U:G:64, UD:G:64, ZD:G:64 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgOr8 U:G:8, UD:G:8, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgOr16 U:G:16, UD:G:16, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgOr32 U:G:32, UD:G:32, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgOr64 U:G:64, UD:G:64, ZD:G:64 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgClear8 U:G:8, UD:G:8, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgClear16 U:G:16, UD:G:16, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgClear32 U:G:32, UD:G:32, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgClear64 U:G:64, UD:G:64, ZD:G:64 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgXor8 U:G:8, UD:G:8, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgXor16 U:G:16, UD:G:16, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgXor32 U:G:32, UD:G:32, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchgXor64 U:G:64, UD:G:64, ZD:G:64 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchg8 U:G:8, UD:G:8, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchg16 U:G:16, UD:G:16, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchg32 U:G:32, UD:G:32, ZD:G:32 /effects
-    Tmp, SimpleAddr, Tmp
-
-arm64_lse: AtomicXchg64 U:G:64, UD:G:64, ZD:G:64 /effects
-    Tmp, SimpleAddr, Tmp
-
 Compare32 U:G:32, U:G:32, U:G:32, ZD:G:32
     RelCond, Tmp, Tmp, Tmp
     RelCond, Tmp, Imm, Tmp
@@ -1449,9 +1088,9 @@ Compare32 U:G:32, U:G:32, U:G:32, ZD:G:32
     x86: RelCond, Tmp, Imm, Tmp
 
 Test32 U:G:32, U:G:32, U:G:32, ZD:G:32
-    x86: ResCond, Addr, Imm, Tmp
-    ResCond, Tmp, Tmp, Tmp
-    ResCond, Tmp, BitImm, Tmp
+    x86: ResCond, Addr, Imm, Tmp as test32_cond 
+    ResCond, Tmp, Tmp, Tmp as test32_cond 
+    ResCond, Tmp, BitImm, Tmp as test32_cond
 
 64: Test64 U:G:32, U:G:64, U:G:64, ZD:G:32
     x86: ResCond, Tmp, Imm, Tmp
@@ -1524,9 +1163,9 @@ BranchFloat U:G:32, U:F:32, U:F:32 /branch
     DoubleCond, Tmp, Tmp
 
 BranchAdd32 U:G:32, U:G:32, U:G:32, ZD:G:32 /branch
-    ResCond, Tmp, Tmp, Tmp
-    x86:ResCond, Tmp, Addr, Tmp
-    x86:ResCond, Addr, Tmp, Tmp
+    ResCond, Tmp, Tmp, Tmp as branch_add32_rrr
+    x86:ResCond, Tmp, Addr, Tmp as branch_add32_rrr 
+    x86:ResCond, Addr, Tmp, Tmp as branch_add32_rrr
 
 BranchAdd32 U:G:32, U:G:32, UZD:G:32 /branch
     ResCond, Tmp, Tmp
@@ -1536,9 +1175,9 @@ BranchAdd32 U:G:32, U:G:32, UZD:G:32 /branch
     x86: ResCond, Addr, Tmp
 
 64: BranchAdd64 U:G:32, U:G:64, U:G:64, ZD:G:64 /branch
-    ResCond, Tmp, Tmp, Tmp
-    x86:ResCond, Tmp, Addr, Tmp
-    x86:ResCond, Addr, Tmp, Tmp
+    ResCond, Tmp, Tmp, Tmp as branch_add64_rrr
+    x86:ResCond, Tmp, Addr, Tmp as branch_add64_rrr
+    x86:ResCond, Addr, Tmp, Tmp as branch_add64_rrr
 
 64: BranchAdd64 U:G:32, U:G:64, UD:G:64 /branch
     ResCond, Imm, Tmp
@@ -1550,7 +1189,7 @@ x86: BranchMul32 U:G:32, U:G:32, UZD:G:32 /branch
     ResCond, Addr, Tmp
 
 x86: BranchMul32 U:G:32, U:G:32, U:G:32, ZD:G:32 /branch
-    ResCond, Tmp, Imm, Tmp
+    ResCond, Tmp, Imm, Tmp as branch_mul32_rrr
 
 arm64: BranchMul32 U:G:32, U:G:32, U:G:32, S:G:32, S:G:32, ZD:G:32 /branch
     ResCond, Tmp, Tmp, Tmp, Tmp, Tmp
@@ -1582,40 +1221,40 @@ BranchNeg32 U:G:32, UZD:G:32 /branch
     RelCond, Tmp, Tmp, Tmp, Tmp
 
 64: MoveConditionally32 U:G:32, U:G:32, U:G:32, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    RelCond, Tmp, Tmp, Tmp, Tmp, Tmp
-    RelCond, Tmp, Imm, Tmp, Tmp, Tmp
+    RelCond, Tmp, Tmp, Tmp, Tmp, Tmp  as move_conditionally32_then_else
+    RelCond, Tmp, Imm, Tmp, Tmp, Tmp  as move_conditionally32_then_else
 
 64: MoveConditionally64 U:G:32, U:G:64, U:G:64, U:G:Ptr, UD:G:Ptr
     RelCond, Tmp, Tmp, Tmp, Tmp
 
 64: MoveConditionally64 U:G:32, U:G:64, U:G:64, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    RelCond, Tmp, Tmp, Tmp, Tmp, Tmp
-    RelCond, Tmp, Imm, Tmp, Tmp, Tmp
+    RelCond, Tmp, Tmp, Tmp, Tmp, Tmp as move_conditionally64_then_else
+    RelCond, Tmp, Imm, Tmp, Tmp, Tmp as move_conditionally64_then_else
 
 64: MoveConditionallyTest32 U:G:32, U:G:32, U:G:32, U:G:Ptr, UD:G:Ptr
     ResCond, Tmp, Tmp, Tmp, Tmp
     x86: ResCond, Tmp, Imm, Tmp, Tmp
 
 64: MoveConditionallyTest32 U:G:32, U:G:32, U:G:32, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    ResCond, Tmp, Tmp, Tmp, Tmp, Tmp
-    ResCond, Tmp, BitImm, Tmp, Tmp, Tmp
+    ResCond, Tmp, Tmp, Tmp, Tmp, Tmp as move_conditionally_test32_then_else
+    ResCond, Tmp, BitImm, Tmp, Tmp, Tmp as move_conditionally_test32_then_else
 
 64: MoveConditionallyTest64 U:G:32, U:G:64, U:G:64, U:G:Ptr, UD:G:Ptr
     ResCond, Tmp, Tmp, Tmp, Tmp
     x86: ResCond, Tmp, Imm, Tmp, Tmp
 
 64: MoveConditionallyTest64 U:G:32, U:G:32, U:G:32, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    ResCond, Tmp, Tmp, Tmp, Tmp, Tmp
-    x86_64: ResCond, Tmp, Imm, Tmp, Tmp, Tmp
+    ResCond, Tmp, Tmp, Tmp, Tmp, Tmp as move_conditionally_test64_then_else
+    x86_64: ResCond, Tmp, Imm, Tmp, Tmp, Tmp as move_conditionally_test64_then_else
 
 64: MoveConditionallyDouble U:G:32, U:F:64, U:F:64, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    DoubleCond, Tmp, Tmp, Tmp, Tmp, Tmp
+    DoubleCond, Tmp, Tmp, Tmp, Tmp, Tmp as move_conditionally_double_then_else
 
 64: MoveConditionallyDouble U:G:32, U:F:64, U:F:64, U:G:Ptr, UD:G:Ptr
     DoubleCond, Tmp, Tmp, Tmp, Tmp
 
 64: MoveConditionallyFloat U:G:32, U:F:32, U:F:32, U:G:Ptr, U:G:Ptr, D:G:Ptr
-    DoubleCond, Tmp, Tmp, Tmp, Tmp, Tmp
+    DoubleCond, Tmp, Tmp, Tmp, Tmp, Tmp as move_conditionally_float_then_else
 
 64: MoveConditionallyFloat U:G:32, U:F:32, U:F:32, U:G:Ptr, UD:G:Ptr
     DoubleCond, Tmp, Tmp, Tmp, Tmp
@@ -1697,8 +1336,4 @@ custom Patch
 # something else first. The origin Value must be a CCallValue.
 custom CCall
 custom ColdCCall
-
-# This is a special wasm opcode that branches to a trap handler. This uses the generator located to Air::Code
-# to produce the side-exit code.
-custom WasmBoundsCheck
 

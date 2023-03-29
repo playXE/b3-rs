@@ -3,6 +3,15 @@ pub struct Insertion<T> {
     pub element: T,
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for Insertion<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Insertion")
+            .field("index", &self.index)
+            .field("element", &self.element)
+            .finish()
+    }
+}
+
 impl<T: Default> Default for Insertion<T> {
     fn default() -> Self {
         Self {
@@ -64,7 +73,6 @@ pub fn execute_insertions<TargetType: Default>(
     }
 
     let original_target_size = target.len();
-
     target.resize_with(original_target_size + num_insertions, Default::default);
 
     let mut last_index = target.len();
@@ -81,7 +89,7 @@ pub fn execute_insertions<TargetType: Default>(
         } {
             target[i] = std::mem::take(&mut target[i - index_offset]);
         }
-
+        
         target[first_index] = std::mem::take(insertions[index_in_insertion].element_mut());
         last_index = first_index;
     }

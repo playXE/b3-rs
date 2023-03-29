@@ -338,3 +338,365 @@ arm64: VectorDupElementFloat32 U:G:8, U:F:128, D:F:128
     Imm, Tmp, Tmp
 arm64: VectorDupElementFloat64 U:G:8, U:F:128, D:F:128
     Imm, Tmp, Tmp
+
+
+# The first operand is rax.
+# FIXME: This formulation means that the boolean result cannot be put in eax, even though all users
+# of this would be OK with that.
+# https://bugs.webkit.org/show_bug.cgi?id=169254
+x86: AtomicStrongCAS8 U:G:32, UD:G:8, U:G:8, UD:G:8, ZD:G:8 /effects
+    StatusCond, Tmp*, Tmp, Addr, Tmp
+    StatusCond, Tmp*, Tmp, Index, Tmp
+
+x86: AtomicStrongCAS16 U:G:32, UD:G:16, U:G:32, UD:G:16, ZD:G:8 /effects
+    StatusCond, Tmp*, Tmp, Addr, Tmp
+    StatusCond, Tmp*, Tmp, Index, Tmp
+
+x86: AtomicStrongCAS32 U:G:32, UD:G:32, U:G:32, UD:G:32, ZD:G:8 /effects
+    StatusCond, Tmp*, Tmp, Addr, Tmp
+    StatusCond, Tmp*, Tmp, Index, Tmp
+
+x86_64: AtomicStrongCAS64 U:G:32, UD:G:64, U:G:64, UD:G:64, ZD:G:8 /effects
+    StatusCond, Tmp*, Tmp, Addr, Tmp
+    StatusCond, Tmp*, Tmp, Index, Tmp
+
+x86 arm64_lse: AtomicStrongCAS8 UD:G:8, U:G:8, UD:G:8 /effects
+    x86: Tmp*, Tmp, Addr
+    x86: Tmp*, Tmp, Index
+    arm64_lse: Tmp, Tmp, SimpleAddr
+
+x86 arm64_lse: AtomicStrongCAS16 UD:G:16, U:G:32, UD:G:16 /effects
+    x86: Tmp*, Tmp, Addr
+    x86: Tmp*, Tmp, Index
+    arm64_lse: Tmp, Tmp, SimpleAddr
+
+x86 arm64_lse: AtomicStrongCAS32 UD:G:32, U:G:32, UD:G:32 /effects
+    x86: Tmp*, Tmp, Addr
+    x86: Tmp*, Tmp, Index
+    arm64_lse: Tmp, Tmp, SimpleAddr
+
+x86_64 arm64_lse: AtomicStrongCAS64 UD:G:64, U:G:64, UD:G:64 /effects
+    x86_64: Tmp*, Tmp, Addr
+    x86_64: Tmp*, Tmp, Index
+    arm64_lse: Tmp, Tmp, SimpleAddr
+
+x86: BranchAtomicStrongCAS8 U:G:32, UD:G:8, U:G:8, UD:G:8 /branch /effects
+    StatusCond, Tmp*, Tmp, Addr
+    StatusCond, Tmp*, Tmp, Index
+
+x86: BranchAtomicStrongCAS16 U:G:32, UD:G:16, U:G:32, UD:G:16 /branch /effects
+    StatusCond, Tmp*, Tmp, Addr
+    StatusCond, Tmp*, Tmp, Index
+
+x86: BranchAtomicStrongCAS32 U:G:32, UD:G:32, U:G:32, UD:G:32 /branch /effects
+    StatusCond, Tmp*, Tmp, Addr
+    StatusCond, Tmp*, Tmp, Index
+
+x86_64: BranchAtomicStrongCAS64 U:G:32, UD:G:64, U:G:64, UD:G:64 /branch /effects
+    StatusCond, Tmp*, Tmp, Addr
+    StatusCond, Tmp*, Tmp, Index
+
+x86: AtomicAdd8 U:G:8, UD:G:8 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicAdd16 U:G:16, UD:G:16 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicAdd32 U:G:32, UD:G:32 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicAdd64 U:G:64, UD:G:64 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicSub8 U:G:8, UD:G:8 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicSub16 U:G:16, UD:G:16 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicSub32 U:G:32, UD:G:32 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicSub64 U:G:64, UD:G:64 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicAnd8 U:G:8, UD:G:8 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicAnd16 U:G:16, UD:G:16 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicAnd32 U:G:32, UD:G:32 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicAnd64 U:G:64, UD:G:64 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicOr8 U:G:8, UD:G:8 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicOr16 U:G:16, UD:G:16 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicOr32 U:G:32, UD:G:32 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicOr64 U:G:64, UD:G:64 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXor8 U:G:8, UD:G:8 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXor16 U:G:16, UD:G:16 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXor32 U:G:32, UD:G:32 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicXor64 U:G:64, UD:G:64 /effects
+    Imm, Addr
+    Imm, Index
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicNeg8 UD:G:8 /effects
+    Addr
+    Index
+
+x86: AtomicNeg16 UD:G:16 /effects
+    Addr
+    Index
+
+x86: AtomicNeg32 UD:G:32 /effects
+    Addr
+    Index
+
+x86_64: AtomicNeg64 UD:G:64 /effects
+    Addr
+    Index
+
+x86: AtomicNot8 UD:G:8 /effects
+    Addr
+    Index
+
+x86: AtomicNot16 UD:G:16 /effects
+    Addr
+    Index
+
+x86: AtomicNot32 UD:G:32 /effects
+    Addr
+    Index
+
+x86_64: AtomicNot64 UD:G:64 /effects
+    Addr
+    Index
+
+x86: AtomicXchgAdd8 UD:G:8, UD:G:8 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXchgAdd16 UD:G:16, UD:G:16 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXchgAdd32 UD:G:32, UD:G:32 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicXchgAdd64 UD:G:64, UD:G:64 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXchg8 UD:G:8, UD:G:8 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXchg16 UD:G:16, UD:G:16 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86: AtomicXchg32 UD:G:32, UD:G:32 /effects
+    Tmp, Addr
+    Tmp, Index
+
+x86_64: AtomicXchg64 UD:G:64, UD:G:64 /effects
+    Tmp, Addr
+    Tmp, Index
+
+arm: LoadLink8 U:G:8, ZD:G:8 /effects
+    SimpleAddr, Tmp
+
+arm64: LoadLinkAcq8 U:G:8, ZD:G:8 /effects
+    SimpleAddr, Tmp
+
+# Super confusing fact: this returns 0 to mean success, 1 to mean failure.
+arm: StoreCond8 U:G:8, D:G:8, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64: StoreCondRel8 U:G:8, D:G:8, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm: LoadLink16 U:G:16, ZD:G:16 /effects
+    SimpleAddr, Tmp
+
+arm64: LoadLinkAcq16 U:G:16, ZD:G:16 /effects
+    SimpleAddr, Tmp
+
+arm: StoreCond16 U:G:16, D:G:16, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64: StoreCondRel16 U:G:16, D:G:16, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm: LoadLink32 U:G:32, ZD:G:32 /effects
+    SimpleAddr, Tmp
+
+arm64: LoadLinkAcq32 U:G:32, ZD:G:32 /effects
+    SimpleAddr, Tmp
+
+arm: StoreCond32 U:G:32, D:G:32, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64: StoreCondRel32 U:G:32, D:G:32, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+armv7: LoadLinkPair32 U:G:64, D:G:32, D:G:32 /effects
+    SimpleAddr, Tmp, Tmp
+
+arm64: LoadLink64 U:G:64, ZD:G:64 /effects
+    SimpleAddr, Tmp
+
+arm64: LoadLinkAcq64 U:G:64, ZD:G:64 /effects
+    SimpleAddr, Tmp
+
+armv7: StoreCondPair32 U:G:32, U:G:32, D:G:64, EZD:G:8 /effects
+    Tmp, Tmp, SimpleAddr, Tmp
+
+arm64: StoreCond64 U:G:64, D:G:64, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64: StoreCondRel64 U:G:64, D:G:64, EZD:G:8 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64: Depend32 U:G:32, ZD:G:32
+    Tmp, Tmp
+
+arm64: Depend64 U:G:64, ZD:G:64
+    Tmp, Tmp
+
+arm64_lse: AtomicXchgAdd8 U:G:8, UD:G:8, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgAdd16 U:G:16, UD:G:16, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgAdd32 U:G:32, UD:G:32, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgAdd64 U:G:64, UD:G:64, ZD:G:64 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgOr8 U:G:8, UD:G:8, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgOr16 U:G:16, UD:G:16, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgOr32 U:G:32, UD:G:32, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgOr64 U:G:64, UD:G:64, ZD:G:64 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgClear8 U:G:8, UD:G:8, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgClear16 U:G:16, UD:G:16, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgClear32 U:G:32, UD:G:32, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgClear64 U:G:64, UD:G:64, ZD:G:64 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgXor8 U:G:8, UD:G:8, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgXor16 U:G:16, UD:G:16, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgXor32 U:G:32, UD:G:32, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchgXor64 U:G:64, UD:G:64, ZD:G:64 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchg8 U:G:8, UD:G:8, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchg16 U:G:16, UD:G:16, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchg32 U:G:32, UD:G:32, ZD:G:32 /effects
+    Tmp, SimpleAddr, Tmp
+
+arm64_lse: AtomicXchg64 U:G:64, UD:G:64, ZD:G:64 /effects
+    Tmp, SimpleAddr, Tmp

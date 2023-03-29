@@ -26,7 +26,6 @@ pub enum RoleMode {
 
 impl StackMapSpecial {
     pub fn report_used_registers(
-        &self,
         code: &mut Code<'_>,
         inst: &Inst,
         used_registers: &RegisterSetBuilder,
@@ -40,13 +39,13 @@ impl StackMapSpecial {
             .merge(used_registers);
     }
 
-    pub fn extra_clobbered_regs(&self, code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
+    pub fn extra_clobbered_regs(code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
         let value = code.proc.value(inst.origin);
 
         value.stackmap().unwrap().late_clobbered
     }
 
-    pub fn extra_early_clobbered_regs(&self, code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
+    pub fn extra_early_clobbered_regs(code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
         let value = code.proc.value(inst.origin);
 
         value.stackmap().unwrap().early_clobbered
@@ -155,7 +154,7 @@ impl StackMapSpecial {
         inst: &Inst,
         mut role_mode: RoleMode,
         first_recoverable_index: Option<usize>,
-        mut callback: impl FnMut(Arg, ArgRole, Bank, Width),
+        mut callback: impl FnMut(&Arg, ArgRole, Bank, Width),
         optional_def_arg_width: Option<Width>,
         code: &Code<'_>,
     ) {
@@ -240,7 +239,7 @@ impl StackMapSpecial {
 
             let typ = code.proc.value(child.value).typ();
 
-            callback(arg, role, bank_for_type(typ), width_for_type(typ));
+            callback(&arg, role, bank_for_type(typ), width_for_type(typ));
         }
     }
 
@@ -310,17 +309,17 @@ impl StackMapSpecial {
         false
     }
 
-    pub fn reps_impl(&self, context: &mut GenerationContext<'_>, num_ignored_b3_args: usize, num_ignored_air_args: usize, inst: &Inst) -> Vec<ValueRep> {
+    pub fn reps_impl(context: &mut GenerationContext<'_>, num_ignored_b3_args: usize, num_ignored_air_args: usize, inst: &Inst) -> Vec<ValueRep> {
         let mut result = vec![];    
 
         for i in 0..context.code.proc.value(inst.origin).children.len() - num_ignored_b3_args {
-            result.push(self.rep_for_arg(context.code, &inst.args[i + num_ignored_air_args]));
+            result.push(Self::rep_for_arg(context.code, &inst.args[i + num_ignored_air_args]));
         }
 
         result
     }
 
-    pub fn rep_for_arg(&self, code: &Code<'_>, arg: &Arg) -> ValueRep {
+    pub fn rep_for_arg(code: &Code<'_>, arg: &Arg) -> ValueRep {
         match arg.kind() {
             ArgKind::Tmp => ValueRep::reg(arg.reg()),
             ArgKind::Imm 

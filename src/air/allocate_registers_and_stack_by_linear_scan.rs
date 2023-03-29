@@ -9,22 +9,27 @@ use crate::{
         register_set::{RegisterSet, RegisterSetBuilder, ScalarRegisterSet},
     },
     liveness::Liveness,
-    utils::{deque::VecDequeExt, index_set::IndexMap},
+    utils::{deque::VecDequeExt, index_set::IndexMap, phase_scope::phase_scope},
 };
+
+const VERBOSE: bool = !true;
 
 use super::{
     arg::{Arg, ArgRole, ArgTiming},
     basic_block::BasicBlockId,
     code::Code,
+    fix_spills_after_terminals::fix_spills_after_terminals,
+    handle_callee_saves::handle_callee_saves,
     insertion_set::phased::PhasedInsertionSet,
     inst::Inst,
     liveness_adapter::UnifiedTmpLivenessAdapter,
     opcode::Opcode,
     pad_interference::pad_interference,
     reg_liveness::LocalCalcForUnifiedTmpLiveness,
+    stack_allocation::{allocate_escaped_stack_slots, update_frame_size_based_on_stack_slots},
     stack_slot::{StackSlotId, StackSlotKind},
     tmp::Tmp,
-    tmp_set::TmpMap, fix_spills_after_terminals::fix_spills_after_terminals, handle_callee_saves::handle_callee_saves, stack_allocation::{allocate_escaped_stack_slots, update_frame_size_based_on_stack_slots},
+    tmp_set::TmpMap,
 };
 
 /// This implements the Poletto and Sarkar register allocator called "linear scan":
@@ -81,41 +86,44 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
         };
 
         for block_id in (0..this.code.blocks.len()).map(BasicBlockId) {
-            this.insertion_sets.insert(block_id, PhasedInsertionSet::new());
+            this.insertion_sets
+                .insert(block_id, PhasedInsertionSet::new());
         }
 
         this
     }
 
     pub fn run(&mut self) {
-        pad_interference(self.code);
-        self.build_register_set_builder();
-        self.build_indices();
-        self.build_intervals();
+        phase_scope("air::lsra", || {
+            pad_interference(self.code);
+            self.build_register_set_builder();
+            self.build_indices();
+            self.build_intervals();
 
-        loop {
-            self.prepare_intervals_for_scan_for_registers();
-            self.did_spill = false;
+            loop {
+                self.prepare_intervals_for_scan_for_registers();
+                self.did_spill = false;
 
-            self.attempt_scan_for_registers(Bank::GP);
-            self.attempt_scan_for_registers(Bank::FP);
+                self.attempt_scan_for_registers(Bank::GP);
+                self.attempt_scan_for_registers(Bank::FP);
 
-            if !self.did_spill {
-                break;
+                if !self.did_spill {
+                    break;
+                }
+
+                self.emit_spill_code();
             }
 
-            self.emit_spill_code();
-        }
-
-        self.insert_spill_code();
-        self.assign_registers();
-        fix_spills_after_terminals(self.code);
-        handle_callee_saves(self.code);
-        allocate_escaped_stack_slots(self.code);
-        self.prepare_intervals_for_scan_for_stack();
-        self.scan_for_stack();
-        update_frame_size_based_on_stack_slots(self.code);
-        self.code.stack_is_allocated = true;
+            self.insert_spill_code();
+            self.assign_registers();
+            fix_spills_after_terminals(self.code);
+            handle_callee_saves(self.code);
+            allocate_escaped_stack_slots(self.code);
+            self.prepare_intervals_for_scan_for_stack();
+            self.scan_for_stack();
+            update_frame_size_based_on_stack_slots(self.code);
+            self.code.stack_is_allocated = true;
+        });
     }
 
     fn build_register_set_builder(&mut self) {
@@ -157,15 +165,18 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     }
 
     fn early_interval(index_of_early: usize) -> Range<usize> {
-        index_of_early..index_of_early
+        index_of_early..index_of_early + 1
     }
 
     fn late_interval(index_of_late: usize) -> Range<usize> {
-        index_of_late..index_of_late + 1
+        index_of_late + 1..index_of_late + 2
     }
 
     fn early_and_late_interval(index_of_early: usize) -> Range<usize> {
-        index_of_early..index_of_early + 1
+        add_interval(
+            &Self::early_interval(index_of_early),
+            &Self::late_interval(index_of_early),
+        )
     }
 
     #[allow(dead_code)]
@@ -217,7 +228,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 if !tmp.is_reg() {
                     add_interval_mut(
                         &mut self.map.entry(tmp).or_insert(TmpData::default()).interval,
-                        &(index_of_head..index_of_head),
+                        &(index_of_head..index_of_head + 1),
                     );
                 }
             }
@@ -226,7 +237,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 if !tmp.is_reg() {
                     add_interval_mut(
                         &mut self.map.entry(tmp).or_insert(TmpData::default()).interval,
-                        &(index_of_tail..index_of_tail),
+                        &(index_of_tail..index_of_tail + 1),
                     );
                 }
             }
@@ -240,15 +251,12 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                         return;
                     }
 
-                    /*self.map[tmp].interval = add_interval(
-                        &self.map.entry(tmp).or_insert(TmpData::default()),
-                        &Self::interval_for_spill(index_of_early, role),
-                    );*/
-
-                    add_interval_mut(
+                    let _res = add_interval_mut(
                         &mut self.map.entry(tmp).or_insert(TmpData::default()).interval,
                         &Self::interval_for_spill(index_of_early, role),
                     );
+
+                    
                 });
             }
 
@@ -274,7 +282,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                     });
 
                     if prev.kind.opcode == Opcode::Patch {
-                        todo!()
+                        prev_regs.merge(&prev.extra_clobbered_regs(this.code));
                     }
 
                     prev_regs.filter_regs(
@@ -283,7 +291,6 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                             .to_register_set()
                             .include_whole_register_width(),
                     );
-
                     if !prev_regs.is_empty() {
                         this.clobbers.push(Clobber {
                             index: index_of_head + inst_index * 2 - 1,
@@ -302,7 +309,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                     });
 
                     if next.kind.opcode == Opcode::Patch {
-                        todo!()
+                        next_regs.merge(&next.extra_early_clobbered_regs(this.code));
                     }
 
                     if !next_regs.is_empty() {
@@ -385,6 +392,38 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             let entry = &self.map[tmp];
             let index = entry.interval.start;
 
+            if false && VERBOSE {
+                println!("Index #{}: {}", index, tmp);
+                println!("  {}: {}", tmp, entry);
+                println!("  clobberIndex = {}", clobber_index);
+
+                let mut block = BasicBlockId(0);
+
+                for candidate_block in self.code.blocks.iter().enumerate() {
+                    if *self
+                        .start_index
+                        .get(&BasicBlockId(candidate_block.0))
+                        .unwrap()
+                        > index
+                    {
+                        break;
+                    }
+
+                    block = BasicBlockId(candidate_block.0);
+                }
+
+                let inst_index = (index - self.start_index.get(&block).unwrap() + 1) / 2;
+                println!("  At {:?}, instIndex = {}", block, inst_index);
+                if inst_index != 0 {
+                    println!("    Prev: {}", self.code.block(block).insts[inst_index - 1]);
+                }
+                println!("    Next: {}", self.code.block(block).insts[inst_index]);
+                println!(" Active:");
+                for tmp in self.active.iter() {
+                    println!("    {}: {}", tmp, self.map[*tmp]);
+                }
+            }
+
             // This is ExpireOldIntervals in Fig. 1.
             while !self.active.is_empty() {
                 let tmp = self.active.front().copied().unwrap();
@@ -433,6 +472,10 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 self.map[tmp].did_build_possible_regs = true;
             }
 
+            if VERBOSE {
+                println!("  Possible regs: {}", self.map[tmp].possible_regs);
+            }
+
             if self.active.len() != self.allowed_registers_in_priority_order[bank as usize].len() {
                 let mut did_assign = false;
 
@@ -457,6 +500,10 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             }
 
             let spill_tmp = self.active.take_last(|spill_candidate| {
+                println!(
+                    "{} is assigned to {}",
+                    spill_candidate, self.map[*spill_candidate].assigned
+                );
                 self.map[tmp]
                     .possible_regs
                     .contains(self.map[*spill_candidate].assigned)
@@ -503,12 +550,13 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     fn assign(&mut self, tmp: Tmp, reg: Reg) {
         let entry = &mut self.map[tmp];
         entry.assigned = reg;
-        println!("assign {} to {}", tmp, reg);
         self.active_regs
             .add(reg, reg.conservative_width_without_vectors());
+        self.add_to_active(tmp);
     }
 
     fn spill(&mut self, tmp: Tmp) {
+        println!("Spilling {}", tmp);
         let slot = self
             .code
             .add_stack_slot(size_of::<usize>(), StackSlotKind::Spill);
@@ -556,7 +604,8 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
                 let code3 = unsafe { &mut *(code2 as *const Code as *mut Code) };
                 code2.block_mut(block_id).insts[inst_index].for_each_tmp_mut(
-                    code3, |tmp, role, bank, _| {
+                    code3,
+                    |tmp, role, bank, _| {
                         if tmp.is_reg() {
                             return;
                         }
@@ -643,7 +692,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                     .map(|x| x.0)
                     .unwrap_or_else(|| self.used_spillslots.len());
 
-                let slot_size = 64;
+                let slot_size = 8;
 
                 let offset = -(self.code.frame_size as isize)
                     - (self.map[tmp].spill_index as isize) * (slot_size as isize)
@@ -702,7 +751,25 @@ struct TmpData {
     did_build_possible_regs: bool,
     spill_index: usize,
 }
-#[derive(Default)]
+
+impl std::fmt::Display for TmpData {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "interval: {:?}", self.interval)?;
+        writeln!(f, "spilled: {:?}", self.spilled)?;
+        writeln!(f, "possible_regs: {}", self.possible_regs)?;
+        writeln!(f, "assigned: {}", self.assigned)?;
+        writeln!(f, "is_unspillable: {}", self.is_unspillable)?;
+        writeln!(
+            f,
+            "did_build_possible_regs: {}",
+            self.did_build_possible_regs
+        )?;
+        writeln!(f, "spill_index: {}", self.spill_index)?;
+        Ok(())
+    }
+}
+
+#[derive(Default, Debug)]
 struct Clobber {
     index: usize,
     regs: RegisterSet,
@@ -721,16 +788,17 @@ fn add_interval(this: &Range<usize>, other: &Range<usize>) -> Range<usize> {
     this.start.min(other.start)..this.end.max(other.end)
 }
 
-fn add_interval_mut(this: &mut Range<usize>, other: &Range<usize>) {
+fn add_interval_mut(this: &mut Range<usize>, other: &Range<usize>) -> Range<usize> {
     if this.start == this.end {
         *this = other.clone();
-        return;
+        return this.clone();
     }
 
     if other.start == other.end {
-        return;
+        return this.clone();
     }
 
     this.start = this.start.min(other.start);
     this.end = this.end.max(other.end);
+    this.clone()
 }

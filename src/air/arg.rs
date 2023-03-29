@@ -1068,6 +1068,9 @@ impl Arg {
     }
 
     pub fn offset(&self) -> i64 {
+        if self.kind() == ArgKind::Stack {
+            return self.scale as _;
+        }
         assert!(self.has_offset());
         self.offset
     }
@@ -1211,7 +1214,7 @@ impl Arg {
     }
 
     pub fn fpr(&self) -> u8 {
-        assert!(self.is_fpr());
+        assert!(self.is_fpr(), "not fpr: {}", self);
         self.tmp().fpr()
     }
 

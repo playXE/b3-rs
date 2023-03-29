@@ -1,5 +1,5 @@
 use macroassembler::{
-    assembler::x86assembler::xmm0,
+    assembler::{x86assembler::xmm0, TargetMacroAssembler, abstract_macro_assembler::Jump},
     jit::gpr_info::{NON_PRESERVED_NON_ARGUMENT_GPR0, RETURN_VALUE_GPR, RETURN_VALUE_GPR2},
 };
 
@@ -14,7 +14,7 @@ use super::{
     code::Code,
     form_table::is_arm64,
     inst::Inst,
-    tmp::Tmp,
+    tmp::Tmp, generation_context::GenerationContext,
 };
 
 /// Use this special for constructing a C call. Arg 0 is of course a Special arg that refers to the
@@ -79,6 +79,7 @@ impl CCallSpecial {
         }
 
         for i in 0..Self::NUM_RETURN_GP_ARGS {
+            
             lambda(
                 inst.args[Self::RETURN_GP_ARG_OFFSET + i],
                 ArgRole::Def,
@@ -222,5 +223,29 @@ impl CCallSpecial {
         } else {
             false
         }
+    }
+
+    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, _: &mut GenerationContext) -> Jump {
+        match inst.args[Self::CALLEE_ARG_OFFSET].kind() {
+            ArgKind::Imm
+            | ArgKind::BigImm => {
+                jit.mov(inst.args[Self::CALLEE_ARG_OFFSET].as_imm_ptr(), Self::SCRATCH_REGISTER);
+                jit.call_op(Some(Self::SCRATCH_REGISTER));
+            }
+            
+            ArgKind::Tmp => {
+                jit.call_op(Some(inst.args[Self::CALLEE_ARG_OFFSET].gpr()));
+            }
+
+            ArgKind::Addr
+            | ArgKind::ExtendedOffsetAddr => {
+                jit.call_op(Some(inst.args[Self::CALLEE_ARG_OFFSET].as_address()));
+            }
+
+            _ => unreachable!()
+        }
+
+        
+        Jump::default()
     }
 }

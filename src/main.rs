@@ -1,24 +1,33 @@
 use b3::{
-    air::{eliminate_dead_code, lsra::allocate_registers_and_stack_by_linear_scan},
+    air::generate::{generate, prepare_for_generation},
     block::{BasicBlockBuilder, Frequency},
-    fix_ssa::fix_ssa,
+    generate::generate_to_air,
     jit::reg::Reg,
-    lower_to_air::lower_to_air,
     opcode::Opcode,
     procedure::Procedure,
     typ::Type,
+    utils::phase_scope::print_scope_info,
 };
-use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
+
+use macroassembler::{
+    assembler::{link_buffer::LinkBuffer, TargetMacroAssembler},
+    jit::gpr_info::ARGUMENT_GPR0,
+};
+
+#[allow(dead_code)]
+extern "C" fn some_func(x: i32) -> i32 {
+    println!("i is equal to {}", x);
+    x
+}
 
 #[allow(dead_code)]
 fn factorial() {
-    let mut proc = Procedure::new();
-
+    let mut proc = Procedure::new(Default::default());
     // factorial_iterative (Int32) -> Int32
     let root = proc.add_block(1.0);
     let loop_footer = proc.add_block(1.0);
     let loop_body = proc.add_block(1.0);
-    let exit = proc.add_block(1.0);
+    let exit = proc.add_block(0.0);
     let n = proc.add_variable(Type::Int32);
     let acc = proc.add_variable(Type::Int32);
     let i = proc.add_variable(Type::Int32);
@@ -72,18 +81,32 @@ fn factorial() {
     });
 
     proc.dominators_or_compute();
-    fix_ssa(&mut proc);
 
-    let mut code = lower_to_air(&mut proc);
-    println!("Assembly IR before RA:\n{}", code);
-    eliminate_dead_code::eliminate_dead_code(&mut code);
-    code.reset_reachability();
+    let mut code = generate_to_air(&mut proc);
+    prepare_for_generation(&mut code);
 
-    allocate_registers_and_stack_by_linear_scan(&mut code);
+    let mut jit = TargetMacroAssembler::new();
+    code.generate_default_prologue(&mut jit);
+    generate(&mut code, &mut jit);
 
-    println!("Assembly IR after RA:\n{}", code);
+    let mut link_buffer = LinkBuffer::from_macro_assembler(&mut jit);
+    let mut out = String::new();
+
+    let x = link_buffer
+        .finalize_with_disassembly(true, "factorial-iterative", &mut out)
+        .unwrap();
+
+    println!("{}", out);
+
+    let factorial_iterative: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(x.start()) };
+
+    println!("factorial_iterative(5) = {}", factorial_iterative(5));
+
+    let _ = x;
+    let _ = code;
+
+    print_scope_info();
 }
-
 fn main() {
     factorial();
 }

@@ -143,7 +143,7 @@ impl InsertionSet {
         }
         self.insertions.sort();
         execute_insertions(&mut proc.block_mut(block).values, &mut self.insertions);
-
+        self.insertions.clear();
         self.bottom_for_type.clear();
     }
 }

@@ -1,5 +1,7 @@
 use std::mem::size_of;
 
+use macroassembler::jit::{gpr_info, fpr_info};
+
 use crate::width::{width_for_bytes, Width};
 
 use super::typ::*;
@@ -9,6 +11,22 @@ use super::typ::*;
 pub enum Bank {
     GP,
     FP,
+}
+
+impl Bank {
+    pub fn num_of_argument_registers(&self) -> usize {
+        match self {
+            Self::GP => gpr_info::NUMBER_OF_ARGUMENT_REGISTERS,
+            Self::FP => fpr_info::NUMBER_OF_ARGUMENT_REGISTERS
+        }
+    }
+
+    pub fn to_argument_register(&self ,index: usize) -> u8 {
+        match self {
+            Self::GP => gpr_info::to_argument_register(index),
+            Self::FP => fpr_info::to_argument_register(index)
+        }
+    }
 }
 
 pub fn bank_for_type(typ: Type) -> Bank {

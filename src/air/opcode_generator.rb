@@ -1184,17 +1184,16 @@ writeH("opcode_generated") {
     outp.puts "return false; }"
     outp.puts "}"
     outp.puts "}"
-    outp.puts "}"
-    return 
-    outp.puts "CCallHelpers::Jump Inst::generate(CCallHelpers& jit, GenerationContext& context)"
+    
+
+    outp.puts "pub fn generate(&self, jit: &mut TargetMacroAssembler, context: &mut GenerationContext<'_>) -> Jump"
     outp.puts "{"
-    outp.puts "UNUSED_PARAM(jit);"
-    outp.puts "UNUSED_PARAM(context);"
-    outp.puts "CCallHelpers::Jump result;"
-    matchInstOverloadForm(outp, :fast, "this") {
+
+    outp.puts "let mut result = Jump::default();"
+    matchInstOverloadForm(outp, :fast, "self") {
         | opcode, overload, form |
         if opcode.custom
-            outp.puts "OPGEN_RETURN(#{opcode.name}Custom::generate(*this, jit, context));"
+            outp.puts "return #{opcode.name}Custom::generate(self, jit, context);"
         else
             beginArchs(outp, form.archs)
             if form.altName
@@ -1202,10 +1201,23 @@ writeH("opcode_generated") {
             else
                 methodName = opcode.masmName
             end
-
-            if form.kinds.length > 2
-                methodName = methodName + "_rrr"
-            end
+            
+            #if methodName == "move"
+            #    methodName = "mov"
+            #end
+            #if methodName.start_with?("branch") and form.kinds.length == 3
+            #    methodName = methodName 
+            #elsif methodName.start_with?("moveConditionally")
+            #    
+            #    if form.kinds.length == 6
+            #        methodName = methodName + "ThenElse"
+            #    else 
+            #        methodName = methodName
+            #    end
+            #elsif form.kinds.length > 2
+            #    methodName = methodName + "_rrr"
+            #end
+            
 
             methodName = underscore(methodName)
             
@@ -1222,46 +1234,47 @@ writeH("opcode_generated") {
                 case kind.name
                 when "Tmp"
                     if overload.signature[index].bank == "G"
-                        outp.print "args[#{index}].gpr()"
+                        outp.print "self.args[#{index}].gpr()"
                     else
-                        outp.print "args[#{index}].fpr()"
+                        outp.print "self.args[#{index}].fpr()"
                     end
                 when "Imm", "BitImm"
-                    outp.print "args[#{index}].asTrustedImm32()"
+                    outp.print "self.args[#{index}].as_imm32()"
                 when "BigImm"
-                    outp.print "args[#{index}].asTrustedBigImm()"
+                    outp.print "self.args[#{index}].as_big_imm()"
                 when "BitImm64"
-                    outp.print "args[#{index}].asTrustedImm64()"
+                    outp.print "self.args[#{index}].as_imm64()"
                 when "ZeroReg"
-                    outp.print "args[#{index}].asZeroReg()"
+                    outp.print "self.args[#{index}].as_zero_reg()"
                 when "SimpleAddr", "Addr", "ExtendedOffsetAddr"
-                    outp.print "args[#{index}].asAddress()"
+                    outp.print "self.args[#{index}].as_address()"
                 when "Index"
-                    outp.print "args[#{index}].asBaseIndex()"
+                    outp.print "self.args[#{index}].as_base_index()"
                 when "PreIndex"
-                    outp.print "args[#{index}].asPreIndexAddress()"
+                    outp.print "self.args[#{index}].as_pre_index_address()"
                 when "PostIndex"
-                    outp.print "args[#{index}].asPostIndexAddress()"
+                    outp.print "self.args[#{index}].as_post_index_address()"
                 when "RelCond"
-                    outp.print "args[#{index}].asRelationalCondition()"
+                    outp.print "self.args[#{index}].as_relational_condition()"
                 when "ResCond"
-                    outp.print "args[#{index}].asResultCondition()"
+                    outp.print "self.args[#{index}].as_result_condition()"
                 when "DoubleCond"
-                    outp.print "args[#{index}].asDoubleCondition()"
+                    outp.print "self.args[#{index}].as_double_condition()"
                 when "StatusCond"
-                    outp.print "args[#{index}].asStatusCondition()"
+                    outp.print "self.args[#{index}].as_status_condition()"
                 when "SIMDInfo"
-                    outp.print "args[#{index}].simdInfo()"
+                    outp.print "todo!(\"SIMDInfo\");)"
+                    #outp.print "args[#{index}].simdInfo()"
                 end
             }
 
             outp.puts ");"
-            outp.puts "OPGEN_RETURN(result);"
+            outp.puts "return result;"
             endArchs(outp, form.archs)
         end
     }
-    outp.puts "RELEASE_ASSERT_NOT_REACHED();"
-    outp.puts "return result;"
+    outp.puts "unreachable!(\"Failed to generate: {}\", self)"
+    outp.puts "}"
     outp.puts "}"
 }
 

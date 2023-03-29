@@ -79,10 +79,16 @@ impl Reg {
         Self::invalid() - 1
     }
 
-    pub const fn new_fpr(index: u8) -> Reg {
+    pub fn new_fpr(index: u8) -> Reg {
+        assert!(
+            index < TargetAssembler::number_of_fp_registers() as u8,
+            "index: {} >= {}",
+            index,
+            TargetAssembler::number_of_fp_registers() as u8
+        );
+        // println!("FPR {} -> {} -> {}", index, fp_register_index(index), Self { index: fp_register_index(index) });
         Reg {
-            index: index - TargetAssembler::first_fp_register()
-                + TargetAssembler::number_of_registers() as u8,
+            index: fp_register_index(index),
         }
     }
 
@@ -118,4 +124,14 @@ impl std::fmt::Display for Reg {
             write!(f, "{}", TargetAssembler::fpr_name(self.fpr()))
         }
     }
+}
+
+pub const fn gp_register_index(index: u8) -> u8 {
+    index - TargetAssembler::first_register()
+}
+
+pub const fn fp_register_index(index: u8) -> u8 {
+    index
+        .wrapping_sub(TargetAssembler::first_fp_register())
+        .wrapping_add(TargetAssembler::number_of_registers() as u8)
 }

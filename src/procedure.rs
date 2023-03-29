@@ -10,16 +10,19 @@ use crate::{
     sparse_collection::SparseCollection,
     typ::{Type, TypeKind},
     value::{NumChildren, Value, ValueData, ValueId},
-    variable::{Variable, VariableId}, air::stack_slot::{StackSlot, StackSlotKind, StackSlotId},
+    variable::{Variable, VariableId}, air::{stack_slot::{StackSlot, StackSlotKind, StackSlotId}, special::{Special, SpecialId}}, effects::Effects, data_section::DataSection, rpo::rpo_sort,
 };
-
+use crate::Options;
 pub struct Procedure {
+    pub(crate) options: Options,
     pub(crate) values: SparseCollection<Value>,
     pub(crate) blocks: Vec<BasicBlock>,
     pub(crate) variables: SparseCollection<Variable>,
     pub(crate) dominators: Option<Dominators<Self>>,
     pub(crate) natural_loops: Option<NaturalLoops<Self>>,
-    pub(crate) stack_slots: Vec<StackSlot>
+    pub(crate) stack_slots: Vec<StackSlot>,
+    pub(crate) specials: SparseCollection<Special>,
+    pub(crate) data_sections: Vec<DataSection>,
 }
 
 impl Graph for Procedure {
@@ -57,7 +60,7 @@ impl Graph for Procedure {
 }
 
 impl Procedure {
-    pub fn new() -> Self {
+    pub fn new(options: Options) -> Self {
         Self {
             values: SparseCollection::new(),
             blocks: Vec::new(),
@@ -65,7 +68,24 @@ impl Procedure {
             dominators: None,
             natural_loops: None,
             stack_slots: vec![],
+            specials: SparseCollection::new(),
+            options,
+            data_sections: vec![],
         }
+    }
+
+   
+
+    pub fn options(&self) -> &Options {
+        &self.options
+    }
+
+    pub fn special(&self, id: SpecialId) -> &Special {
+        self.specials.at(id).unwrap()
+    }
+
+    pub fn special_mut(&mut self, id: SpecialId) -> &mut Special {
+        self.specials.at_mut(id).unwrap()
     }
 
     pub fn add_stack_slot(&mut self, size: usize, stack_slot_kind: StackSlotKind) -> StackSlotId {
@@ -174,6 +194,10 @@ impl Procedure {
         self.blocks.push(block);
 
         BlockId(self.blocks.len() - 1)
+    }
+
+    pub fn add_nop(&mut self) -> ValueId {
+        self.add(Value::new(Opcode::Nop, Type::Void, NumChildren::Zero, &[], ValueData::None))
     }
 
     pub fn add_int_constant(&mut self, typ: Type, value: impl Into<i64>) -> ValueId {
@@ -425,6 +449,9 @@ impl Procedure {
         if !found_dead {
             return;
         }
+        
+        self.reset_value_owners();
+
 
         for value_id in (0..self.values.size()).map(ValueId) {
             if let ValueData::Upsilon(ref phi) = self.value(value_id).data {
@@ -446,6 +473,8 @@ impl Procedure {
                 self.blocks[block_id.0].clear();
             }
         }
+
+        rpo_sort(self);
     }
 
     pub fn delete_value(&mut self, value_id: ValueId) {
@@ -484,6 +513,24 @@ impl Procedure {
             &[val],
             ValueData::None,
         ))
+    }
+
+    pub fn add_ccall(&mut self, ret: Type, callee: ValueId, args: &[ValueId], effects: Effects) -> ValueId {
+        self.add(Value::new(
+            Opcode::CCall,
+            ret,
+            NumChildren::VarArgs,
+            std::iter::once(callee).chain(args.iter().copied()).collect::<Vec<_>>().as_slice(),
+            ValueData::CCallValue(effects),
+        ))
+    }
+
+    pub fn add_data_section(&mut self, size: usize) -> (usize, *mut u8) {
+        self.data_sections.push(DataSection::new(size));
+        let index = self.data_sections.len() - 1;
+        let ptr = self.data_sections[index].data.as_mut_ptr();
+
+        (index, ptr)
     }
 }
 

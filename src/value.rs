@@ -10,13 +10,15 @@ use crate::{
     jit::reg::Reg,
     kind::Kind,
     opcode::Opcode,
+    patchpoint_value::PatchpointValue,
     procedure::Procedure,
     sparse_collection::SparseElement,
     stackmap_value::StackMapValue,
     typ::{Type, TypeKind},
+    utils::index_set::KeyIndex,
     variable::VariableId,
     width::{width_for_type, Width},
-    *, utils::index_set::KeyIndex, patchpoint_value::PatchpointValue,
+    *,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -44,6 +46,140 @@ pub struct Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Ord, PartialOrd)]
 #[repr(C)]
 pub struct ValueId(pub usize);
+
+impl ValueId {
+    pub fn child(self, proc: &Procedure, index: usize) -> ValueId {
+        proc.value(self).children[index]
+    }
+
+    pub fn child_mut(self, proc: &mut Procedure, index: usize) -> &mut ValueId {
+        &mut proc.value_mut(self).children[index]
+    }
+
+    pub fn materialize(self, proc: &mut Procedure) -> ValueId {
+        let typ = proc.value(self).typ();
+        use Opcode::*;
+        match proc.value(self).kind.opcode() {
+            Opcode::FramePointer => proc.add(Value::new(
+                Opcode::FramePointer,
+                typ,
+                NumChildren::Zero,
+                &[],
+                ValueData::None,
+            )),
+            Identity | Opaque | Abs | Floor | Ceil | Sqrt | Neg | Depend | SExt8 | SExt16
+            | SExt8To64 | SExt16To64 | SExt32 | ZExt32 | Clz | Trunc | IToD | IToF
+            | FloatToDouble | DoubleToFloat => {
+                let child = self.child(proc, 0);
+                let kind = proc.value(self).kind;
+                proc.add(Value::new(
+                    kind,
+                    typ,
+                    NumChildren::One,
+                    &[child],
+                    ValueData::None,
+                ))
+            }
+
+            Add | Sub | Mul | Div | UDiv | Mod | UMod | FMax | FMin | BitAnd | BitOr | BitXor
+            | Shl | SShr | ZShr | RotR | RotL | Equal | NotEqual | LessThan | GreaterThan
+            | Above | Below | AboveEqual | BelowEqual | EqualOrUnordered => {
+                let child0 = self.child(proc, 0);
+                let child1 = self.child(proc, 1);
+                let kind = proc.value(self).kind;
+                proc.add(Value::new(
+                    kind,
+                    typ,
+                    NumChildren::Two,
+                    &[child0, child1],
+                    ValueData::None,
+                ))
+            }
+
+            Select => {
+                let child0 = self.child(proc, 0);
+                let child1 = self.child(proc, 1);
+                let child2 = self.child(proc, 2);
+                let kind = proc.value(self).kind;
+                proc.add(Value::new(
+                    kind,
+                    typ,
+                    NumChildren::Three,
+                    &[child0, child1, child2],
+                    ValueData::None,
+                ))
+            }
+
+            Const32 => {
+                let val = proc.value(self).as_int32().unwrap();
+                proc.add(Value::new(
+                    Opcode::Const32,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Const32(val),
+                ))
+            }
+
+            Const64 => {
+                let val = proc.value(self).as_int64().unwrap();
+                proc.add(Value::new(
+                    Opcode::Const64,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Const64(val),
+                ))
+            }
+
+            Const128 => {
+                let val = proc.value(self).as_int128().unwrap();
+                proc.add(Value::new(
+                    Opcode::Const128,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Const128(val),
+                ))
+            }
+
+            ConstFloat => {
+                let val = proc.value(self).as_float().unwrap();
+                proc.add(Value::new(
+                    Opcode::ConstFloat,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Float(val.to_bits()),
+                ))
+            }
+
+            ConstDouble => {
+                let val = proc.value(self).as_double().unwrap();
+                proc.add(Value::new(
+                    Opcode::ConstDouble,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Double(val.to_bits()),
+                ))
+            }
+
+            ArgumentReg => {
+                let reg = proc.value(self).argument_reg().unwrap();
+                proc.add(Value::new(
+                    Opcode::ArgumentReg,
+                    typ,
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::Argument(reg),
+                ))
+            }
+
+            _ => todo!(),
+        }
+    }
+}
 
 impl Into<usize> for ValueId {
     fn into(self) -> usize {
@@ -189,6 +325,17 @@ impl Value {
         }
     }
 
+    pub fn memory_value_mut(&mut self) -> Option<(&mut i32, &mut Range<usize>, &mut Range<usize>)> {
+        match self.data {
+            ValueData::MemoryValue {
+                ref mut offset,
+                ref mut range,
+                ref mut fence_range,
+            } => Some((offset, range, fence_range)),
+            _ => None,
+        }
+    }
+
     pub fn effects(&self) -> Effects {
         let mut result = Effects::none();
 
@@ -215,9 +362,10 @@ impl Value {
                 _ => unreachable!(),
             },
 
-            Opcode::Patchpoint => {
-                todo!()
-            }
+            Opcode::Patchpoint => match self.data {
+                ValueData::Patchpoint(ref patchpoint) => result = patchpoint.effects.clone(),
+                _ => todo!(),
+            },
 
             Opcode::Phi | Opcode::Upsilon => {
                 result.writes_local_state = true;
@@ -230,6 +378,10 @@ impl Value {
             | Opcode::Oops
             | Opcode::EntrySwitch => {
                 result.terminal = true;
+            }
+
+            Opcode::Check | Opcode::CheckAdd | Opcode::CheckMul | Opcode::CheckSub => {
+                result = Effects::for_check()
             }
 
             _ => (),
@@ -1291,7 +1443,7 @@ impl Value {
                 Some(x) => write!(f, " phi=v@{}", x.0)?,
                 None => write!(f, " phi=none")?,
             },
-            _ => todo!(),
+            _ => (),
         }
 
         write!(f, ")")?;
@@ -1396,13 +1548,12 @@ impl Value {
 
         while stackmap.reps.len() < nchild {
             stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
-        }   
+        }
         stackmap.reps.push(rep);
         self.children.push(value);
-        
     }
 
-    pub fn stackmap_append_some_register(&mut self, value: ValueId,) {
+    pub fn stackmap_append_some_register(&mut self, value: ValueId) {
         self.stackmap_append_with_rep(value, ValueRep::new(ValueRepKind::SomeRegister))
     }
 
@@ -1474,7 +1625,7 @@ impl std::fmt::Debug for ValueRep {
             ValueRepKind::Stack => write!(f, "({})", self.offset_from_fp()),
             ValueRepKind::StackArgument => write!(f, "({})", self.offset_from_sp()),
             ValueRepKind::Constant => write!(f, "({})", self.value()),
-            _ => Ok(())
+            _ => Ok(()),
         }
     }
 }
@@ -1615,7 +1766,6 @@ impl ValueRep {
         assert!(self.is_stack_argument());
         unsafe { self.u.offset_from_sp }
     }
-
 }
 
 impl PartialEq for ValueRep {
@@ -1625,7 +1775,6 @@ impl PartialEq for ValueRep {
 }
 
 impl Eq for ValueRep {}
-
 
 #[derive(Clone, Copy)]
 union ValueRepU {

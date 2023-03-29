@@ -40,7 +40,7 @@ pub fn attempt_assignment(
             return false;
         }
     }
-
+   
     code.stack_slot_mut(slot).offset_from_fp = offset_from_fp;
 
     true
@@ -58,7 +58,7 @@ pub fn assign(code: &mut Code<'_>, slot: StackSlotId, other_slots: &[StackSlotId
         }
 
         let offset_from_fp = code.stack_slot(other_slot).offset_from_fp
-            - code.stack_slot(other_slot).byte_size as isize;
+            - code.stack_slot(slot).byte_size as isize;
 
         if attempt_assignment(code, slot, offset_from_fp, other_slots) {
             return;
@@ -69,6 +69,7 @@ pub fn assign(code: &mut Code<'_>, slot: StackSlotId, other_slots: &[StackSlotId
 pub fn allocate_and_get_escaped_slots_without_changing_frame_size(
     code: &mut Code<'_>,
 ) -> Vec<StackSlotId> {
+    assert!(code.frame_size == 0);
     let mut assigned_escaped_stack_slots = Vec::new();
     let mut escaped_stack_slot_worklist = Vec::new();
 

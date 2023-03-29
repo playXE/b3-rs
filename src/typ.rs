@@ -33,6 +33,7 @@ impl Type {
     pub const V128: Self = Self::new(TypeKind::V128);
     pub const Void: Self = Self::new(TypeKind::Void);
 
+
     pub const fn new(kind: TypeKind) -> Self {
         Self { kind: kind as _ }
     }

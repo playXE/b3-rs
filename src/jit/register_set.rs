@@ -91,6 +91,12 @@ impl RegisterSetBuilder {
         self
     }
 
+    pub fn merge_regs(&mut self, other: &RegisterSet) -> &mut Self {
+        self.bits.merge(&other.bits);
+        self.upper_bits.merge(&other.upper_bits);
+        self
+    }
+
     pub fn exclude(&mut self, other: &Self) -> &mut Self {
         self.bits.exclude(&other.bits);
         self.upper_bits.exclude(&other.upper_bits);
@@ -198,10 +204,20 @@ impl RegisterSetBuilder {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Clone, PartialEq, Eq, Hash, Copy)]
 pub struct RegisterSet {
     bits: RegisterBitmap,
     upper_bits: RegisterBitmap,
+}
+
+impl std::fmt::Debug for RegisterSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(")?;
+        self.for_each_with_width(|reg, _| {
+            write!(f, "{}, ", reg).unwrap();
+        });
+        write!(f, ")")
+    }
 }
 
 impl std::fmt::Display for RegisterSet {
@@ -305,9 +321,25 @@ impl RegisterSet {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct ScalarRegisterSet {
     bits: RegisterBitmap,
+}
+
+impl std::fmt::Display for ScalarRegisterSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut i = 0;
+        let count = self.to_register_set().number_of_set_registers();
+        self.to_register_set().for_each(|reg| {
+            write!(f, "{}", reg).unwrap();
+            if i < count - 1 {
+                write!(f, ",").unwrap();
+            }
+            i += 1;
+        });
+
+        Ok(())
+    }
 }
 
 impl ScalarRegisterSet {

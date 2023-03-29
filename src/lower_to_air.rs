@@ -2,15 +2,18 @@ use std::collections::HashMap;
 
 use crate::air;
 use crate::air::arg::{is_representable_as, ArgSignedness};
-use crate::air::form_table::{is_arm64, is_valid_form, is_x86};
+use crate::air::form_table::{is_valid_form, is_x86};
 use crate::air::helpers::{move_for_type, relaxed_move_for_type};
 use crate::air::insertion_set::InsertionSet;
 use crate::air::kind::Kind;
 use crate::air::opcode::Opcode as AirOpcode;
+use crate::air::special::Special;
 use crate::bank::Bank;
 use crate::block::{blocks_in_pre_order, Frequency};
+use crate::patchpoint_special::PatchpointSpecial;
 use crate::typ::TypeKind;
-use crate::value::{Value, ValueData};
+use crate::utils::phase_scope;
+use crate::value::{Value, ValueData, ValueRep, ValueRepKind};
 use crate::width::Width;
 use crate::{
     air::{
@@ -42,12 +45,14 @@ use macroassembler::{
 
 /// This lowers the current B3 procedure to an Air code.
 pub fn lower_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
-    let code = Code::new(proc);
+    phase_scope::phase_scope("b3::lower_to_air", || {
+        let code = Code::new(proc);
 
-    let mut lower_to_air = LowerToAir::new(code);
-    lower_to_air.run();
+        let mut lower_to_air = LowerToAir::new(code);
+        lower_to_air.run();
 
-    lower_to_air.code
+        lower_to_air.code
+    })
 }
 
 macro_rules! opcode_for_width {
@@ -293,7 +298,6 @@ impl<'a> LowerToAir<'a> {
 
         unreachable!()
     }
-
 
     #[allow(dead_code)]
     fn is_mergeable_value(&self, v: ValueId, opcode: Opcode, check_can_be_internal: bool) -> bool {
@@ -691,7 +695,6 @@ impl<'a> LowerToAir<'a> {
         self.append(opcode, &[Arg::new_tmp(result)]);
     }
 
-    
     fn opcode_based_on_shift_kind(
         &self,
         opcode: Opcode,
@@ -1405,7 +1408,6 @@ impl<'a> LowerToAir<'a> {
 
         self.insts.truncate(0);
     }
-
 
     /// Create an Inst to do the comparison specified by the given value.
     fn create_generic_compare(
@@ -3033,10 +3035,12 @@ impl<'a> LowerToAir<'a> {
             }
 
             Opcode::Depend => {
-                assert!(is_arm64());
+                /*assert!(is_arm64());
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Depend32 }, { AirOpcode::Depend64 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                self.append_un_op::<{ AirOpcode::Depend32 }, { AirOpcode::Depend64 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);*/
+
+                todo!()
             }
 
             Opcode::Shl => {
@@ -3433,7 +3437,249 @@ impl<'a> LowerToAir<'a> {
             Opcode::EntrySwitch => {
                 self.append(AirOpcode::EntrySwitch, &[]);
             }
+
+            Opcode::Patchpoint => {
+                let special = self.code.proc.specials.add(Special {
+                    index: 0,
+                    kind: air::special::SpecialKind::Patchpoint(PatchpointSpecial),
+                });
+
+                let mut inst = Inst::new(
+                    AirOpcode::Patch.into(),
+                    self.value,
+                    &[Arg::new_special(special)],
+                );
+
+                let mut after = vec![];
+                use ValueRepKind::*;
+
+                let mut generate_result_operand =
+                    |this: &mut Self, typ, rep: ValueRep, tmp| match rep.kind() {
+                        WarmAny | ColdAny | LateColdAny | SomeRegister | SomeEarlyRegister
+                        | SomeLateRegister => inst.args.push(Arg::new_tmp(tmp)),
+
+                        Register => {
+                            let reg = Tmp::from_reg(rep.get_reg());
+
+                            inst.args.push(Arg::new_tmp(reg));
+                            after.push(Inst::new(
+                                relaxed_move_for_type(typ).into(),
+                                this.value,
+                                &[Arg::new_tmp(reg), Arg::new_tmp(tmp)],
+                            ));
+                        }
+
+                        StackArgument => {
+                            let arg = Arg::new_call_arg(rep.offset_from_fp() as _);
+                            inst.args.push(arg);
+                            after.push(Inst::new(
+                                move_for_type(typ).into(),
+                                this.value,
+                                &[arg, Arg::new_tmp(tmp)],
+                            ));
+                        }
+
+                        _ => unreachable!(),
+                    };
+
+                if self.code.proc.value(self.value).typ().kind() != TypeKind::Void {
+                    let typ = self.code.proc.value(self.value).typ();
+                    let arg = self.imm_or_tmp(self.value);
+                    let rep = self
+                        .code
+                        .proc
+                        .value(self.value)
+                        .patchpoint()
+                        .unwrap()
+                        .result_constraints[0];
+                    generate_result_operand(self, typ, rep, arg.tmp());
+                }
+
+                self.fill_stackmap(&mut inst, self.value, 0);
+
+                for i in 0..self
+                    .code
+                    .proc
+                    .value(self.value)
+                    .patchpoint()
+                    .unwrap()
+                    .result_constraints
+                    .len()
+                {
+                    let constraint = self
+                        .code
+                        .proc
+                        .value(self.value)
+                        .patchpoint()
+                        .unwrap()
+                        .result_constraints[i];
+                    if constraint.is_reg() {
+                        self.code
+                            .proc
+                            .value_mut(self.value)
+                            .patchpoint_mut()
+                            .unwrap()
+                            .late_clobbered
+                            .remove(constraint.get_reg());
+                    }
+                }
+
+                for _ in (0..self
+                    .code
+                    .proc
+                    .value(self.value)
+                    .patchpoint()
+                    .unwrap()
+                    .num_gp_scratch_registers)
+                    .rev()
+                {
+                    inst.args.push(Arg::new_tmp(self.code.new_tmp(Bank::GP)));
+                }
+
+                for _ in (0..self
+                    .code
+                    .proc
+                    .value(self.value)
+                    .patchpoint()
+                    .unwrap()
+                    .num_fp_scratch_registers)
+                    .rev()
+                {
+                    inst.args.push(Arg::new_tmp(self.code.new_tmp(Bank::FP)));
+                }
+
+                self.insts.last_mut().unwrap().push(inst);
+                self.insts.last_mut().unwrap().extend(after);
+            }
+
+            Opcode::CCall => {
+                let special = self.code.ccall_special();
+
+                let mut inst = Inst::new(
+                    if self.is_rare {
+                        AirOpcode::ColdCCall
+                    } else {
+                        AirOpcode::CCall
+                    }
+                    .into(),
+                    self.value,
+                    &[Arg::new_special(special)],
+                );
+
+                // We have a ton of flexibility regarding the callee argument, but currently, we don't
+                // use it yet. It gets weird for reasons:
+                // 1) We probably will never take advantage of this. We don't have C calls to locations
+                //    loaded from addresses. We have JS calls like that, but those use Patchpoints.
+                // 2) On X86_64 we still don't support call with BaseIndex.
+                // 3) On non-X86, we don't natively support any kind of loading from address.
+                // 4) We don't have an isValidForm() for the CCallSpecial so we have no smart way to
+                //    decide.
+                // FIXME: https://bugs.webkit.org/show_bug.cgi?id=151052
+
+                let callee = self.tmp(self.child_id(self.value, 0));
+                inst.args.push(Arg::new_tmp(callee));
+
+                if self.value(self.value).typ.kind() != TypeKind::Void {
+                    let arg = self.imm_or_tmp(self.value);
+                    inst.args.push(arg);
+                }
+
+                for i in 1..self.value(self.value).children.len() {
+                    let arg = self.imm_or_tmp(self.child_id(self.value, i));
+                    inst.args.push(arg);
+                }
+
+                self.insts.last_mut().unwrap().push(inst);
+            }
+
+            Opcode::Identity | Opcode::Opaque => {
+                assert!(self.tmp(self.value.child(self.code.proc, 0)) == self.tmp(self.value));
+            }
             opcode => todo!("NYI: Could not lower {:?}", opcode),
+        }
+    }
+
+    fn fill_stackmap(&mut self, inst: &mut Inst, stackmap: ValueId, num_skipped: usize) {
+        for i in num_skipped..self.code.proc.value(stackmap).children.len() {
+            let value = self.code.proc.value(stackmap).constrained_child(i);
+
+            let arg;
+            match value.rep.kind() {
+                ValueRepKind::WarmAny | ValueRepKind::ColdAny | ValueRepKind::LateColdAny => {
+                    if let Some(imm) = self.imm_from_value(value.value) {
+                        arg = imm;
+                    } else if let Some(imm64) = self.code.proc.value(value.value).as_int64() {
+                        arg = Arg::new_bigimm(imm64);
+                    } else if let Some(imm) = self
+                        .code
+                        .proc
+                        .value(value.value)
+                        .as_double()
+                        .filter(|_| self.can_be_internal(value.value))
+                    {
+                        self.commit_internal(Some(value.value));
+                        arg = Arg::new_bigimm(imm.to_bits() as _);
+                    } else if let Some(imm) = self
+                        .code
+                        .proc
+                        .value(value.value)
+                        .as_float()
+                        .filter(|_| self.can_be_internal(value.value))
+                    {
+                        self.commit_internal(Some(value.value));
+                        arg = Arg::new_bigimm(imm.to_bits() as _);
+                    } else {
+                        arg = Arg::new_tmp(self.tmp(value.value));
+                    }
+                }
+
+                ValueRepKind::SomeRegister | ValueRepKind::SomeLateRegister => {
+                    arg = Arg::new_tmp(self.tmp(value.value));
+                }
+
+                ValueRepKind::SomeRegisterWithClobber => {
+                    let typ = self.code.proc.value(value.value).typ();
+                    let result_bank = self.code.proc.value(value.value).result_bank();
+                    let dst_tmp = self.code.new_tmp(result_bank);
+                    let imm_or_tmp = self.imm_or_tmp_or_zero_reg(value.value);
+                    self.move_to_tmp(relaxed_move_for_type(typ), imm_or_tmp, dst_tmp);
+                    arg = Arg::new_tmp(dst_tmp);
+                }
+
+                ValueRepKind::Register | ValueRepKind::LateRegister => {
+                    self.code
+                        .proc
+                        .value_mut(stackmap)
+                        .stackmap_mut()
+                        .unwrap()
+                        .early_clobbered
+                        .remove(value.rep.get_reg());
+                    let dst_tmp = Tmp::from_reg(value.rep.get_reg());
+                    let tmp = self.imm_or_tmp_or_zero_reg(value.value);
+                    self.move_to_tmp(
+                        relaxed_move_for_type(self.code.proc.value(value.value).typ()),
+                        tmp,
+                        dst_tmp,
+                    );
+                    arg = Arg::new_tmp(dst_tmp);
+                }
+
+                ValueRepKind::StackArgument => {
+                    arg = Arg::new_call_arg(value.rep.offset_from_sp() as _);
+                    let mut inst = self
+                        .create_store(
+                            move_for_type(self.code.proc.value(value.value).typ()).into(),
+                            value.value,
+                            &arg,
+                        )
+                        .unwrap();
+                    inst.kind.effects = true;
+                    self.append_inst(inst);
+                }
+                _ => unreachable!(),
+            }
+
+            inst.args.push(arg);
         }
     }
 
@@ -3465,7 +3711,6 @@ impl<'a> LowerToAir<'a> {
         }
     }
 }
-
 
 struct ArgPromise {
     arg: Arg,

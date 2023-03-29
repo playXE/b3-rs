@@ -1,22 +1,24 @@
 use std::{hash::Hash, rc::Rc};
 
-use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep};
+use macroassembler::assembler::TargetMacroAssembler;
+
+use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep, stackmap_generation_params::StackmapGenerationParams};
 
 #[derive(Clone)]
 pub struct StackMapValue {
     pub reps: Vec<ValueRep>,
-    pub generator: Option<Rc<dyn FnOnce()>>,
+    pub generator: Option<Rc<dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)>>,
     pub early_clobbered: RegisterSetBuilder,
     pub late_clobbered: RegisterSetBuilder,
     pub used_registers: RegisterSetBuilder,
 }
 
 impl StackMapValue {
-    pub fn set_generator(&mut self, generator: impl FnOnce() + 'static) {
+    pub fn set_generator(&mut self, generator: impl Fn(&mut TargetMacroAssembler, &StackmapGenerationParams) + 'static) {
         self.generator = Some(Rc::new(generator));
     }
 
-    pub fn generator(&self) -> Option<&dyn FnOnce()> {
+    pub fn generator(&self) -> Option<&dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)> {
         self.generator.as_ref().map(|x| &**x)
     }
 

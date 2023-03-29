@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 use crate::{
     block::{blocks_in_pre_order, BlockId},
     break_critical_edges::break_critical_edges,
@@ -8,9 +7,12 @@ use crate::{
     liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
     opcode::Opcode,
     procedure::Procedure,
-    ssa_calculator::{SSACalculator},
+    ssa_calculator::SSACalculator,
     typ::Type,
-    utils::index_set::{IndexMap, IndexSet},
+    utils::{
+        index_set::{IndexMap, IndexSet},
+        phase_scope,
+    },
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
     variable_liveness::{VariableLiveness, VariableLivenessAdapter},
@@ -155,17 +157,19 @@ pub fn fix_ssa(proc: &mut Procedure) -> bool {
     if proc.variables.is_empty() {
         return false;
     }
-    fix_ssa_locally(proc);
-    kill_dead_variables(proc);
+    phase_scope::phase_scope("b3::fix_ssa", || {
+        fix_ssa_locally(proc);
+        kill_dead_variables(proc);
 
-    if proc.variables.is_empty() {
-        return false;
-    }
+        if proc.variables.is_empty() {
+            return false;
+        }
 
-    break_critical_edges(proc);
-    fix_ssa_globally(proc);
+        break_critical_edges(proc);
+        fix_ssa_globally(proc);
 
-    true
+        true
+    })
 }
 
 /// Simple pass that removes all dead variables.

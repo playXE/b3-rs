@@ -153,3 +153,19 @@ impl RegisterAtOffsetList {
 pub const fn round_up_to_multiple_of(divisor: isize, x: isize) -> isize {
     (x + (divisor - 1)) & !(divisor - 1)
 }
+
+impl std::fmt::Display for RegisterAtOffsetList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[")?;
+        for (i, reg) in self.iter().enumerate() {
+            write!(f, "{}({})", reg.offset(), reg.reg())?;
+            if i != self.len() - 1 {
+                write!(f, ", ")?;
+            }
+        }
+
+        write!(f, "]")?;
+
+        Ok(())
+    }
+}

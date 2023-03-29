@@ -27,6 +27,7 @@ impl Default for StackSlotKind {
 }
 
 
+#[derive(Debug)]
 pub struct StackSlot {
     pub byte_size: u32,
     pub kind: StackSlotKind,

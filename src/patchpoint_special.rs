@@ -1,13 +1,15 @@
+use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Jump};
+
 use crate::{
     air::{
         arg::{Arg, ArgRole},
         code::Code,
-        inst::Inst,
+        inst::Inst, generation_context::GenerationContext,
     },
     bank::{bank_for_type, Bank},
     stackmap_special::{RoleMode, StackMapSpecial},
     value::ValueRepKind,
-    width::{width_for_type, Width},
+    width::{width_for_type, Width}, stackmap_generation_params::StackmapGenerationParams,
 };
 
 /// This is a special that recognizes that there are two uses of Patchpoint: Void and and non-Void.
@@ -69,7 +71,7 @@ impl PatchpointSpecial {
         let value = code.proc.value(inst.origin);
         let patchpoint = value.patchpoint().unwrap();
 
-        for i in (0..patchpoint.num_gp_scratch_registers).rev() {
+        for _i in (0..patchpoint.num_gp_scratch_registers).rev() {
             lambda(
                 &inst.args[arg_index],
                 ArgRole::Scratch,
@@ -79,7 +81,7 @@ impl PatchpointSpecial {
             arg_index += 1;
         }
 
-        for i in (0..patchpoint.num_fp_scratch_registers).rev() {
+        for _i in (0..patchpoint.num_fp_scratch_registers).rev() {
             lambda(
                 &inst.args[arg_index],
                 ArgRole::Scratch,
@@ -243,4 +245,42 @@ impl PatchpointSpecial {
     pub fn is_terminal(&self, code: &Code<'_>, inst: &Inst) -> bool {
         code.proc.value(inst.origin).patchpoint().unwrap().effects.terminal
     }
+
+    pub fn generate<'a>(inst: &Inst, jit: &mut TargetMacroAssembler, context: &'a mut GenerationContext<'a>) -> Jump {
+        let value = context.code.proc.value(inst.origin);
+        let mut reps = vec![];
+        let mut offset = 1;
+
+        let typ = value.typ();
+
+        while offset <= (typ.is_numeric() as usize) {
+            reps.push(StackMapSpecial::rep_for_arg(context.code, &inst.args[offset]));
+            offset += 1;
+        }
+        let nchildren = value.children.len();
+        reps.append(&mut StackMapSpecial::reps_impl(context, 0, offset, inst));
+        offset += nchildren; 
+        let value = context.code.proc.value(inst.origin);
+        let num_gp_scratch = value.patchpoint().unwrap().num_gp_scratch_registers;
+        let num_fp_scratch = value.patchpoint().unwrap().num_fp_scratch_registers;
+        let generator = context.code.proc.value_mut(inst.origin).patchpoint_mut().unwrap().generator.take();
+        let mut params = StackmapGenerationParams::new(inst.origin, reps, context);
+
+        for _ in (0..num_gp_scratch).rev() {
+            params.gp_scratch.push(inst.args[offset].gpr());
+            offset += 1;
+        }
+
+        for _ in (0..num_fp_scratch).rev() {
+            params.fp_scratch.push(inst.args[offset].fpr());
+            offset += 1;
+        }
+
+        (generator.unwrap())(jit, &params);
+
+        Jump::default()
+
+    }
+
+    
 }

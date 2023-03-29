@@ -1,13 +1,13 @@
-use macroassembler::assembler::abstract_macro_assembler::Label;
+use macroassembler::assembler::{abstract_macro_assembler::Label, TargetMacroAssembler};
 
-use crate::{jit::ccall_helpers::CCallHelpers, utils::index_set::IndexMap};
+use crate::{utils::index_set::IndexMap};
 
 use super::{basic_block::BasicBlockId, code::Code};
 
 
 
 
-pub type LatePath= Box<dyn FnOnce(&mut CCallHelpers, &mut GenerationContext)>;
+pub type LatePath= Box<dyn FnOnce(&mut TargetMacroAssembler, &mut GenerationContext)>;
 
 
 pub struct GenerationContext<'a> {

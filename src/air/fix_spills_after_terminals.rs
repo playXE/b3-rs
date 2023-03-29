@@ -1,6 +1,6 @@
 use crate::air::{inst::Inst, opcode::Opcode};
 
-use super::{code::Code, insertion_set::InsertionSet, basic_block::BasicBlockId, rpo::rpo_sort};
+use super::{code::Code, insertion_set::InsertionSet, basic_block::BasicBlockId, block_order::rpo_sort};
 
 /// Because there may be terminals that produce values, the register allocator may
 /// want to spill those terminals. It'll happen to spill it after

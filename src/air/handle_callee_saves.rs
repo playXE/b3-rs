@@ -10,7 +10,6 @@ pub fn handle_callee_saves_with_used(
 ) {
     used_callee_saves.filter_regs(&RegisterSetBuilder::callee_saved_registers());
     used_callee_saves.filter_regs(&code.mutable_regs.to_register_set());
-
     let callee_saves_to_save = used_callee_saves.to_register_set();
 
     if callee_saves_to_save.number_of_set_registers() == 0 {
@@ -41,7 +40,8 @@ pub fn handle_callee_saves(code: &mut Code<'_>) {
             });
 
             if inst.kind.opcode == Opcode::Patch {
-                todo!()
+                used_callee_saves.merge(&inst.extra_clobbered_regs(code));
+                used_callee_saves.merge(&mut inst.extra_early_clobbered_regs(code));
             }
         }
     }

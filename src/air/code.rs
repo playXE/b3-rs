@@ -1,3 +1,4 @@
+use macroassembler::assembler::TargetMacroAssembler;
 use tinyvec::TinyVec;
 
 use crate::{
@@ -10,15 +11,25 @@ use crate::{
         register_set::{RegisterSet, RegisterSetBuilder, ScalarRegisterSet},
     },
     procedure::Procedure,
-    sparse_collection::SparseCollection,
 };
 
 use super::{
     basic_block::{update_predecessors_after, BasicBlock, BasicBlockId},
-    special::Special,
+    special::{Special, SpecialId},
     stack_slot::{StackSlot, StackSlotId, StackSlotKind},
-    tmp::Tmp,
+    tmp::Tmp, generate::{emit_restore, emit_function_epilogue, emit_function_epilogue_with_empty_frame, emit_function_prologue, emit_save},
 };
+
+
+pub fn default_prologue_generator(jit: &mut TargetMacroAssembler, code: &mut Code) {
+    emit_function_prologue(jit);
+
+    if code.frame_size != 0 {
+        jit.sub64(code.frame_size as i32, TargetMacroAssembler::STACK_POINTER_REGISTER);
+    }
+
+    emit_save(jit, &code.callee_save_registers_at_offset_list());
+}
 
 /// This is an IR that is very close to the bare metal. It requires about 40x more bytes than the
 /// generated machine code - for example if you're generating 1MB of machine code, you need about
@@ -35,25 +46,27 @@ pub struct Code<'a> {
     pub frame_size: usize,
     pub call_arg_area_size: usize,
     pub stack_is_allocated: bool,
-    pub specials: SparseCollection<Special>,
+
     pub blocks: Vec<BasicBlock>,
     pub entrypoints: Vec<(BasicBlockId, Frequency)>,
     pub callee_save_stack_slot: Option<StackSlotId>,
     pub uncorrected_callee_save_registers_at_offset_list: RegisterAtOffsetList,
     pub callee_save_registers: RegisterSetBuilder,
+    pub ccall_special: Option<SpecialId>,
+    pub default_prologue_generator: Option<Box<dyn FnOnce(&mut TargetMacroAssembler, &mut Code)>>
 }
 
 impl<'a> Code<'a> {
     pub fn new(proc: &'a mut Procedure) -> Self {
         let mut this = Self {
             proc,
+            default_prologue_generator: Some(Box::new(default_prologue_generator)),
             gp_regs_in_priority_order: vec![],
             fp_regs_in_priority_order: vec![],
             mutable_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
             pinned_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
             num_gp_tmps: 0,
             num_fp_tmps: 0,
-            specials: SparseCollection::new(),
             blocks: Vec::new(),
             entrypoints: vec![],
             frame_size: 0,
@@ -62,6 +75,7 @@ impl<'a> Code<'a> {
             callee_save_stack_slot: None,
             uncorrected_callee_save_registers_at_offset_list: Default::default(),
             callee_save_registers: RegisterSetBuilder::new(),
+            ccall_special: None,
         };
 
         for_each_bank(|bank| {
@@ -89,14 +103,56 @@ impl<'a> Code<'a> {
             });
 
             let mut result = Vec::new();
-            //result.append(&mut full_callee_save_regs);
-            result.append(&mut callee_save_regs);
+            
             result.append(&mut volatile_regs);
+            result.append(&mut full_callee_save_regs);
+            result.append(&mut callee_save_regs);
+            
 
             this.set_regs_in_priority_order(bank, &result);
         });
 
         this
+    }
+
+    pub fn set_default_prologue_generator(&mut self, generator: Box<dyn FnOnce(&mut TargetMacroAssembler, &mut Code)>) {
+        self.default_prologue_generator = Some(generator);
+    }
+
+    pub fn generate_default_prologue(&mut self, jit: &mut TargetMacroAssembler) {
+        if let Some(generator) = self.default_prologue_generator.take() {
+            generator(jit, self);
+        }
+    }
+
+    pub fn ccall_special(&mut self) -> SpecialId {
+        self.ccall_special.unwrap_or_else(|| {
+            let spec = self.proc.specials.add(Special {
+                index: 0,
+                kind: super::special::SpecialKind::CCall(super::ccall_special::CCallSpecial::new()),
+            });
+            self.ccall_special = Some(spec);
+            spec
+        })
+    }
+
+    pub fn emit_epilogue(&mut self, jit: &mut TargetMacroAssembler) {
+        if self.frame_size != 0 {
+            emit_restore(jit, &self.callee_save_registers_at_offset_list(), TargetMacroAssembler::FRAME_POINTER_REGISTER);
+            emit_function_epilogue(jit);
+        } else {
+            emit_function_epilogue_with_empty_frame(jit);
+        }
+
+        jit.ret();
+    }
+
+    pub fn special(&self, id: SpecialId) -> &Special {
+        self.proc.special(id)
+    }
+
+    pub fn special_mut(&mut self, id: SpecialId) -> &mut Special {
+        self.proc.special_mut(id)
     }
 
     fn set_regs_in_priority_order(&mut self, bank: Bank, regs: &[Reg]) {
@@ -109,6 +165,7 @@ impl<'a> Code<'a> {
 
         for_each_bank(|bank| {
             for i in 0..self.regs_in_priority_order(bank).len() {
+                
                 let reg = self.regs_in_priority_order(bank)[i];
                 self.mutable_regs.add(reg);
             }
@@ -213,7 +270,6 @@ impl<'a> Code<'a> {
 
     pub fn add_stack_slot(&mut self, byte_size: usize, kind: StackSlotKind) -> StackSlotId {
         let result = self.proc.add_stack_slot(byte_size, kind);
-
         if self.stack_is_allocated {
             let extent = round_up_to_multiple_of(
                 self.proc.stack_slots[result.0].alignment() as _,
@@ -234,8 +290,7 @@ impl<'a> Code<'a> {
         self.uncorrected_callee_save_registers_at_offset_list = register_at_offset_list;
 
         for i in 0..self.uncorrected_callee_save_registers_at_offset_list.len() {
-            let register_at_offset = self.uncorrected_callee_save_registers_at_offset_list
-               [i];
+            let register_at_offset = self.uncorrected_callee_save_registers_at_offset_list[i];
 
             let reg = register_at_offset.reg();
             let width = register_at_offset.width();
@@ -246,7 +301,9 @@ impl<'a> Code<'a> {
     }
 
     pub fn callee_save_registers_at_offset_list(&self) -> RegisterAtOffsetList {
-        let mut result = self.uncorrected_callee_save_registers_at_offset_list.clone();
+        let mut result = self
+            .uncorrected_callee_save_registers_at_offset_list
+            .clone();
 
         if let Some(slot) = self.callee_save_stack_slot {
             let offset = self.stack_slot(slot).offset_from_fp;
@@ -255,6 +312,18 @@ impl<'a> Code<'a> {
         }
 
         result
+    }
+
+    pub fn find_first_block_index(&self, index: usize) -> usize {
+        index
+    }
+
+    pub fn find_next_block_index(&self, index: usize) -> Option<usize> {
+        if index + 1 < self.blocks.len() {
+            Some(index + 1)
+        } else {
+            None
+        }
     }
 }
 

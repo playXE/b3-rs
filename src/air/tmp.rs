@@ -83,7 +83,10 @@ impl Tmp {
 
     const fn decode_fpr(value: i32) -> u8 {
         assert!(Self::is_encoded_fpr(value));
-        ((value as i32 - Self::encode_fpr(TargetAssembler::first_fp_register() as _))
+        /*((value as i32 - Self::encode_fpr(TargetAssembler::first_fp_register() as _))
+            + TargetAssembler::first_fp_register() as i32) as _*/
+
+        ((Self::encode_fpr(TargetAssembler::first_fp_register() as _) - value)
             + TargetAssembler::first_fp_register() as i32) as _
     }
 

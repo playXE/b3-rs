@@ -172,10 +172,12 @@ impl SSACalculator {
         &mut self,
         proc: &mut Procedure,
         mut f: impl FnMut(SSAVariableId, BlockId, &mut Procedure) -> Option<ValueId>,
-    ) {
+    ) { 
+        proc.dominators_or_compute();
         for i in 0..self.variables.len() {
             let var = SSAVariableId(i);
             let blocks_with_defs = &self.variables[i].blocks_with_defs;
+            
             // this `clone` is cheap, `Dominators` internally uses `Rc` to share the dominator tree
             let dominators = proc.dominators().clone();
 

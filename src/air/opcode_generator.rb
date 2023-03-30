@@ -749,6 +749,20 @@ writeH("opcode_utils") {
     #outp.puts "    }"
     #outp.puts "}"
 
+    outp.puts "impl Inst {"
+    outp.puts "pub fn for_each_arg_simple(&self, mut func: impl FnMut(&Arg, ArgRole, Bank, Width)) {"
+    outp.puts "let num_operands = self.args.len();"
+    outp.puts "let form_offset = (num_operands.wrapping_sub(1)) * num_operands / 2;"
+    
+    outp.puts "let form_base = G_FORM_TABLE.as_ptr() as usize + self.kind.opcode as usize * #{formTableWidth} + form_offset;"
+    #outp.puts "println!(\"offset is at {} for {:?}\", self.kind.opcode as usize * #{formTableWidth} + form_offset, self.kind.opcode);"
+    outp.puts "for i in 0..num_operands {"
+    outp.puts "let form = unsafe { *(form_base as *const u8).add(i) };"
+    #outp.puts "if self.kind.opcode == Opcode::Branch32 { assert_eq!(decode_form_role(form), ArgRole::Use); }"
+    outp.puts "func(&self.args[i], decode_form_role(form), decode_form_bank(form), decode_form_width(form));"
+    outp.puts "}"
+    outp.puts "}"
+    outp.puts "}"
 
     outp.puts "#[inline(always)] pub fn is_valid_form(opcode: Opcode, kinds: &[ArgKind]) -> bool"
     outp.puts "{"
@@ -844,7 +858,8 @@ writeH("opcode_generated") {
     outp.puts "    }"
     outp.puts "}"
     
-    outp.puts "pub const G_FORM_TABLE: [u8; #{$opcodes.size * formTableWidth}] = ["
+    outp.puts "pub static G_FORM_TABLE: [u8; #{$opcodes.size * formTableWidth}] = ["
+    ix = 0
     $opcodes.values.each {
         | opcode |
         overloads = [nil] * (maxNumOperands + 1)
@@ -863,12 +878,14 @@ writeH("opcode_generated") {
                 numOperands.times {
                     | index |
                     arg = overload.signature[index]
-                    outp.print "encode_inst_form(ArgRole::#{arg.roleCode}, #{arg.bank}P, #{arg.widthCode}), "
+                    outp.print "encode_inst_form(ArgRole::#{arg.roleCode}, #{arg.bank}P, #{arg.widthCode}), /* #{ix} */"
+                    ix += 1
                 }
             else
                 outp.puts "// Invalid: #{opcode.name} with numOperands = #{numOperands}"
                 numOperands.times {
-                    outp.print "INVALID_INST_FORM, "
+                    outp.print "INVALID_INST_FORM /* #{ix} */, "
+                    ix += 1
                 }
             end
             outp.puts

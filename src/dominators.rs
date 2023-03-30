@@ -274,7 +274,7 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
 
         while {
             let res = i != 0;
-            i -= 1;
+            i = i.wrapping_sub(1);
             res
         } {
             let block = stack[i];

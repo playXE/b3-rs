@@ -1,4 +1,6 @@
-use macroassembler::assembler::TargetMacroAssembler;
+use std::rc::Rc;
+
+use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Label};
 use tinyvec::TinyVec;
 
 use crate::{
@@ -31,6 +33,8 @@ pub fn default_prologue_generator(jit: &mut TargetMacroAssembler, code: &mut Cod
     emit_save(jit, &code.callee_save_registers_at_offset_list());
 }
 
+pub type PrologueGenerator = Rc<dyn Fn(&mut TargetMacroAssembler, &mut Code)>;
+
 /// This is an IR that is very close to the bare metal. It requires about 40x more bytes than the
 /// generated machine code - for example if you're generating 1MB of machine code, you need about
 /// 40MB of Air.
@@ -48,19 +52,22 @@ pub struct Code<'a> {
     pub stack_is_allocated: bool,
 
     pub blocks: Vec<BasicBlock>,
+    pub prologue_generators: Vec<Option<PrologueGenerator>>,
     pub entrypoints: Vec<(BasicBlockId, Frequency)>,
+    pub entrypoint_labels: Vec<Label>,
     pub callee_save_stack_slot: Option<StackSlotId>,
     pub uncorrected_callee_save_registers_at_offset_list: RegisterAtOffsetList,
     pub callee_save_registers: RegisterSetBuilder,
     pub ccall_special: Option<SpecialId>,
-    pub default_prologue_generator: Option<Box<dyn FnOnce(&mut TargetMacroAssembler, &mut Code)>>
+    pub default_prologue_generator: Option<PrologueGenerator>,
 }
 
 impl<'a> Code<'a> {
     pub fn new(proc: &'a mut Procedure) -> Self {
         let mut this = Self {
             proc,
-            default_prologue_generator: Some(Box::new(default_prologue_generator)),
+            prologue_generators: vec![],
+            default_prologue_generator: Some(Rc::new(default_prologue_generator)),
             gp_regs_in_priority_order: vec![],
             fp_regs_in_priority_order: vec![],
             mutable_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
@@ -76,6 +83,7 @@ impl<'a> Code<'a> {
             uncorrected_callee_save_registers_at_offset_list: Default::default(),
             callee_save_registers: RegisterSetBuilder::new(),
             ccall_special: None,
+            entrypoint_labels: vec![],
         };
 
         for_each_bank(|bank| {
@@ -115,7 +123,7 @@ impl<'a> Code<'a> {
         this
     }
 
-    pub fn set_default_prologue_generator(&mut self, generator: Box<dyn FnOnce(&mut TargetMacroAssembler, &mut Code)>) {
+    pub fn set_default_prologue_generator(&mut self, generator: PrologueGenerator) {
         self.default_prologue_generator = Some(generator);
     }
 
@@ -123,6 +131,51 @@ impl<'a> Code<'a> {
         if let Some(generator) = self.default_prologue_generator.take() {
             generator(jit, self);
         }
+    }
+
+    pub fn prologue_generator_for_entrypoint(&self, entrypoint_index: usize) -> Option<PrologueGenerator> {
+        self.prologue_generators.get(entrypoint_index).cloned().flatten()
+    }
+
+    pub fn set_prologue_for_entrypoint(&mut self, entrypoint_index: usize, generator: PrologueGenerator) {
+        if self.prologue_generators.len() <= entrypoint_index {
+            self.prologue_generators.resize_with(entrypoint_index + 1, || None);
+        }
+        self.prologue_generators[entrypoint_index] = Some(generator);
+    }
+
+    pub fn entrypoint_index(&self, entrypoint: BasicBlockId) -> Option<usize> {
+        self.entrypoints.iter().position(|(entrypoint_id, _)| *entrypoint_id == entrypoint)
+    }
+
+    pub fn entrypoint_label(&self, entrypoint_index: usize) -> Label {
+        self.entrypoint_labels[entrypoint_index]
+    }
+
+    pub fn set_entrypoint_labels(&mut self, entrypoint_labels: Vec<Label>) {
+        self.entrypoint_labels = entrypoint_labels;
+    }
+
+    pub fn entrypoint(&self, index: usize) -> Option<(BasicBlockId, Frequency)> {
+        self.entrypoints.get(index).cloned()
+    }
+
+    pub fn entrypoints(&self) -> &[(BasicBlockId, Frequency)] {
+        &self.entrypoints
+    }
+
+    pub fn is_entrypoint(&self, block: BasicBlockId) -> bool {
+        self.entrypoints.iter().any(|(entrypoint, _)| *entrypoint == block)
+    }
+
+    pub fn set_num_entrypoints(&mut self, num_entrypoints: usize) {
+        self.prologue_generators.resize(num_entrypoints, self.default_prologue_generator.clone());
+    }
+
+
+
+    pub fn indices(&self) -> impl Iterator<Item = BasicBlockId> {
+        (0..self.blocks.len()).map(BasicBlockId)
     }
 
     pub fn ccall_special(&mut self) -> SpecialId {

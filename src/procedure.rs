@@ -1,4 +1,4 @@
-use std::ops::Range;
+use std::{ops::Range, rc::Rc};
 
 use crate::{
     block::{is_block_dead, recompute_predecessors, BasicBlock, BlockId, FrequentBlock},
@@ -19,10 +19,11 @@ pub struct Procedure {
     pub(crate) blocks: Vec<BasicBlock>,
     pub(crate) variables: SparseCollection<Variable>,
     pub(crate) dominators: Option<Dominators<Self>>,
-    pub(crate) natural_loops: Option<NaturalLoops<Self>>,
+    pub(crate) natural_loops: Option<Rc<NaturalLoops<Self>>>,
     pub(crate) stack_slots: Vec<StackSlot>,
     pub(crate) specials: SparseCollection<Special>,
     pub(crate) data_sections: Vec<DataSection>,
+    pub(crate) num_entrypoints: usize,
 }
 
 impl Graph for Procedure {
@@ -66,6 +67,7 @@ impl Procedure {
             blocks: Vec::new(),
             variables: SparseCollection::new(),
             dominators: None,
+            num_entrypoints: 1,
             natural_loops: None,
             stack_slots: vec![],
             specials: SparseCollection::new(),
@@ -74,7 +76,13 @@ impl Procedure {
         }
     }
 
-   
+    pub fn num_entrypoints(&self) -> usize {
+        self.num_entrypoints
+    }
+    
+    pub fn set_num_entrypoints(&mut self, num: usize) {
+        self.num_entrypoints = num;
+    }
 
     pub fn options(&self) -> &Options {
         &self.options
@@ -167,19 +175,19 @@ impl Procedure {
         self.dominators = Some(Dominators::new(self));
     }
 
-    pub fn natural_loops_or_compute(&mut self) -> &NaturalLoops<Self> {
+    pub fn natural_loops_or_compute(&mut self) -> Rc<NaturalLoops<Self>> {
         if self.natural_loops.is_none() {
             self.dominators_or_compute();
             let doms = self.dominators();
-            self.natural_loops = Some(NaturalLoops::new(self, doms));
+            self.natural_loops = Some(Rc::new(NaturalLoops::new(self, doms)));
         }
 
         self.natural_loops()
     }
 
-    pub fn natural_loops(&self) -> &NaturalLoops<Self> {
+    pub fn natural_loops(&self) -> Rc<NaturalLoops<Self>> {
         self.natural_loops
-            .as_ref()
+            .as_ref().cloned()
             .expect("Natural loops not computed")
     }
 

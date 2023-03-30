@@ -500,10 +500,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             }
 
             let spill_tmp = self.active.take_last(|spill_candidate| {
-                println!(
-                    "{} is assigned to {}",
-                    spill_candidate, self.map[*spill_candidate].assigned
-                );
+                
                 self.map[tmp]
                     .possible_regs
                     .contains(self.map[*spill_candidate].assigned)
@@ -556,7 +553,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     }
 
     fn spill(&mut self, tmp: Tmp) {
-        println!("Spilling {}", tmp);
+        
         let slot = self
             .code
             .add_stack_slot(size_of::<usize>(), StackSlotKind::Spill);
@@ -681,7 +678,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
 
                     let spill_index = self.map[*tmp].spill_index;
                     self.active.pop_front();
-                    self.used_spillslots.remove(spill_index);
+                    self.used_spillslots.set(spill_index, false);
                 }
 
                 self.map[tmp].spill_index = self

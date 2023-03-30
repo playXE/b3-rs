@@ -3,23 +3,25 @@
 
 pub mod air;
 pub mod bank;
-pub mod move_constants;
 pub mod block;
-pub mod data_section;
 pub mod block_insertion_set;
 pub mod break_critical_edges;
-pub mod generate;
 pub mod cfg;
 pub mod check_special;
+pub mod compile;
+pub mod data_section;
 pub mod dominators;
 pub mod effects;
+pub mod estimate_static_exec_counts;
 pub mod fix_ssa;
+pub mod generate;
 pub mod insertion_set;
 pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
 pub mod liveness;
 pub mod lower_to_air;
+pub mod move_constants;
 pub mod natural_loops;
 pub mod opcode;
 pub mod patchpoint_special;
@@ -220,3 +222,11 @@ impl Default for Options {
         }
     }
 }
+
+pub use block::*;
+pub use compile::*;
+pub use generate::*;
+pub use opcode::*;
+pub use procedure::*;
+pub use value::*;
+pub use typ::*;

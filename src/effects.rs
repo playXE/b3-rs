@@ -18,7 +18,7 @@ pub struct Effects {
     /// a terminal like Branch or anything that exits sideways, like Check) validates whether the
     /// pointer is valid. Hoisting the load above control may cause the load to trap even though it
     /// would not have otherwise trapped.
-    pub control_dependant: bool,
+    pub control_dependent: bool,
 
     /// True if this writes to the local state. Operations that write local state don't write to anything
     /// in "memory" but they have a side-effect anyway. This is for modeling Upsilons, Sets, and Fences.
@@ -46,7 +46,7 @@ impl Effects {
         let mut this = Self::default();
 
         this.exit_sideways = true;
-        this.control_dependant = true;
+        this.control_dependent = true;
         this.writes = 0..usize::MAX;
         this.reads = 0..usize::MAX;
         this.fence = true;
@@ -92,7 +92,7 @@ fn interferes_with_terminal(terminal: &Effects, other: &Effects) -> bool {
         return false;
     }
 
-    other.terminal || other.control_dependant || other.writes_local_state || other.writes != (0..0)
+    other.terminal || other.control_dependent || other.writes_local_state || other.writes != (0..0)
 }
 
 fn interferes_with_exit_sideways(exit_side_ways: &Effects, other: &Effects) -> bool {

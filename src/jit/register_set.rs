@@ -222,7 +222,17 @@ impl std::fmt::Debug for RegisterSet {
 
 impl std::fmt::Display for RegisterSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f,"{{\n bits: {},\n upper_bits: {}}}", self.bits, self.upper_bits)
+        let mut i = 0;
+        let count = self.number_of_set_registers();
+        self.for_each(|reg| {
+            write!(f, "{}", reg).unwrap();
+            if i < count - 1 {
+                write!(f, ",").unwrap();
+            }
+            i += 1;
+        });
+
+        Ok(())
     }
 }
 
@@ -260,6 +270,20 @@ impl RegisterSet {
             f(reg, Width::W64);
             false
         });
+    }
+
+    pub fn for_each_with_width_and_preserved(&self, mut f: impl FnMut(Reg, Width, bool)) {
+        let mut all_bits = self.bits;
+        all_bits.merge(&self.upper_bits);
+
+        all_bits.for_each_set_bit(|index| {
+            let reg = Reg::from_index(index as _);
+            let included_width = Width::W64;
+            let preserved_width = self.upper_bits.get(index);
+
+            f(reg, included_width, preserved_width);
+            false 
+        }); 
     }
     pub fn byte_size_of_set_registers(&self) -> usize {
         (self.bits.count() + self.upper_bits.count()) * size_of::<usize>()

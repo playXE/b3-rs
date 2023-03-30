@@ -1,13 +1,17 @@
-use std::ops::{Deref, DerefMut};
 use crate::{
+    air::stack_slot::StackSlotId,
     dominators::{GraphNodeWorklist, GraphVisitOrder, PostOrderGraphNodeWorklist},
-    kind::Kind,
+    effects::Effects,
+    jit::reg::Reg,
+    opcode::Opcode,
     procedure::Procedure,
     sparse_collection::SparseElement,
     typ::Type,
-    value::ValueId,
-    variable::VariableId, jit::reg::Reg, utils::index_set::KeyIndex, effects::Effects,
+    utils::index_set::KeyIndex,
+    value::{NumChildren, Value, ValueData, ValueId},
+    variable::VariableId,
 };
+use std::ops::{Deref, DerefMut, Range};
 
 pub struct BasicBlock {
     pub(crate) index: usize,
@@ -346,17 +350,17 @@ impl SparseElement for BasicBlock {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Frequency {
     /// We don't have any hypothesis about the frequency of this control flow construct. This is
     /// the common case. We can still use basic block frequency in this case.
-    Normal,
+    Normal = 1,
     /// We expect that this control flow construct will be reached super rarely. It's valid to
     /// perform optimizations that punish Rare code. Note that there will be situations where you
     /// have to somehow construct a new frequency class from a merging of multiple classes. When
     /// this happens, never choose Rare; always go with Normal. This is necessary because we
     /// really do punish Rare code very badly.
-    Rare,
+    Rare = 0,
 }
 
 impl Default for Frequency {
@@ -374,124 +378,6 @@ pub fn max_frequency(a: Frequency, b: Frequency) -> Frequency {
 }
 
 pub type FrequentBlock = (BlockId, Frequency);
-
-pub struct BasicBlockBuilder<'a> {
-    pub func: &'a mut Procedure,
-    pub block: BlockId,
-}
-
-impl<'a> BasicBlockBuilder<'a> {
-    pub fn new(func: &'a mut Procedure, block: BlockId) -> Self {
-        BasicBlockBuilder { func, block }
-    }
-
-    pub fn append(&mut self, value: ValueId) {
-        self.func.add_to_block(self.block, value);
-    }
-
-    pub fn add_int_constant<T>(
-        &mut self,
-        typ: Type,
-        value: impl Into<i64>,
-        next: impl FnOnce(&mut Self, ValueId) -> T,
-    ) -> T {
-        let value = self.func.add_int_constant(typ, value);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-    pub fn add_bits_constant<T>(
-        &mut self,
-        typ: Type,
-        value: impl Into<u64>,
-        next: impl FnOnce(&mut Self, ValueId) -> T,
-    ) -> T {
-        let value = self.func.add_bits_constant(typ, value);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-
-
-    pub fn add_binary<T>(
-        &mut self,
-        kind: impl Into<Kind>,
-        lhs: ValueId,
-        rhs: ValueId,
-        next: impl FnOnce(&mut Self, ValueId) -> T,
-    ) -> T {
-        let value = self.func.add_binary(kind.into(), lhs, rhs);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-
-    pub fn add_argument<T>(
-        &mut self,
-        typ: Type,
-        reg: Reg,
-        next: impl FnOnce(&mut Self, ValueId) -> T,
-    ) -> T {
-        let value = self.func.add_argument(typ, reg);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-
-    pub fn add_return(&mut self, value: ValueId) {
-        let val = self.func.add_return(value);
-        self.func.add_to_block(self.block, val);
-    }
-
-    pub fn add_variable_get(
-        &mut self,
-        variable: VariableId,
-        next: impl FnOnce(&mut Self, ValueId),
-    ) {
-        let value = self.func.add_variable_get(variable);
-        self.func.add_to_block(self.block, value);
-        next(self, value);
-    }
-
-    pub fn add_ccall<T>(&mut self, ret: Type, callee: ValueId, args: &[ValueId], effeects: Effects, next: impl FnOnce(&mut Self, ValueId) -> T) -> T {
-        let value = self.func.add_ccall(ret, callee, args, effeects);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-
-    pub fn add_variable_set<T>(
-        &mut self,
-        variable: VariableId,
-        value: ValueId,
-        next: impl FnOnce(&mut Self, ValueId) -> T,
-    ) -> T {
-        let value = self.func.add_variable_set(variable, value);
-        self.func.add_to_block(self.block, value);
-        next(self, value)
-    }
-
-    pub fn add_jump(&mut self, to: BlockId) {
-        self.func.block_mut(self.block).successor_list.clear();
-        let val = self.func.add_jump();
-        self.func.add_to_block(self.block, val);
-        self.func
-            .block_mut(self.block)
-            .set_successors((to, Frequency::Normal));
-        self.func.block_mut(to).add_predecessor(self.block);
-    }
-
-    pub fn add_branch(
-        &mut self,
-        condition: ValueId,
-        taken: BlockId,
-        not_taken: (BlockId, Frequency),
-    ) {
-        self.func.block_mut(self.block).successor_list.clear();
-        let val = self.func.add_branch(condition);
-        self.func.add_to_block(self.block, val);
-        self.func
-            .block_mut(self.block)
-            .set_successors2((taken, Frequency::Normal), not_taken);
-        self.func.block_mut(not_taken.0).add_predecessor(self.block);
-        self.func.block_mut(taken).add_predecessor(self.block);
-    }
-}
 
 pub fn clear_predecessors(blocks: &mut Vec<BasicBlock>) {
     for block in blocks {
@@ -528,4 +414,697 @@ pub fn is_block_dead(block: &BasicBlock) -> bool {
     }
 
     block.predecessor_list.is_empty()
+}
+
+pub struct BasicBlockBuilder<'a> {
+    pub block: BlockId,
+    pub procedure: &'a mut Procedure,
+}
+
+impl<'a> BasicBlockBuilder<'a> {
+    pub fn new(block: BlockId, procedure: &'a mut Procedure) -> Self {
+        Self { block, procedure }
+    }
+
+    pub fn add_value(&mut self, value: ValueId) {
+        self.procedure.add_to_block(self.block, value);
+    }
+
+    pub fn const32(&mut self, val: i32) -> ValueId {
+        let x = self.procedure.add_int_constant(Type::Int32, val);
+        self.add_value(x);
+        x
+    }
+
+    pub fn const64(&mut self, val: i64) -> ValueId {
+        let x = self.procedure.add_int_constant(Type::Int64, val);
+        self.add_value(x);
+        x
+    }
+
+    pub fn const_float(&mut self, val: f32) -> ValueId {
+        let x = self
+            .procedure
+            .add_bits_constant(Type::Float, val.to_bits() as u64);
+        self.add_value(x);
+        x
+    }
+
+    pub fn const_double(&mut self, val: f64) -> ValueId {
+        let x = self
+            .procedure
+            .add_bits_constant(Type::Double, val.to_bits());
+        self.add_value(x);
+        x
+    }
+
+    pub fn var_get(&mut self, var: VariableId) -> ValueId {
+        let x = self.procedure.add_variable_get(var);
+        self.add_value(x);
+        x
+    }
+
+    pub fn var_set(&mut self, var: VariableId, value: ValueId) {
+        let x = self.procedure.add_variable_set(var, value);
+        self.add_value(x);
+    }
+
+    pub fn stack_addr(&mut self, stack_slot: StackSlotId) -> ValueId {
+        let value = Value::new(
+            Opcode::SlotBase,
+            Type::Int64,
+            NumChildren::Zero,
+            &[],
+            ValueData::SlotBase(stack_slot),
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn load8z(
+        &mut self,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::Load8Z,
+            Type::Int32,
+            NumChildren::One,
+            &[ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn load8s(
+        &mut self,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::Load8S,
+            Type::Int32,
+            NumChildren::One,
+            &[ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn load16z(
+        &mut self,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::Load16Z,
+            Type::Int32,
+            NumChildren::One,
+            &[ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn load16s(
+        &mut self,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::Load16S,
+            Type::Int32,
+            NumChildren::One,
+            &[ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn load(
+        &mut self,
+        ty: Type,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::Load,
+            ty,
+            NumChildren::One,
+            &[ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn store(
+        &mut self,
+        value: ValueId,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) {
+        let value = Value::new(
+            Opcode::Store,
+            Type::Void,
+            NumChildren::Two,
+            &[ptr, value],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+    }
+
+    pub fn store8(
+        &mut self,
+        value: ValueId,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) {
+        assert!(self.procedure.value(value).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::Store8,
+            Type::Void,
+            NumChildren::Two,
+            &[value, ptr],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+    }
+
+    pub fn store16(
+        &mut self,
+        value: ValueId,
+        ptr: ValueId,
+        offset: i32,
+        range: Option<Range<usize>>,
+        fence_range: Option<Range<usize>>,
+    ) {
+        assert!(self.procedure.value(value).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::Store16,
+            Type::Void,
+            NumChildren::Two,
+            &[ptr, value],
+            ValueData::MemoryValue {
+                offset,
+                range: range.unwrap_or(0..usize::MAX),
+                fence_range: fence_range.unwrap_or(0..usize::MAX),
+            },
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+    }
+
+    pub fn binary(&mut self, op: Opcode, lhs: ValueId, rhs: ValueId) -> ValueId {
+        assert!(op.is_binary());
+        assert!(self.procedure.value(lhs).typ() == self.procedure.value(rhs).typ());
+        let typ = self.procedure.value(lhs).typ();
+        let value = Value::new(op, typ, NumChildren::Two, &[lhs, rhs], ValueData::None);
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn abs(&mut self, value: ValueId) -> ValueId {
+        assert!(self.procedure.value(value).typ().is_float());
+        let value = Value::new(
+            Opcode::Abs,
+            self.procedure.value(value).typ(),
+            NumChildren::One,
+            &[value],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn ceil(&mut self, value: ValueId) -> ValueId {
+        assert!(self.procedure.value(value).typ().is_float());
+        let value = Value::new(
+            Opcode::Ceil,
+            self.procedure.value(value).typ(),
+            NumChildren::One,
+            &[value],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn floor(&mut self, value: ValueId) -> ValueId {
+        assert!(self.procedure.value(value).typ().is_float());
+        let value = Value::new(
+            Opcode::Floor,
+            self.procedure.value(value).typ(),
+            NumChildren::One,
+            &[value],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn sqrt(&mut self, value: ValueId) -> ValueId {
+        assert!(self.procedure.value(value).typ().is_float());
+        let value = Value::new(
+            Opcode::Sqrt,
+            self.procedure.value(value).typ(),
+            NumChildren::One,
+            &[value],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn bitwise_cast(&mut self, typ: Type, src: ValueId) -> ValueId {
+        assert!(typ.is_int() || typ.is_float());
+        assert!(
+            self.procedure.value(src).typ().is_int() || self.procedure.value(src).typ().is_float()
+        );
+        let value = Value::new(
+            Opcode::BitwiseCast,
+            typ,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    /// Takes and returns Int32
+    pub fn sext8(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::SExt8,
+            Type::Int32,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    /// Takes and returns Int32
+    pub fn sext16(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::SExt16,
+            Type::Int32,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn sext8to64(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::SExt8To64,
+            Type::Int64,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn sext16to64(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::SExt16To64,
+            Type::Int64,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn sext32(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::SExt32,
+            Type::Int64,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn zext32(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Int32);
+        let value = Value::new(
+            Opcode::ZExt32,
+            Type::Int64,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn trunc(&mut self, src: ValueId) -> ValueId {
+        let dest_ty = match self.procedure.value(src).typ() {
+            Type::Int64 => Type::Int32,
+            Type::Double => Type::Float,
+            _ => panic!("Invalid type for trunc"),
+        };
+
+        let value = Value::new(
+            Opcode::Trunc,
+            dest_ty,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn i2d(&mut self, src: ValueId) -> ValueId {
+        assert!(
+            self.procedure.value(src).typ() == Type::Int32
+                || self.procedure.value(src).typ() == Type::Int64
+        );
+        let value = Value::new(
+            Opcode::IToD,
+            Type::Double,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn i2f(&mut self, src: ValueId) -> ValueId {
+        assert!(
+            self.procedure.value(src).typ() == Type::Int32
+                || self.procedure.value(src).typ() == Type::Int64
+        );
+        let value = Value::new(
+            Opcode::IToF,
+            Type::Float,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn f2i(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Float);
+        let value = Value::new(
+            Opcode::FToI,
+            Type::Int32,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn d2i(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Double);
+        let value = Value::new(
+            Opcode::DToI,
+            Type::Int64,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn float_to_double(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Float);
+        let value = Value::new(
+            Opcode::FloatToDouble,
+            Type::Double,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn double_to_float(&mut self, src: ValueId) -> ValueId {
+        assert!(self.procedure.value(src).typ() == Type::Double);
+        let value = Value::new(
+            Opcode::DoubleToFloat,
+            Type::Float,
+            NumChildren::One,
+            &[src],
+            ValueData::None,
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+    /// This is a regular ordinary C function call, using the system C calling convention. Make sure
+    /// that the arguments are passed using the right types. The first argument is the callee.
+    pub fn ccall(
+        &mut self,
+        ret: Type,
+        callee: ValueId,
+        args: &[ValueId],
+        effects: Effects,
+    ) -> ValueId {
+        let value = Value::new(
+            Opcode::CCall,
+            ret,
+            NumChildren::VarArgs,
+            std::iter::once(callee)
+                .chain(args.iter().cloned())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            ValueData::CCallValue(effects),
+        );
+
+        let x = self.procedure.add(value);
+        self.add_value(x);
+        x
+    }
+
+    pub fn jump(&mut self, target: Option<BlockId>) {
+        let value = Value::new(
+            Opcode::Jump,
+            Type::Void,
+            NumChildren::Zero,
+            &[],
+            ValueData::None,
+        );
+
+        if let Some(target) = target {
+            self.procedure
+                .block_mut(self.block)
+                .successor_list
+                .push((target, Frequency::Normal));
+            
+            self.procedure.block_mut(target).predecessor_list.push(self.block);
+        }
+
+        let id = self.procedure.add(value);
+
+        self.add_value(id);
+    }
+
+    pub fn branch(&mut self, on: ValueId, taken: BlockId, not_taken: (BlockId, Frequency)) {
+        let value = Value::new(
+            Opcode::Branch,
+            Type::Void,
+            NumChildren::One,
+            &[on],
+            ValueData::None,
+        );
+
+        self.procedure
+            .block_mut(self.block)
+            .successor_list
+            .push((taken, Frequency::Normal));
+        self.procedure
+            .block_mut(self.block)
+            .successor_list
+            .push(not_taken);
+
+        self.procedure.block_mut(taken).predecessor_list.push(self.block);
+        self.procedure
+            .block_mut(not_taken.0)
+            .predecessor_list
+            .push(self.block);
+
+        let value = self.procedure.add(value);
+
+        self.add_value(value);
+    }
+
+    pub fn return_(mut self, value: Option<ValueId>) {
+        let args = if value.is_none() {
+            vec![]
+        } else {
+            vec![value.unwrap()]
+        };
+        let value = Value::new(
+            Opcode::Return,
+            Type::Void,
+            value.map(|_| NumChildren::One).unwrap_or(NumChildren::Zero),
+            &args,
+            ValueData::None,
+        );
+
+        let value = self.procedure.add(value);
+
+        self.add_value(value);
+    }
+
+    pub fn argument(&mut self, reg: Reg, typ: Type) -> ValueId {
+        if reg.is_gpr() {
+            assert!(typ.is_int());
+        } else {
+            assert!(typ.is_float());
+        }
+
+        let value = Value::new(
+            Opcode::ArgumentReg,
+            typ,
+            NumChildren::Zero,
+            &[],
+            ValueData::Argument(reg),
+        );
+
+        let value = self.procedure.add(value);
+
+        self.add_value(value);
+
+        value
+    }
+
+    pub fn identity(&mut self, value: ValueId) -> ValueId {
+        let value = Value::new(
+            Opcode::Identity,
+            self.procedure.value(value).typ(),
+            NumChildren::One,
+            &[value],
+            ValueData::None,
+        );
+
+        let value = self.procedure.add(value);
+
+        self.add_value(value);
+
+        value
+    }
 }

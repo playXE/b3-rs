@@ -1,13 +1,16 @@
 use bitvec::vec::BitVec;
 
 use crate::{
-    jit::{reg::Reg, register_set::RegisterSet},
+    jit::{
+        reg::Reg,
+        register_set::{RegisterSet, },
+    },
     liveness::Liveness,
     utils::index_set::IndexMap,
 };
 
 use super::{
-    basic_block::BasicBlockId, code::Code, liveness_adapter::UnifiedTmpLivenessAdapter, tmp::Tmp,
+    basic_block::BasicBlockId, code::Code, liveness_adapter::UnifiedTmpLivenessAdapter, tmp::Tmp, 
 };
 
 /// Although we could trivially adapt [Liveness<>](crate::liveness::Liveness) to work with Reg, this would not be so
@@ -48,34 +51,40 @@ impl RegLiveness {
                 inst.for_each_reg(code, |reg, role, _bank, width| {
                     if role.is_early_use() {
                         actions_for_boundary[inst_index].use_.add(reg, width);
+                        assert!(actions_for_boundary[inst_index].use_.contains(reg, width));
                     }
 
                     if role.is_early_def() {
                         actions_for_boundary[inst_index].def.add(reg, width);
+                        assert!(actions_for_boundary[inst_index].def.contains(reg, width));
                     }
 
                     if role.is_late_use() {
                         actions_for_boundary[inst_index + 1].use_.add(reg, width);
+                        assert!(actions_for_boundary[inst_index + 1].use_.contains(reg, width));
                     }
 
                     if role.is_late_def() {
                         actions_for_boundary[inst_index + 1].def.add(reg, width);
+                        assert!(actions_for_boundary[inst_index + 1].def.contains(reg, width));
                     }
                 });
+               
             }
         }
 
         for i in 0..code.blocks.len() {
             let live_at_tail = &mut live_at_tail[BasicBlockId(i)];
 
-            code.block(BasicBlockId(i))
-                .last()
-                .unwrap()
-                .for_each_reg(code, |reg, role, _bank, width| {
+            code.block(BasicBlockId(i)).last().unwrap().for_each_reg(
+                code,
+                |reg, role, _bank, width| {
+
                     if role.is_late_use() {
                         live_at_tail.add(reg, width);
                     }
-                });
+                },
+            );
         }
 
         let mut dirty_blocks: BitVec<usize> = bitvec::vec::BitVec::new();
@@ -106,14 +115,14 @@ impl RegLiveness {
                     local_calc.execute(inst_index);
                 }
 
-                code.block(BasicBlockId(block_index))
-                    .first()
-                    .unwrap()
-                    .for_each_reg(code, |reg, role, _bank, _width| {
+                code.block(BasicBlockId(block_index))[0].for_each_reg(
+                    code,
+                    |reg, role, _bank, _width| {
                         if role.is_early_def() {
                             local_calc.workset.remove(reg);
                         }
-                    });
+                    },
+                );
 
                 let workset = local_calc.workset;
 
@@ -130,8 +139,8 @@ impl RegLiveness {
                     if live_at_tail.subsumes(&workset) {
                         continue;
                     }
-
-                    this.live_at_tail[BasicBlockId(block_index)].merge(&workset);
+                    
+                    this.live_at_tail[*pred].merge(&workset);
                     dirty_blocks.set(pred.0, true);
                     changed = true;
                 }
@@ -139,6 +148,26 @@ impl RegLiveness {
 
             if !changed {
                 break;
+            }
+        }
+
+        if true {
+            println!("Reg Liveness result:");
+
+            for block_index in (0..code.blocks.len()).rev() {
+                let actions_for_boundary = &this.actions[BasicBlockId(block_index)];
+                println!("Block {}", block_index);
+                println!("Live at head: {}", this.live_at_head[BasicBlockId(block_index)]);
+                println!("Live at tail: {}", this.live_at_tail[BasicBlockId(block_index)]);
+
+                for inst_index in (0..code.blocks[block_index].insts.len()).rev() {
+                    println!(
+                        "{} | use: {} | def: {}",
+                        code.blocks[block_index][inst_index],
+                        actions_for_boundary[inst_index].use_,
+                        actions_for_boundary[inst_index].def
+                    );
+                }
             }
         }
 
@@ -204,8 +233,13 @@ impl<'a> LocalCalc<'a> {
 
     pub fn execute(&mut self, inst_index: usize) {
         self.actions[inst_index + 1].def.for_each(|reg| {
+            println!("remove {} at {} from {}", reg, inst_index, self.workset);
             self.workset.remove(reg);
-        })
+        });
+
+        let used = self.actions[inst_index].use_;
+
+        self.workset.merge(&used);
     }
 }
 
@@ -259,7 +293,8 @@ impl<'a> LocalCalcForUnifiedTmpLiveness<'a> {
         for index in self.actions[inst_index].use_.iter().copied() {
             let tmp = Tmp::tmp_for_linear_index(self.code, index);
             if tmp.is_reg() {
-                self.workset.add(tmp.reg(), tmp.reg().conservative_width_without_vectors());
+                self.workset
+                    .add(tmp.reg(), tmp.reg().conservative_width_without_vectors());
             }
         }
     }

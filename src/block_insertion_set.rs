@@ -69,12 +69,6 @@ impl GenericBlockInsertionSet {
         self.blocks.retain(|block| block.0 != usize::MAX);
 
         for i in 0..self.blocks.len() {
-            println!(
-                "{} -> {:?} (from {})",
-                i,
-                self.blocks[i],
-                proc.block(self.blocks[i]).index
-            );
             proc.block_mut(self.blocks[i]).index = i;
         }
 

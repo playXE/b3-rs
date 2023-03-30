@@ -1,14 +1,23 @@
 use tinyvec::TinyVec;
 
-use crate::{bank::Bank, sparse_collection::SparseElement, value::ValueId, width::Width, jit::{reg::Reg, register_set::RegisterSetBuilder}};
+use crate::{
+    bank::Bank,
+    jit::{reg::Reg, register_set::RegisterSetBuilder},
+    sparse_collection::SparseElement,
+    value::ValueId,
+    width::Width,
+};
 
 use super::{
     arg::{Arg, ArgRole},
+    code::Code,
+    custom::{CCallCustom, ColdCCallCustom, EntrySwitchCustom, PatchCustom, ShuffleCustom},
     form_table::{decode_form_bank, decode_form_role, decode_form_width},
     kind::Kind,
     opcode::Opcode,
     opcode_generated::G_FORM_TABLE,
-    tmp::Tmp, stack_slot::StackSlotId, code::Code, custom::{EntrySwitchCustom, ShuffleCustom, PatchCustom, CCallCustom, ColdCCallCustom},
+    stack_slot::StackSlotId,
+    tmp::Tmp,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -31,15 +40,16 @@ impl Default for Inst {
 }
 
 impl Inst {
-
     pub fn extra_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
         assert!(self.kind.opcode == Opcode::Patch);
-        code.special(self.args[0].special()).extra_clobbered_regs(code, self)
+        code.special(self.args[0].special())
+            .extra_clobbered_regs(code, self)
     }
 
     pub fn extra_early_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
         assert!(self.kind.opcode == Opcode::Patch);
-        code.special(self.args[0].special()).extra_early_clobbered_regs(code, self)
+        code.special(self.args[0].special())
+            .extra_early_clobbered_regs(code, self)
     }
 
     pub fn has_late_use_or_def(&self, code: &Code<'_>) -> bool {
@@ -72,12 +82,12 @@ impl Inst {
         prev.has_late_use_or_def(code) && next.has_early_def(code)
     }
 
-    pub fn for_each_arg_simple<F>(&self, mut f: F)
+    /*pub fn for_each_arg_simple<F>(&self, mut f: F)
     where
         F: FnMut(&Arg, ArgRole, Bank, Width),
     {
         let num_operands = self.args.len();
-        
+
         let form_offset = num_operands.wrapping_sub(1) * num_operands / 2;
         let form_base = &G_FORM_TABLE[self.kind.opcode as usize * 21 + form_offset..];
 
@@ -90,14 +100,14 @@ impl Inst {
                 decode_form_width(form),
             )
         }
-    }
+    }*/
 
     pub fn for_each_arg_simple_mut<F>(&mut self, mut f: F)
     where
         F: FnMut(&mut Arg, ArgRole, Bank, Width),
     {
         let num_operands = self.args.len();
-        
+
         let form_offset = (num_operands.wrapping_sub(1)) * num_operands / 2;
         let form_base = &G_FORM_TABLE[self.kind.opcode as usize * 21 + form_offset..];
 
@@ -122,55 +132,39 @@ impl Inst {
     }
 
     pub fn for_each_arg<F>(&self, code: &Code<'_>, f: F)
-    where F: FnMut(&Arg, ArgRole, Bank, Width)
-     {
+    where
+        F: FnMut(&Arg, ArgRole, Bank, Width),
+    {
         match self.kind.opcode {
-            Opcode::EntrySwitch => {
-                EntrySwitchCustom::for_each_arg(code, self, f)
-            }
+            Opcode::EntrySwitch => EntrySwitchCustom::for_each_arg(code, self, f),
 
-            Opcode::Shuffle => {
-                ShuffleCustom::for_each_arg(code, self, f)
-            }
+            Opcode::Shuffle => ShuffleCustom::for_each_arg(code, self, f),
 
-            Opcode::Patch => {
-                PatchCustom::for_each_arg(code, self, f)
-            }
+            Opcode::Patch => PatchCustom::for_each_arg(code, self, f),
 
-            Opcode::CCall => {
-                CCallCustom::for_each_arg(code, self, f)
-            }
+            Opcode::CCall => CCallCustom::for_each_arg(code, self, f),
 
-            Opcode::ColdCCall => {
-                ColdCCallCustom::for_each_arg(code, self, f)
-            }
-
+            Opcode::ColdCCall => ColdCCallCustom::for_each_arg(code, self, f),
 
             _ => self.for_each_arg_simple(f),
         }
     }
 
-    pub fn for_each_arg_mut(&mut self, code: &mut Code<'_>, f: impl FnMut(&mut Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        f: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+    ) {
         match self.kind.opcode {
-            Opcode::EntrySwitch => {
-                EntrySwitchCustom::for_each_arg_mut(code, self, f)
-            }
+            Opcode::EntrySwitch => EntrySwitchCustom::for_each_arg_mut(code, self, f),
 
-            Opcode::Shuffle => {
-                ShuffleCustom::for_each_arg_mut(code, self, f)
-            }
+            Opcode::Shuffle => ShuffleCustom::for_each_arg_mut(code, self, f),
 
-            Opcode::Patch => {
-                PatchCustom::for_each_arg_mut(code, self, f)
-            }
+            Opcode::Patch => PatchCustom::for_each_arg_mut(code, self, f),
 
-            Opcode::CCall => {
-                CCallCustom::for_each_arg_mut(code, self, f)
-            }
+            Opcode::CCall => CCallCustom::for_each_arg_mut(code, self, f),
 
-            Opcode::ColdCCall => {
-                ColdCCallCustom::for_each_arg_mut(code, self, f)
-            }
+            Opcode::ColdCCall => ColdCCallCustom::for_each_arg_mut(code, self, f),
 
             _ => self.for_each_arg_simple_mut(f),
         }
@@ -184,7 +178,11 @@ impl Inst {
         })
     }
 
-    pub fn for_each_tmp_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp, ArgRole, Bank, Width)) {
+    pub fn for_each_tmp_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        mut f: impl FnMut(&mut Tmp, ArgRole, Bank, Width),
+    ) {
         self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_tmp_mut(role, bank, width, |tmp, role, bank, width| {
                 f(tmp, role, bank, width)
@@ -193,19 +191,11 @@ impl Inst {
     }
 
     pub fn for_each_tmp_fast(&self, code: &Code<'_>, mut f: impl FnMut(Tmp)) {
-        self.for_each_arg(code, |arg, _, _, _| {
-            arg.for_each_tmp_fast(|tmp| {
-                f(tmp)
-            })
-        })
+        self.for_each_arg(code, |arg, _, _, _| arg.for_each_tmp_fast(|tmp| f(tmp)))
     }
 
     pub fn for_each_tmp_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp)) {
-        self.for_each_arg_mut(code, |arg, _, _, _| {
-            arg.for_each_tmp_fast_mut(|tmp| {
-                f(tmp)
-            })
-        })
+        self.for_each_arg_mut(code, |arg, _, _, _| arg.for_each_tmp_fast_mut(|tmp| f(tmp)))
     }
 
     pub fn for_each_reg(&self, code: &Code<'_>, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
@@ -216,7 +206,11 @@ impl Inst {
         })
     }
 
-    pub fn for_each_reg_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width)) {
+    pub fn for_each_reg_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width),
+    ) {
         self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_reg_mut(role, bank, width, |reg, role, bank, width| {
                 f(reg, role, bank, width)
@@ -224,23 +218,19 @@ impl Inst {
         })
     }
 
-    pub fn for_each_reg_fast(&self,code: &Code<'_>, mut f: impl FnMut(Reg)) {
-        self.for_each_arg(code, |arg, _, _, _| {
-            arg.for_each_reg_fast(|reg| {
-                f(reg)
-            })
-        })
+    pub fn for_each_reg_fast(&self, code: &Code<'_>, mut f: impl FnMut(Reg)) {
+        self.for_each_arg(code, |arg, _, _, _| arg.for_each_reg_fast(|reg| f(reg)))
     }
 
     pub fn for_each_reg_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg)) {
-        self.for_each_arg_mut(code, |arg, _, _, _| {
-            arg.for_each_reg_fast_mut(|reg| {
-                f(reg)
-            })
-        })
+        self.for_each_arg_mut(code, |arg, _, _, _| arg.for_each_reg_fast_mut(|reg| f(reg)))
     }
 
-    pub fn for_each_stack_slot(&self,code: &Code<'_>, mut f: impl FnMut(StackSlotId, ArgRole, Bank, Width)) {
+    pub fn for_each_stack_slot(
+        &self,
+        code: &Code<'_>,
+        mut f: impl FnMut(StackSlotId, ArgRole, Bank, Width),
+    ) {
         self.for_each_arg(code, |arg, role, bank, width| {
             arg.for_each_stack_slot(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
@@ -248,7 +238,11 @@ impl Inst {
         })
     }
 
-    pub fn for_each_stack_slot_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut StackSlotId, ArgRole, Bank, Width)) {
+    pub fn for_each_stack_slot_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        mut f: impl FnMut(&mut StackSlotId, ArgRole, Bank, Width),
+    ) {
         self.for_each_arg_mut(code, |arg, role, bank, width| {
             arg.for_each_stack_slot_mut(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
@@ -258,18 +252,72 @@ impl Inst {
 
     pub fn for_each_stack_slot_fast(&self, code: &Code<'_>, mut f: impl FnMut(StackSlotId)) {
         self.for_each_arg(code, |arg, _, _, _| {
-            arg.for_each_stack_slot_fast(|stack_slot| {
-                f(stack_slot)
-            })
+            arg.for_each_stack_slot_fast(|stack_slot| f(stack_slot))
         })
     }
 
-    pub fn for_each_stack_slot_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut StackSlotId)) {
+    pub fn for_each_stack_slot_fast_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        mut f: impl FnMut(&mut StackSlotId),
+    ) {
         self.for_each_arg_mut(code, |arg, _, _, _| {
-            arg.for_each_stack_slot_fast_mut(|stack_slot| {
-                f(stack_slot)
-            })
+            arg.for_each_stack_slot_fast_mut(|stack_slot| f(stack_slot))
         })
+    }
+
+    pub fn for_each_def(
+        prev_inst: Option<&Self>,
+        next_inst: Option<&Self>,
+        code: &Code,
+        mut functor: impl FnMut(Tmp, ArgRole, Bank, Width),
+    ) {
+        if let Some(prev_inst) = prev_inst {
+            prev_inst.for_each_tmp(code, |tmp, role, bank, width| {
+                if role.is_late_def() {
+                    functor(tmp, role, bank, width)
+                }
+            });
+        }
+
+        if let Some(next_inst) = next_inst {
+            next_inst.for_each_tmp(code, |tmp, role, bank, width| {
+                if role.is_early_def() {
+                    functor(tmp, role, bank, width)
+                }
+            });
+        }
+    }
+
+    pub fn for_each_def_with_extra_clobbered_regs(
+        prev_inst: Option<&Self>,
+        next_inst: Option<&Self>,
+        code: &Code<'_>,
+        mut functor: impl FnMut(Tmp, ArgRole, Bank, Width, bool),
+    ) {
+        Self::for_each_def(prev_inst, next_inst, code, |tmp, role, bank, width| {
+            functor(tmp, role, bank, width, false)
+        });
+
+        if let Some(prev_inst) = prev_inst.filter(|x| x.kind.opcode == Opcode::Patch) {
+            let report_reg = |reg: Reg, width, preserved64: bool| {
+                let bank = if reg.is_gpr() { Bank::GP } else { Bank::FP };
+
+                functor(Tmp::from_reg(reg), ArgRole::Def, bank, width, preserved64)
+            };
+
+            prev_inst.extra_clobbered_regs(code).to_register_set().for_each_with_width_and_preserved(report_reg);
+        }
+
+        if let Some(next_inst) = next_inst.filter(|x| x.kind.opcode == Opcode::Patch) {
+            let report_reg = |reg: Reg, width, preserved64: bool| {
+                let bank = if reg.is_gpr() { Bank::GP } else { Bank::FP };
+
+                functor(Tmp::from_reg(reg), ArgRole::EarlyDef, bank, width, preserved64)
+            };
+
+            next_inst.extra_early_clobbered_regs(code).to_register_set().for_each_with_width_and_preserved(report_reg);
+        }
     }
 }
 

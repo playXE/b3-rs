@@ -341,7 +341,7 @@ impl Value {
 
         match self.kind.opcode() {
             Opcode::Div | Opcode::UDiv | Opcode::Mod | Opcode::UMod => {
-                result.control_dependant = true;
+                result.control_dependent = true;
             }
 
             Opcode::Load8Z | Opcode::Load8S | Opcode::Load16S | Opcode::Load16Z | Opcode::Load => {
@@ -354,7 +354,7 @@ impl Value {
                     result.fence = true;
                 }
 
-                result.control_dependant = true;
+                result.control_dependent = true;
             }
 
             Opcode::CCall => match self.data {

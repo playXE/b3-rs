@@ -10,17 +10,17 @@ use crate::{
 };
 
 use super::{
-    basic_block::BasicBlockId, code::Code, eliminate_dead_code::eliminate_dead_code,
-    form_table::is_return, generation_context::GenerationContext,
-    lower_after_regalloc::lower_after_regalloc, lower_macros::lower_macros,
-    lower_stack_args::lower_stack_args, allocate_registers_and_stack_by_linear_scan::allocate_registers_and_stack_by_linear_scan,
-    opcode::Opcode, block_order::{ optimize_block_order}, simplify_cfg::simplify_cfg,
+    allocate_registers_and_stack_by_linear_scan::allocate_registers_and_stack_by_linear_scan,
+    basic_block::BasicBlockId, block_order::optimize_block_order, code::Code,
+    eliminate_dead_code::eliminate_dead_code, form_table::is_return,
+    generation_context::GenerationContext, lower_after_regalloc::lower_after_regalloc,
+    lower_macros::lower_macros, lower_stack_args::lower_stack_args, opcode::Opcode,
+    simplify_cfg::simplify_cfg, lower_entry_switch::lower_entry_switch,
 };
 
 pub fn prepare_for_generation(code: &mut Code<'_>) {
     phase_scope("air::prepare_for_generation", || {
         code.reset_reachability();
-
         simplify_cfg(code);
         lower_macros(code);
         eliminate_dead_code(code);
@@ -34,13 +34,13 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         lower_after_regalloc(code);
         // This turns all Stack and CallArg Args into Addr args that use the frame pointer.
         lower_stack_args(code);
+        lower_entry_switch(code);
+        //report_used_registers(code);
         // If we coalesced moves then we can unbreak critical edges. This is the main reason for this
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
         optimize_block_order(code);
-        println!("{}", code);
-
     });
 }
 
@@ -48,105 +48,114 @@ fn generate_with_already_allocated_registers<'a>(
     code: &'a mut Code<'a>,
     jit: &mut TargetMacroAssembler,
 ) {
+    println!("{}", code);
     //phase_scope("air::generate", || {
-        let mut context = GenerationContext {
-            late_paths: vec![],
-            block_labels: IndexMap::with_capacity(code.blocks.len()),
-            current_block: None,
-            index_in_block: 0,
-            code,
-        };
+    let mut context = GenerationContext {
+        late_paths: vec![],
+        block_labels: IndexMap::with_capacity(code.blocks.len()),
+        current_block: None,
+        index_in_block: 0,
+        code,
+    };
 
-        for block in (0..context.code.blocks.len()).map(BasicBlockId) {
-            context.block_labels.insert(block, Box::new(Label::unset()));
+    for block in (0..context.code.blocks.len()).map(BasicBlockId) {
+        context.block_labels.insert(block, Box::new(Label::unset()));
+    }
+
+    let mut block_jumps = IndexMap::with_capacity(context.code.blocks.len());
+
+    let link = |ctx: &mut GenerationContext,
+                block_jumps: &mut IndexMap<JumpList, BasicBlockId>,
+                jit: &mut TargetMacroAssembler,
+                jump: Jump,
+                target| {
+        if ctx.block_labels.get(&target).unwrap().is_set() {
+            jump.link_to(jit, **ctx.block_labels.get(&target).unwrap());
+            return;
         }
 
-        let mut block_jumps = IndexMap::with_capacity(context.code.blocks.len());
+        block_jumps
+            .entry(target)
+            .or_insert_with(|| JumpList::new())
+            .push(jump);
+    };
 
-        let link = |ctx: &mut GenerationContext,
-                    block_jumps: &mut IndexMap<JumpList, BasicBlockId>,
-                    jit: &mut TargetMacroAssembler,
-                    jump: Jump,
-                    target| {
-            if ctx.block_labels.get(&target).unwrap().is_set() {
-                jump.link_to(jit, **ctx.block_labels.get(&target).unwrap());
-                return;
-            }
+    for block_id in (0..context.code.blocks.len()).map(BasicBlockId) {
+        context.current_block = Some(block_id);
+        context.index_in_block = usize::MAX;
 
-            block_jumps
-                .entry(target)
-                .or_insert_with(|| JumpList::new())
-                .push(jump);
-        };
 
-        for block_id in (0..context.code.blocks.len()).map(BasicBlockId) {
-            context.current_block = Some(block_id);
-            context.index_in_block = usize::MAX;
+        block_jumps.get(&block_id).map(|jumps: &JumpList| {
+            jumps.link(jit);
+        });
 
-            block_jumps.get(&block_id).map(|jumps: &JumpList| {
-                jumps.link(jit);
-            });
+        let label = jit.label();
+        *context.block_labels.get_mut(&block_id).unwrap() = Box::new(label);
 
-            let label = jit.label();
-            *context.block_labels.get_mut(&block_id).unwrap() = Box::new(label);
 
-            for i in 0..context.code.block(block_id).insts.len() - 1 {
-                context.index_in_block = i;
-                let inst = context.code.block(block_id).insts[i].clone();
-                //let start = jit.label_ignoring_watchpoints();
-                let _jump = inst.generate(jit, &mut context);
-            }
+        if let Some(entrypoint_index) = context.code.entrypoint_index(block_id) {
+            jit.comment(format!("entrypoint {}", entrypoint_index));
 
-            context.index_in_block = context.code.block(block_id).insts.len() - 1;
+            (context.code.prologue_generator_for_entrypoint(entrypoint_index).clone().unwrap())(jit, context.code);
+        }
 
-            // falthrough
-            if context.code.block(block_id).last().unwrap().kind.opcode == Opcode::Jump
-                && context.code.find_next_block_index(block_id.0)
-                    == Some(context.code.block(block_id).successors[0].0 .0)
-            {
-                continue;
-            }
+        for i in 0..context.code.block(block_id).insts.len() - 1 {
+            context.index_in_block = i;
+            let inst = context.code.block(block_id).insts[i].clone();
+            //let start = jit.label_ignoring_watchpoints();
+            let _jump = inst.generate(jit, &mut context);
+        }
 
-            if is_return(context.code.block(block_id).last().unwrap().kind.opcode) {
-                context.code.emit_epilogue(jit);
-                continue;
-            }
+        context.index_in_block = context.code.block(block_id).insts.len() - 1;
 
-            let jump = context
-                .code
-                .block(block_id)
-                .last()
-                .cloned()
-                .unwrap()
-                .generate(jit, &mut context);
+        // falthrough
+        if context.code.block(block_id).last().unwrap().kind.opcode == Opcode::Jump
+            && context.code.find_next_block_index(block_id.0)
+                == Some(context.code.block(block_id).successors[0].0 .0)
+        {
+            continue;
+        }
 
-            if jump.is_set() {
-                match context.code.block(block_id).successors.len() {
-                    1 => {
-                        let succ0 = context.code.block(block_id).successors[0].0;
-                        link(&mut context, &mut block_jumps, jit, jump, succ0);
-                    }
+        if is_return(context.code.block(block_id).last().unwrap().kind.opcode) {
+            context.code.emit_epilogue(jit);
+            continue;
+        }
 
-                    2 => {
-                        let succ0 = context.code.block(block_id).successors[0].0;
-                        let succ1 = context.code.block(block_id).successors[1].0;
+        let jump = context
+            .code
+            .block(block_id)
+            .last()
+            .cloned()
+            .unwrap()
+            .generate(jit, &mut context);
 
-                        link(&mut context, &mut block_jumps, jit, jump, succ0);
-                        if Some(succ1.0) != context.code.find_next_block_index(block_id.0) {
-                            let j = jit.jump();
-                            link(&mut context, &mut block_jumps, jit, j, succ1);
-                        }
-                    }
-                    _ => unreachable!(),
+        if jump.is_set() {
+            match context.code.block(block_id).successors.len() {
+                1 => {
+                    let succ0 = context.code.block(block_id).successors[0].0;
+                    link(&mut context, &mut block_jumps, jit, jump, succ0);
                 }
-            }
 
-            context.current_block = None;
+                2 => {
+                    let succ0 = context.code.block(block_id).successors[0].0;
+                    let succ1 = context.code.block(block_id).successors[1].0;
 
-            for late_path in std::mem::take(&mut context.late_paths) {
-                late_path(jit, &mut context);
+                    link(&mut context, &mut block_jumps, jit, jump, succ0);
+                    if Some(succ1.0) != context.code.find_next_block_index(block_id.0) {
+                        let j = jit.jump();
+                        link(&mut context, &mut block_jumps, jit, j, succ1);
+                    }
+                }
+                _ => unreachable!(),
             }
         }
+
+        context.current_block = None;
+
+        for late_path in std::mem::take(&mut context.late_paths) {
+            late_path(jit, &mut context);
+        }
+    }
     //});
 }
 

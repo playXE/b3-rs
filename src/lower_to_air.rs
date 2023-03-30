@@ -110,8 +110,9 @@ use macroassembler::assembler::x86assembler::*;
 
 #[allow(dead_code)]
 impl<'a> LowerToAir<'a> {
-    pub fn new(code: Code<'a>) -> Self {
+    pub fn new(mut code: Code<'a>) -> Self {
         code.proc.dominators_or_compute();
+        code.set_num_entrypoints(code.proc.num_entrypoints());
         Self {
             value_to_tmp: vec![Tmp::empty(); code.proc.values.size()],
             phi_to_tmp: vec![Tmp::empty(); code.proc.values.size()],
@@ -153,11 +154,13 @@ impl<'a> LowerToAir<'a> {
         }
 
         for i in 0..self.code.proc.variables.size() {
-            let variable = self.code.proc.variable(VariableId(i));
-            let index = variable.index();
-            let typ = variable.typ;
-            let tmp = self.tmp_for_type(typ);
-            self.variable_to_tmps.insert(VariableId(index), vec![tmp]);
+            if let Some(_variable) = self.code.proc.variables.at(VariableId(i)) {
+                let variable = self.code.proc.variable(VariableId(i));
+                let index = variable.index();
+                let typ = variable.typ;
+                let tmp = self.tmp_for_type(typ);
+                self.variable_to_tmps.insert(VariableId(index), vec![tmp]);
+            }
         }
 
         self.fast_worklist.push(BlockId(0));

@@ -450,6 +450,8 @@ impl Opcode {
         )
     }
 
+    
+
     pub const fn is_check_math(self) -> bool {
         matches!(self, Self::CheckAdd | Self::CheckSub | Self::CheckMul)
     }

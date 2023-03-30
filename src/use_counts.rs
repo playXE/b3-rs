@@ -24,7 +24,7 @@ impl UseCounts {
 
         for value in (0..proc.values.size()).map(ValueId) {
             children.truncate(0);
-
+            
             for child in proc.value(value).children.iter() {
                 counts[child.0].num_uses += 1;
                 children.push(*child);

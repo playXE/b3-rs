@@ -1,5 +1,5 @@
 #![allow(incomplete_features)]
-#![feature(adt_const_params)]
+#![feature(adt_const_params, fmt_internals)]
 
 pub mod air;
 pub mod bank;
@@ -14,12 +14,14 @@ pub mod dominators;
 pub mod effects;
 pub mod estimate_static_exec_counts;
 pub mod fix_ssa;
+pub mod eliminate_dead_code;
 pub mod generate;
 pub mod insertion_set;
 pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
 pub mod liveness;
+pub mod compute_division_magic;
 pub mod lower_to_air;
 pub mod move_constants;
 pub mod natural_loops;
@@ -201,6 +203,7 @@ pub struct Options {
     pub use_b3_hoist_loop_invariant_values: bool,
     pub dump_b3_at_each_phase: bool,
     pub dump_air_at_each_phase: bool,
+    pub dump_b3_reduce_strength: bool,
 }
 
 impl Default for Options {
@@ -219,6 +222,7 @@ impl Default for Options {
             use_b3_hoist_loop_invariant_values: false,
             dump_b3_at_each_phase: false,
             dump_air_at_each_phase: false,
+            dump_b3_reduce_strength: false,
         }
     }
 }

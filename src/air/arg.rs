@@ -10,17 +10,13 @@ use macroassembler::{
 };
 
 use crate::{
-    bank::{Bank, bank_for_type},
+    bank::{bank_for_type, Bank},
     jit::reg::Reg,
-    width::{bytes_for_width, width_for_bytes, Width}, typ::Type,
+    typ::Type,
+    width::{bytes_for_width, width_for_bytes, Width},
 };
 
-use super::{
-    opcode::Opcode,
-    special::{Special, SpecialId},
-    stack_slot::StackSlotId,
-    tmp::Tmp,
-};
+use super::{opcode::Opcode, special::SpecialId, stack_slot::StackSlotId, tmp::Tmp};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u8)]
@@ -314,8 +310,6 @@ impl Arg {
         self.bank() == bank_for_type(typ)
     }
 
-    
-
     /// This is smart enough to know that an address arg in a Def or UseDef rule will use its
     /// tmps and never def them. For example, this:
     ///
@@ -502,7 +496,13 @@ impl Arg {
         self.offset = stack_slot.0 as _;
     }
 
-    pub fn for_each_reg(&self, arg_role: ArgRole, arg_bank: Bank, arg_width: Width, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
+    pub fn for_each_reg(
+        &self,
+        arg_role: ArgRole,
+        arg_bank: Bank,
+        arg_width: Width,
+        mut f: impl FnMut(Reg, ArgRole, Bank, Width),
+    ) {
         self.for_each_tmp(arg_role, arg_bank, arg_width, |tmp, role, bank, width| {
             if !tmp.is_reg() {
                 return;
@@ -513,7 +513,13 @@ impl Arg {
         });
     }
 
-    pub fn for_each_reg_mut(&mut self, arg_role: ArgRole, arg_bank: Bank, arg_width: Width, mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width)) {
+    pub fn for_each_reg_mut(
+        &mut self,
+        arg_role: ArgRole,
+        arg_bank: Bank,
+        arg_width: Width,
+        mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width),
+    ) {
         self.for_each_tmp_mut(arg_role, arg_bank, arg_width, |tmp, role, bank, width| {
             if !tmp.is_reg() {
                 return;
@@ -866,7 +872,6 @@ impl Arg {
         }
     }
 
-
     pub fn uses_tmp(&self, tmp: Tmp) -> bool {
         match self.kind {
             ArgKind::Tmp
@@ -1071,7 +1076,14 @@ impl Arg {
         if self.kind() == ArgKind::Stack {
             return self.scale as _;
         }
-        assert!(self.has_offset());
+        assert!(
+            self.kind == ArgKind::Addr
+                || self.kind == ArgKind::ExtendedOffsetAddr
+                || self.kind == ArgKind::CallArg
+                || self.kind == ArgKind::Index
+                || self.kind == ArgKind::PreIndex
+                || self.kind == ArgKind::PostIndex
+        );
         self.offset
     }
 
@@ -1108,15 +1120,6 @@ impl Arg {
     pub fn width(&self) -> Width {
         assert!(self.is_width_arg());
         width_for_bytes(self.offset as _)
-    }
-
-    pub fn special_mut<'a>(&'a mut self) -> &'a mut Special {
-        assert!(self.is_special());
-
-        unsafe {
-            // SAFETY: Safe because we check if the argument is a special before we transmute it.
-            std::mem::transmute::<usize, _>(self.offset as usize)
-        }
     }
 
     pub fn is_gp_tmp(&self) -> bool {

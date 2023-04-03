@@ -19,16 +19,18 @@ impl PhiChildren {
         let mut phis = TinyVec::new();
 
         for value in (0..proc.values.size()).map(ValueId) {
-            if let ValueData::Upsilon(ref phi) = proc.value(value).data {
-                let phi = phi.expect("PHIs should be resolved");
+            if let Some(value_) = proc.values.at(value) {
+                if let ValueData::Upsilon(ref phi) = value_.data {
+                    let phi = phi.expect("PHIs should be resolved");
 
-                let vector = &mut upsilons[phi.0];
+                    let vector = &mut upsilons[phi.0];
 
-                if vector.is_empty() {
-                    phis.push(phi);
+                    if vector.is_empty() {
+                        phis.push(phi);
+                    }
+
+                    vector.push(value);
                 }
-
-                vector.push(value);
             }
         }
 

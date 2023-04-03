@@ -1,27 +1,29 @@
-use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Jump};
+use macroassembler::assembler::{abstract_macro_assembler::Jump, TargetMacroAssembler};
 
 use crate::{
     air::{
         arg::{Arg, ArgRole},
         code::Code,
-        inst::Inst, generation_context::GenerationContext,
+        generation_context::GenerationContext,
+        inst::Inst,
     },
     bank::{bank_for_type, Bank},
+    stackmap_generation_params::StackmapGenerationParams,
     stackmap_special::{RoleMode, StackMapSpecial},
     value::ValueRepKind,
-    width::{width_for_type, Width}, stackmap_generation_params::StackmapGenerationParams,
+    width::{width_for_type, Width},
 };
 
 /// This is a special that recognizes that there are two uses of Patchpoint: Void and and non-Void.
 /// In the Void case, the syntax of the Air Patch instruction is:
-///
+/// ```mustfail
 ///     Patch &patchpoint, args...
-///
+/// ```
 /// Where "args..." are the lowered arguments to the Patchpoint instruction. In the non-Void case
 /// we will have:
-///
+/// ```mustfail
 ///     Patch &patchpoint, result, args...
-
+/// ```
 pub struct PatchpointSpecial;
 
 impl PatchpointSpecial {
@@ -29,7 +31,7 @@ impl PatchpointSpecial {
         &self,
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
         let procedure = &code.proc;
 
@@ -49,6 +51,7 @@ impl PatchpointSpecial {
             };
 
             lambda(
+                arg_index,
                 &inst.args[arg_index],
                 role,
                 bank_for_type(typ),
@@ -63,7 +66,7 @@ impl PatchpointSpecial {
             inst,
             RoleMode::SameAsRep,
             None,
-            |arg, role, bank, width| lambda(&arg, role, bank, width),
+            |ix, arg, role, bank, width| lambda(ix, &arg, role, bank, width),
             None,
             code,
         );
@@ -73,6 +76,7 @@ impl PatchpointSpecial {
 
         for _i in (0..patchpoint.num_gp_scratch_registers).rev() {
             lambda(
+                arg_index,
                 &inst.args[arg_index],
                 ArgRole::Scratch,
                 Bank::GP,
@@ -83,6 +87,7 @@ impl PatchpointSpecial {
 
         for _i in (0..patchpoint.num_fp_scratch_registers).rev() {
             lambda(
+                arg_index,
                 &inst.args[arg_index],
                 ArgRole::Scratch,
                 Bank::FP,
@@ -96,7 +101,7 @@ impl PatchpointSpecial {
         &mut self,
         code: &Code<'_>,
         inst: &mut Inst,
-        mut lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         let procedure = &code.proc;
 
@@ -116,6 +121,7 @@ impl PatchpointSpecial {
             };
 
             lambda(
+                arg_index,
                 &mut inst.args[arg_index],
                 role,
                 bank_for_type(typ),
@@ -130,7 +136,7 @@ impl PatchpointSpecial {
             inst,
             RoleMode::SameAsRep,
             None,
-            |arg, role, bank, width| lambda(arg, role, bank, width),
+            |ix, arg, role, bank, width| lambda(ix, arg, role, bank, width),
             None,
             code,
         );
@@ -140,6 +146,7 @@ impl PatchpointSpecial {
 
         for _ in (0..patchpoint.num_gp_scratch_registers).rev() {
             lambda(
+                arg_index,
                 &mut inst.args[arg_index],
                 ArgRole::Scratch,
                 Bank::GP,
@@ -150,6 +157,7 @@ impl PatchpointSpecial {
 
         for _ in (0..patchpoint.num_fp_scratch_registers).rev() {
             lambda(
+                arg_index,
                 &mut inst.args[arg_index],
                 ArgRole::Scratch,
                 Bank::FP,
@@ -238,15 +246,29 @@ impl PatchpointSpecial {
         StackMapSpecial::admits_stack_impl(code, 0, return_count + 1, inst, arg_index)
     }
 
-    pub fn admits_extended_offset_addr(&self, code: &Code<'_>, inst: &Inst, arg_index: usize) -> bool {
+    pub fn admits_extended_offset_addr(
+        &self,
+        code: &Code<'_>,
+        inst: &Inst,
+        arg_index: usize,
+    ) -> bool {
         self.admits_stack(code, inst, arg_index)
     }
 
     pub fn is_terminal(&self, code: &Code<'_>, inst: &Inst) -> bool {
-        code.proc.value(inst.origin).patchpoint().unwrap().effects.terminal
+        code.proc
+            .value(inst.origin)
+            .patchpoint()
+            .unwrap()
+            .effects
+            .terminal
     }
 
-    pub fn generate<'a>(inst: &Inst, jit: &mut TargetMacroAssembler, context: &'a mut GenerationContext<'a>) -> Jump {
+    pub fn generate<'a>(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &'a mut GenerationContext<'a>,
+    ) -> Jump {
         let value = context.code.proc.value(inst.origin);
         let mut reps = vec![];
         let mut offset = 1;
@@ -254,16 +276,26 @@ impl PatchpointSpecial {
         let typ = value.typ();
 
         while offset <= (typ.is_numeric() as usize) {
-            reps.push(StackMapSpecial::rep_for_arg(context.code, &inst.args[offset]));
+            reps.push(StackMapSpecial::rep_for_arg(
+                context.code,
+                &inst.args[offset],
+            ));
             offset += 1;
         }
         let nchildren = value.children.len();
         reps.append(&mut StackMapSpecial::reps_impl(context, 0, offset, inst));
-        offset += nchildren; 
+        offset += nchildren;
         let value = context.code.proc.value(inst.origin);
         let num_gp_scratch = value.patchpoint().unwrap().num_gp_scratch_registers;
         let num_fp_scratch = value.patchpoint().unwrap().num_fp_scratch_registers;
-        let generator = context.code.proc.value_mut(inst.origin).patchpoint_mut().unwrap().generator.take();
+        let generator = context
+            .code
+            .proc
+            .value_mut(inst.origin)
+            .patchpoint_mut()
+            .unwrap()
+            .generator
+            .take();
         let mut params = StackmapGenerationParams::new(inst.origin, reps, context);
 
         for _ in (0..num_gp_scratch).rev() {
@@ -279,8 +311,5 @@ impl PatchpointSpecial {
         (generator.unwrap())(jit, &params);
 
         Jump::default()
-
     }
-
-    
 }

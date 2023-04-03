@@ -1,6 +1,6 @@
-use bitvec::vec::BitVec;
 
-use crate::{bank::Bank, block::Frequency, dominators::GraphNodeWorklist};
+
+use crate::{bank::Bank, block::Frequency, dominators::GraphNodeWorklist, utils::bitvector::BitVector};
 
 use super::{
     basic_block::BasicBlockId,
@@ -14,8 +14,8 @@ use super::{
 pub struct UseCounts {
     gp_num_warm_uses_and_defs: Vec<f32>,
     fp_num_warm_uses_and_defs: Vec<f32>,
-    gp_const_defs: BitVec<u32, bitvec::order::LocalBits>,
-    fp_const_defs: BitVec<u32, bitvec::order::LocalBits>,
+    gp_const_defs: BitVector,
+    fp_const_defs: BitVector,
 }
 
 impl UseCounts {
@@ -36,16 +36,15 @@ impl UseCounts {
             &Tmp::gp_tmp_for_index(code.num_tmps(Bank::GP)),
         );
         let mut gp_num_warm_uses_and_defs = vec![0.0; gp_array_size];
-        let mut gp_const_defs = BitVec::with_capacity(gp_array_size);
-        gp_const_defs.resize(gp_array_size, false);
+        let mut gp_const_defs = BitVector::with_capacity(gp_array_size);
+        
 
         let fp_array_size = AbsoluteIndexed::<{ Bank::FP }>::absolute_index(
             &Tmp::fp_tmp_for_index(code.num_tmps(Bank::FP)),
         );
         let mut fp_num_warm_uses_and_defs = vec![0.0f32; fp_array_size];
-        let mut fp_const_defs = BitVec::with_capacity(fp_array_size);
-        fp_const_defs.resize(fp_array_size, false);
-
+        let mut fp_const_defs = BitVector::with_capacity(fp_array_size);
+        
         for block in (0..code.blocks.len()).map(BasicBlockId) {
             let mut frequency = code.block(block).frequency;
             if !fast_worklist.saw(block) {
@@ -94,9 +93,9 @@ impl UseCounts {
 
     pub fn is_const_def<const BANK: Bank>(&self, absolute_index: usize) -> bool {
         if BANK == Bank::GP {
-            self.gp_const_defs[absolute_index]
+            self.gp_const_defs.get(absolute_index)
         } else {
-            self.fp_const_defs[absolute_index]
+            self.fp_const_defs.get(absolute_index)
         }
     }
 

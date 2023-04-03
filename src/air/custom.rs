@@ -1,10 +1,11 @@
 #![allow(unused_variables)]
 use std::collections::HashSet;
 
-use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Jump};
+use macroassembler::assembler::{abstract_macro_assembler::Jump, TargetMacroAssembler};
 
 use crate::{
     bank::{bank_for_type, Bank},
+    jit::register_set::RegisterSetBuilder,
     width::{width_for_type, Width},
 };
 
@@ -12,7 +13,8 @@ use super::{
     arg::{Arg, ArgKind, ArgRole},
     ccalling_convention::{ccall_argument_register_count, ccall_result_count},
     code::Code,
-    inst::Inst, generation_context::GenerationContext,
+    generation_context::GenerationContext,
+    inst::Inst,
 };
 
 pub struct PatchCustom {}
@@ -21,9 +23,9 @@ impl PatchCustom {
     pub fn for_each_arg(
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
-        lambda(&inst.args[0], ArgRole::Use, Bank::GP, Width::W64);
+        lambda(0, &inst.args[0], ArgRole::Use, Bank::GP, Width::W64);
 
         let special = inst.args[0].special();
 
@@ -33,9 +35,9 @@ impl PatchCustom {
     pub fn for_each_arg_mut(
         code: &mut Code<'_>,
         inst: &mut Inst,
-        mut lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
-        lambda(&mut inst.args[0], ArgRole::Use, Bank::GP, Width::W64);
+        lambda(0, &mut inst.args[0], ArgRole::Use, Bank::GP, Width::W64);
 
         let special = inst.args[0].special();
 
@@ -62,8 +64,14 @@ impl PatchCustom {
             return false;
         }
 
-        let clobbered_early = inst.extra_early_clobbered_regs(code).build_and_validate();
-        let clobbered_late = inst.extra_clobbered_regs(code).build_and_validate();
+        let clobbered_early = inst
+            .extra_early_clobbered_regs(code)
+            .filter_regs(&RegisterSetBuilder::all_scalar_registers())
+            .build_and_validate();
+        let clobbered_late = inst
+            .extra_clobbered_regs(code)
+            .filter_regs(&RegisterSetBuilder::all_scalar_registers())
+            .build_and_validate();
 
         let mut ok = true;
 
@@ -74,6 +82,9 @@ impl PatchCustom {
 
             if role.is_late_def() || role.is_late_use() {
                 ok &= !clobbered_late.contains(tmp.reg(), Width::W64);
+                if !ok {
+                    panic!("late clobbered: {}", tmp.reg());
+                }
             } else {
                 ok &= !clobbered_early.contains(tmp.reg(), Width::W64);
             }
@@ -114,7 +125,11 @@ impl PatchCustom {
             .has_non_arg_non_control_effects(code, inst)
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, context: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &mut GenerationContext,
+    ) -> Jump {
         let special = inst.args[0].special();
         let context2 = unsafe { &mut *(context as *const _ as *mut _) };
 
@@ -128,13 +143,13 @@ impl CCallCustom {
     pub fn for_each_arg(
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
         // Skip CCallSpecial arg
         let mut index = 1;
 
         let mut next = |role, bank, width| {
-            lambda(&inst.args[index], role, bank, width);
+            lambda(index, &inst.args[index], role, bank, width);
             index += 1;
         };
 
@@ -166,13 +181,13 @@ impl CCallCustom {
     pub fn for_each_arg_mut(
         code: &mut Code<'_>,
         inst: &mut Inst,
-        mut lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         // Skip CCallSpecial arg
         let mut index = 1;
 
         let mut next = |role, bank, width| {
-            lambda(&mut inst.args[index], role, bank, width);
+            lambda(index, &mut inst.args[index], role, bank, width);
             index += 1;
         };
 
@@ -292,7 +307,11 @@ impl CCallCustom {
         true
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, context: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &mut GenerationContext,
+    ) -> Jump {
         todo!()
     }
 }
@@ -303,17 +322,17 @@ impl ColdCCallCustom {
     pub fn for_each_arg(
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
-        CCallCustom::for_each_arg(code, inst, |arg, role, bank, width| {
-            lambda(arg, role, bank, width)
+        CCallCustom::for_each_arg(code, inst, |ix, arg, role, bank, width| {
+            lambda(ix, arg, role, bank, width)
         });
     }
 
     pub fn for_each_arg_mut(
         code: &mut Code<'_>,
         inst: &mut Inst,
-        lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         CCallCustom::for_each_arg_mut(code, inst, lambda);
     }
@@ -347,7 +366,11 @@ impl ColdCCallCustom {
         true
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, context: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &mut GenerationContext,
+    ) -> Jump {
         todo!()
     }
 }
@@ -358,7 +381,7 @@ impl ShuffleCustom {
     pub fn for_each_arg(
         code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
         let limit = inst.args.len() / 3 * 3;
 
@@ -376,9 +399,9 @@ impl ShuffleCustom {
                 Bank::FP
             };
 
-            lambda(src, ArgRole::Use, bank, width);
-            lambda(dst, ArgRole::Def, bank, width);
-            lambda(width_arg, ArgRole::Use, bank, width);
+            lambda(i, src, ArgRole::Use, bank, width);
+            lambda(i + 1,dst, ArgRole::Def, bank, width);
+            lambda(i + 2,width_arg, ArgRole::Use, bank, width);
 
             i += 3;
         }
@@ -387,7 +410,7 @@ impl ShuffleCustom {
     pub fn for_each_arg_mut(
         code: &mut Code<'_>,
         inst: &mut Inst,
-        mut lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         let limit = inst.args.len() / 3 * 3;
 
@@ -405,9 +428,9 @@ impl ShuffleCustom {
                 Bank::FP
             };
 
-            lambda(&mut inst.args[i + 0], ArgRole::Use, bank, width);
-            lambda(&mut inst.args[i + 1], ArgRole::Def, bank, width);
-            lambda(&mut inst.args[i + 2], ArgRole::Use, bank, width);
+            lambda(i, &mut inst.args[i + 0], ArgRole::Use, bank, width);
+            lambda(i + 1, &mut inst.args[i + 1], ArgRole::Def, bank, width);
+            lambda(i + 2, &mut inst.args[i + 2], ArgRole::Use, bank, width);
 
             i += 3;
         }
@@ -485,7 +508,7 @@ impl ShuffleCustom {
                 if dsts.contains(&Arg::new_tmp(tmp)) {
                     ok = false;
                 }
-            }); 
+            });
 
             if !ok {
                 return false;
@@ -498,7 +521,7 @@ impl ShuffleCustom {
     pub fn admits_stack(_inst: &Inst, arg_index: usize, _code: &Code<'_>) -> bool {
         match arg_index % 3 {
             0 | 1 => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -518,7 +541,11 @@ impl ShuffleCustom {
         false
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, context: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &mut GenerationContext,
+    ) -> Jump {
         todo!()
     }
 }
@@ -529,19 +556,16 @@ impl EntrySwitchCustom {
     pub fn for_each_arg(
         _code: &Code<'_>,
         _inst: &Inst,
-        _lambda: impl FnMut(&Arg, ArgRole, Bank, Width),
+        _lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
     ) {
-        
     }
 
     pub fn for_each_arg_mut(
         _code: &mut Code<'_>,
         _inst: &mut Inst,
-        _lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        _lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
-        
     }
-
 
     pub fn is_valid_form_static(args: &[ArgKind]) -> bool {
         args.len() == 0
@@ -571,7 +595,11 @@ impl EntrySwitchCustom {
         false
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, context: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        context: &mut GenerationContext,
+    ) -> Jump {
         todo!()
     }
 }

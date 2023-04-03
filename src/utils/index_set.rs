@@ -1,11 +1,13 @@
 use std::{marker::PhantomData, fmt::Debug};
 
+use super::bitvector::BitVector;
+
 pub trait KeyIndex: Copy {
     fn index(&self) -> usize;
 }
 
 pub struct IndexSet<T: KeyIndex> {
-    set: bitvec::vec::BitVec,
+    set: BitVector,
     marker: PhantomData<T>
 }
 
@@ -18,18 +20,16 @@ impl<T: KeyIndex> Default for IndexSet<T> {
 impl<T: KeyIndex> IndexSet<T> {
     pub fn new() -> Self {
         Self {
-            set: bitvec::vec::BitVec::new(),
+            set: BitVector::new(),
             marker: PhantomData,
         }
     }
 
     pub fn insert(&mut self, value: T) -> bool {
         let index = value.index();
-        if index >= self.set.len() {
-            self.set.resize(index + 1, false);
-        }
         
-        if self.set[index] {
+        
+        if self.set.get(index) {
             return false;
         }
 
@@ -41,7 +41,7 @@ impl<T: KeyIndex> IndexSet<T> {
         let index = value.index();
     
         if index < self.set.len() {
-            if !self.set[index] {
+            if !self.set.get(index) {
                 return false;
             }
             self.set.set(index, false);
@@ -53,45 +53,26 @@ impl<T: KeyIndex> IndexSet<T> {
 
     pub fn contains(&self, value: &T) -> bool {
         let index = value.index();
-        index < self.set.len() && self.set[index]
+        index < self.set.len() && self.set.get(index)
     }
 
     pub fn iter<'a>(&'a self, collection: &'a [T]) -> impl Iterator<Item = &T> + 'a {
-        self.set.iter().enumerate().filter_map(move |(index, value)| {
-            if *value {
-                Some(&collection[index])
-            } else {
-                None
-            }
+        self.set.iter().map(move |value| {
+            &collection[value]
         })
     }
 
-    pub fn iter_mut<'a>(&'a mut self, collection: &'a mut [T]) -> impl Iterator<Item = &'a mut T> + 'a {
-        self.set.iter_mut().zip(collection.iter_mut()).filter_map(|(value, item)| {
-            if *value {
-                Some(item)
-            } else {
-                None
-            }
-        })
-    }
 
     pub fn is_empty(&self) -> bool {
-        self.set.iter().all(|x| !*x)
+        self.set.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.set.iter().filter(|x| **x).count()
+        self.set.len()
     }
 
     pub fn indices(&self) -> impl Iterator<Item = usize> + '_ {
-        self.set.iter().enumerate().filter_map(|(index, value)| {
-            if *value {
-                Some(index)
-            } else {
-                None
-            }
-        })
+        self.set.iter()
     }
 
     pub fn values<'a>(&'a self, collection: &'a [T]) -> impl Iterator<Item = &T> + 'a {

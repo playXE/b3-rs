@@ -4,18 +4,26 @@ use macroassembler::assembler::{
 };
 
 use crate::{
-    jit::{register_at_offset::RegisterAtOffsetList, register_set::RegisterSetBuilder},
+    bank::Bank,
+    jit::{
+        reg::Reg,
+        register_at_offset::RegisterAtOffsetList,
+        register_set::{RegisterSet, RegisterSetBuilder},
+    },
     utils::{index_set::IndexMap, phase_scope::phase_scope},
     width::Width,
+    OptLevel,
 };
 
 use super::{
     allocate_registers_and_stack_by_linear_scan::allocate_registers_and_stack_by_linear_scan,
-    basic_block::BasicBlockId, block_order::optimize_block_order, code::Code,
-    eliminate_dead_code::eliminate_dead_code, form_table::is_return,
+    allocate_registers_by_graph_coloring::allocate_registers_by_graph_coloring,
+    allocate_stack_by_graph_coloring::allocate_stack_by_graph_coloring, basic_block::BasicBlockId,
+    block_order::optimize_block_order, code::Code, eliminate_dead_code::eliminate_dead_code,
+    fix_obvious_spills::fix_obvious_spills, form_table::is_return,
     generation_context::GenerationContext, lower_after_regalloc::lower_after_regalloc,
-    lower_macros::lower_macros, lower_stack_args::lower_stack_args, opcode::Opcode,
-    simplify_cfg::simplify_cfg, lower_entry_switch::lower_entry_switch,
+    lower_entry_switch::lower_entry_switch, lower_macros::lower_macros,
+    lower_stack_args::lower_stack_args, opcode::Opcode, simplify_cfg::simplify_cfg,
 };
 
 pub fn prepare_for_generation(code: &mut Code<'_>) {
@@ -24,22 +32,43 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         simplify_cfg(code);
         lower_macros(code);
         eliminate_dead_code(code);
-        // TODO: Port IRC and "fast" -O0 allocator from original source code.
+        let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
+        if true || code.proc.options.opt_level <= OptLevel::O1
+            || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring
+        {
+            // When we're compiling quickly, we do register and stack allocation in one linear scan
+            // phase. It's fast because it computes liveness only once.
+            allocate_registers_and_stack_by_linear_scan(code);
+            // We may still need to do post-allocation lowering. Doing it after both register and
+            // stack allocation is less optimal, but it works fine.
+            lower_after_regalloc(code);
+        } else {
+            // Register allocation for all the Tmps that do not have a corresponding machine
+            // register. After this phase, every Tmp has a reg.
+            allocate_registers_by_graph_coloring(code);
 
-        // When we're compiling quickly, we do register and stack allocation in one linear scan
-        // phase. It's fast because it computes liveness only once.
-        allocate_registers_and_stack_by_linear_scan(code);
-        // We may still need to do post-allocation lowering. Doing it after both register and
-        // stack allocation is less optimal, but it works fine.
-        lower_after_regalloc(code);
+            // This replaces uses of spill slots with registers or constants if possible. It
+            // does this by minimizing the amount that we perturb the already-chosen register
+            // allocation. It may extend the live ranges of registers though.
+            fix_obvious_spills(code);
+
+            lower_after_regalloc(code);
+
+            // This does first-fit allocation of stack slots using an interference graph plus a
+            // bunch of other optimizations.
+            allocate_stack_by_graph_coloring(code);
+        }
+
         // This turns all Stack and CallArg Args into Addr args that use the frame pointer.
         lower_stack_args(code);
         lower_entry_switch(code);
+        eliminate_dead_code(code);
         //report_used_registers(code);
         // If we coalesced moves then we can unbreak critical edges. This is the main reason for this
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
+
         optimize_block_order(code);
     });
 }
@@ -48,7 +77,7 @@ fn generate_with_already_allocated_registers<'a>(
     code: &'a mut Code<'a>,
     jit: &mut TargetMacroAssembler,
 ) {
-    println!("{}", code);
+    // println!("{}", code);
     //phase_scope("air::generate", || {
     let mut context = GenerationContext {
         late_paths: vec![],
@@ -84,7 +113,6 @@ fn generate_with_already_allocated_registers<'a>(
         context.current_block = Some(block_id);
         context.index_in_block = usize::MAX;
 
-
         block_jumps.get(&block_id).map(|jumps: &JumpList| {
             jumps.link(jit);
         });
@@ -92,11 +120,14 @@ fn generate_with_already_allocated_registers<'a>(
         let label = jit.label();
         *context.block_labels.get_mut(&block_id).unwrap() = Box::new(label);
 
-
         if let Some(entrypoint_index) = context.code.entrypoint_index(block_id) {
             jit.comment(format!("entrypoint {}", entrypoint_index));
 
-            (context.code.prologue_generator_for_entrypoint(entrypoint_index).clone().unwrap())(jit, context.code);
+            (context
+                .code
+                .prologue_generator_for_entrypoint(entrypoint_index)
+                .clone()
+                .unwrap())(jit, context.code);
         }
 
         for i in 0..context.code.block(block_id).insts.len() - 1 {
@@ -151,10 +182,10 @@ fn generate_with_already_allocated_registers<'a>(
         }
 
         context.current_block = None;
+    }
 
-        for late_path in std::mem::take(&mut context.late_paths) {
-            late_path(jit, &mut context);
-        }
+    for late_path in std::mem::take(&mut context.late_paths) {
+        late_path(jit, &mut context);
     }
     //});
 }
@@ -375,4 +406,30 @@ pub fn emit_save(jit: &mut TargetMacroAssembler, list: &RegisterAtOffsetList) {
         );
         i += 1;
     }
+}
+
+pub fn select_scratch_gpr(preserved: RegisterSet) -> u8 {
+    use macroassembler::jit::gpr_info::*;
+    let registers = [T0, T1, T2, T3, T4, T5];
+
+    for reg in registers {
+        if !preserved.contains(Reg::new_gpr(reg), Width::W64) {
+            return reg;
+        }
+    }
+
+    unreachable!("No scratch register available");
+}
+
+pub fn select_scratch_gpr_for_gpr(gpr: u8) -> u8 {
+    use macroassembler::jit::gpr_info::*;
+    let registers = [T0, T1, T2, T3, T4, T5];
+
+    for reg in registers {
+        if reg != gpr {
+            return reg;
+        }
+    }
+
+    unreachable!("No scratch register available");
 }

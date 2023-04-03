@@ -42,15 +42,15 @@ impl Kind {
     /// version will behave as unpredictably as it wants. For example, it's legal to
     /// constant-fold Div(x, 0) to any value or to replace it with any effectful operation.
     /// But when it's chill, that means that the semantics when it would have trapped are
-    /// the JS semantics. For example, Div<Chill>(@a, @b) means:
+    /// the JS semantics. For example, `Div<Chill>(@a, @b)` means:
     /// ```mustfail
     ///     ((a | 0) / (b | 0)) | 0
     /// ```
-    /// And Mod<Chill>(a, b) means:
+    /// And `Mod<Chill>(a, b)` means:
     /// ```mustfail
     ///     ((a | 0) % (b | 0)) | 0
     /// ```
-    /// Note that Div<Chill> matches exactly how ARM handles integer division.
+    /// Note that `Div<Chill>` matches exactly how ARM handles integer division.
     pub const fn has_chill(&self) -> bool {
         match self.opcode {
             Opcode::Div | Opcode::Mod => true,

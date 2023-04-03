@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Label};
+use macroassembler::{
+    assembler::{abstract_macro_assembler::Label, TargetMacroAssembler},
+    jit::gpr_info::{RETURN_VALUE_GPR, T0, T1},
+};
 use tinyvec::TinyVec;
 
 use crate::{
@@ -17,17 +20,23 @@ use crate::{
 
 use super::{
     basic_block::{update_predecessors_after, BasicBlock, BasicBlockId},
+    generate::{
+        emit_function_epilogue, emit_function_epilogue_with_empty_frame, emit_function_prologue,
+        emit_restore, emit_save,
+    },
     special::{Special, SpecialId},
     stack_slot::{StackSlot, StackSlotId, StackSlotKind},
-    tmp::Tmp, generate::{emit_restore, emit_function_epilogue, emit_function_epilogue_with_empty_frame, emit_function_prologue, emit_save},
+    tmp::Tmp,
 };
-
 
 pub fn default_prologue_generator(jit: &mut TargetMacroAssembler, code: &mut Code) {
     emit_function_prologue(jit);
 
     if code.frame_size != 0 {
-        jit.sub64(code.frame_size as i32, TargetMacroAssembler::STACK_POINTER_REGISTER);
+        jit.sub64(
+            code.frame_size as i32,
+            TargetMacroAssembler::STACK_POINTER_REGISTER,
+        );
     }
 
     emit_save(jit, &code.callee_save_registers_at_offset_list());
@@ -111,11 +120,10 @@ impl<'a> Code<'a> {
             });
 
             let mut result = Vec::new();
-            
+
             result.append(&mut volatile_regs);
             result.append(&mut full_callee_save_regs);
             result.append(&mut callee_save_regs);
-            
 
             this.set_regs_in_priority_order(bank, &result);
         });
@@ -133,19 +141,32 @@ impl<'a> Code<'a> {
         }
     }
 
-    pub fn prologue_generator_for_entrypoint(&self, entrypoint_index: usize) -> Option<PrologueGenerator> {
-        self.prologue_generators.get(entrypoint_index).cloned().flatten()
+    pub fn prologue_generator_for_entrypoint(
+        &self,
+        entrypoint_index: usize,
+    ) -> Option<PrologueGenerator> {
+        self.prologue_generators
+            .get(entrypoint_index)
+            .cloned()
+            .flatten()
     }
 
-    pub fn set_prologue_for_entrypoint(&mut self, entrypoint_index: usize, generator: PrologueGenerator) {
+    pub fn set_prologue_for_entrypoint(
+        &mut self,
+        entrypoint_index: usize,
+        generator: PrologueGenerator,
+    ) {
         if self.prologue_generators.len() <= entrypoint_index {
-            self.prologue_generators.resize_with(entrypoint_index + 1, || None);
+            self.prologue_generators
+                .resize_with(entrypoint_index + 1, || None);
         }
         self.prologue_generators[entrypoint_index] = Some(generator);
     }
 
     pub fn entrypoint_index(&self, entrypoint: BasicBlockId) -> Option<usize> {
-        self.entrypoints.iter().position(|(entrypoint_id, _)| *entrypoint_id == entrypoint)
+        self.entrypoints
+            .iter()
+            .position(|(entrypoint_id, _)| *entrypoint_id == entrypoint)
     }
 
     pub fn entrypoint_label(&self, entrypoint_index: usize) -> Label {
@@ -165,14 +186,15 @@ impl<'a> Code<'a> {
     }
 
     pub fn is_entrypoint(&self, block: BasicBlockId) -> bool {
-        self.entrypoints.iter().any(|(entrypoint, _)| *entrypoint == block)
+        self.entrypoints
+            .iter()
+            .any(|(entrypoint, _)| *entrypoint == block)
     }
 
     pub fn set_num_entrypoints(&mut self, num_entrypoints: usize) {
-        self.prologue_generators.resize(num_entrypoints, self.default_prologue_generator.clone());
+        self.prologue_generators
+            .resize(num_entrypoints, self.default_prologue_generator.clone());
     }
-
-
 
     pub fn indices(&self) -> impl Iterator<Item = BasicBlockId> {
         (0..self.blocks.len()).map(BasicBlockId)
@@ -191,7 +213,11 @@ impl<'a> Code<'a> {
 
     pub fn emit_epilogue(&mut self, jit: &mut TargetMacroAssembler) {
         if self.frame_size != 0 {
-            emit_restore(jit, &self.callee_save_registers_at_offset_list(), TargetMacroAssembler::FRAME_POINTER_REGISTER);
+            emit_restore(
+                jit,
+                &self.callee_save_registers_at_offset_list(),
+                TargetMacroAssembler::FRAME_POINTER_REGISTER,
+            );
             emit_function_epilogue(jit);
         } else {
             emit_function_epilogue_with_empty_frame(jit);
@@ -218,7 +244,6 @@ impl<'a> Code<'a> {
 
         for_each_bank(|bank| {
             for i in 0..self.regs_in_priority_order(bank).len() {
-                
                 let reg = self.regs_in_priority_order(bank)[i];
                 self.mutable_regs.add(reg);
             }

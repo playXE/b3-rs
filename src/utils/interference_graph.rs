@@ -21,16 +21,13 @@
 //!   HugeIterableInterferenceGraph
 //! The large and huge versions are 2x the memory of their non-iterable versions, but offer an additional operator[] method, which returns an iterable object
 
-use bitvec::vec::BitVec;
-
-use super::likely_dense_integer_set::LikelyDenseIntegerSet;
+use super::{bitvector::BitVector, likely_dense_integer_set::LikelyDenseIntegerSet};
 
 pub trait InterferenceGraph {
-    type Iter<'a>: Iterator<Item = u32>
+    type Iter<'a>: Iterable
     where
         Self: 'a;
 
-    
     fn contains(&self, u: u32, v: u32) -> bool;
     fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool;
     fn add(&mut self, u: u32, v: u32);
@@ -41,43 +38,77 @@ pub trait InterferenceGraph {
     fn size(&self) -> usize;
     fn memory_use(&self) -> usize;
     fn dump_memory_use_in_kb(&self);
-    fn iter<'a>(&'a self) -> Self::Iter<'a>;
+    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a>;
 }
 
 pub struct InterferenceBitVector {
-    bitvector: BitVec<usize, bitvec::order::Lsb0>,
+    bitvector: BitVector,
     size: usize,
     num_elements: u32,
+}
+
+pub trait Iterable {
+    type Iter<'a>: Iterator<Item = u32>
+    where
+        Self: 'a;
+    fn iter<'a>(&'a self) -> Self::Iter<'a>;
 }
 
 #[allow(dead_code)]
 pub struct InterferenceBitVectorIter<'a> {
-    bitvector: &'a BitVec<usize, bitvec::order::Lsb0>,
-    size: usize,
-    starting_index: usize,
-    num_elements: u32,
+    bitvector: &'a BitVector,
+    starting_index: u32,
+    begin: u32,
+    end: u32,
+}
+
+impl<'a> Iterable for InterferenceBitVectorIter<'a> {
+    type Iter<'b>
+    = InterfaceBitVectorItrerable<'a, 'b>  where Self: 'b;
+
+    fn iter<'b>(&'b self) -> InterfaceBitVectorItrerable<'a, 'b> {
+        InterfaceBitVectorItrerable {
+            iterator: self,
+            index: self.begin,
+        }
+    }
+}
+
+impl<'a> InterferenceBitVectorIter<'a> {
+    pub fn iter<'b>(&'b self) -> InterfaceBitVectorItrerable<'a, 'b> {
+        InterfaceBitVectorItrerable {
+            iterator: self,
+            index: self.begin,
+        }
+    }
+}
+
+pub struct InterfaceBitVectorItrerable<'a, 'b> {
+    iterator: &'b InterferenceBitVectorIter<'a>,
     index: u32,
 }
 
-impl<'a> Iterator for InterferenceBitVectorIter<'a> {
+impl<'a, 'b> Iterator for InterfaceBitVectorItrerable<'a, 'b> {
     type Item = u32;
+
     fn next(&mut self) -> Option<Self::Item> {
-        self.bitvector
-            .iter_ones()
-            .take(self.index as usize + 1)
-            .next()
-            .map(|x| x as u32)
-            .and_then(|i| {
-                self.index = i as _;
-                Some(i - self.starting_index as u32)
-            })
+        let old = self.index;
+
+        if old >= self.iterator.end {
+            return None;
+        }
+        self.index = self
+            .iterator
+            .bitvector
+            .find_bit(self.index as usize + 1, true) as u32;
+        Some(old - self.iterator.starting_index)
     }
 }
 
 impl InterferenceBitVector {
     pub fn new() -> Self {
         Self {
-            bitvector: BitVec::new(),
+            bitvector: BitVector::new(),
             size: 0,
             num_elements: 0,
         }
@@ -92,22 +123,13 @@ impl InterferenceGraph for InterferenceBitVector {
     type Iter<'a> = InterferenceBitVectorIter<'a>;
 
     fn contains(&self, u: u32, v: u32) -> bool {
-        self.bitvector
-            .get(self.index(u, v))
-            .map(|x| *x)
-            .unwrap_or(false)
+        self.bitvector.quick_get(self.index(u, v))
     }
 
     fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
-        let alrady_in = self.contains(u, v);
-        let index = self.index(u, v);
-        if index >= self.bitvector.len() {
-            self.bitvector.resize(index + 1, false);
-        }
-        self.bitvector.set(index, true);
-        self.size += !alrady_in as usize;
-
-        !alrady_in
+        let already_in = self.bitvector.quick_set(self.index(u, v), true);
+        self.size += !already_in as usize;
+        !already_in
     }
 
     fn add(&mut self, u: u32, v: u32) {
@@ -115,7 +137,7 @@ impl InterferenceGraph for InterferenceBitVector {
     }
 
     fn clear(&mut self) {
-        self.bitvector.clear();
+        self.bitvector.clear_all();
         self.size = 0;
     }
 
@@ -123,7 +145,7 @@ impl InterferenceGraph for InterferenceBitVector {
 
     fn set_max_index(&mut self, n: u32) {
         self.num_elements = n;
-        self.bitvector.resize((n * n) as _, false);
+        self.bitvector.ensure_size(n as usize * n as usize);
     }
 
     fn for_each(&self, mut functor: impl FnMut(u32, u32)) {
@@ -145,16 +167,19 @@ impl InterferenceGraph for InterferenceBitVector {
     }
 
     fn dump_memory_use_in_kb(&self) {
-        println!("InterferenceGraph uses {} kB", self.memory_use() / 1024);
+        eprint!("InterferenceGraph uses {} kB", self.memory_use() / 1024);
     }
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+        let index = self.index(u, 0);
+        let begin = self.bitvector.find_bit(self.index(u, 0), true);
+        let end = self.index(u + 1, 0);
+
         InterferenceBitVectorIter {
             bitvector: &self.bitvector,
-            size: self.size,
-            starting_index: 0,
-            num_elements: self.num_elements,
-            index: 0,
+            starting_index: index as _,
+            begin: begin as _,
+            end: end as _,
         }
     }
 }
@@ -162,24 +187,6 @@ impl InterferenceGraph for InterferenceBitVector {
 pub struct InterferenceVector {
     vector: Vec<LikelyDenseIntegerSet>,
     size: usize,
-}
-
-#[allow(dead_code)]
-pub struct InterferenceVectorIter<'a> {
-    vector: &'a Vec<LikelyDenseIntegerSet>,
-    size: usize,
-    starting_index: usize,
-    index: usize,
-}
-
-impl<'a> Iterator for InterferenceVectorIter<'a> {
-    type Item = u32;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.vector.iter().skip(self.index).next().and_then(|x| {
-            self.index += 1;
-            x.iter().next().map(|x| x - self.starting_index as u32)
-        })
-    }
 }
 
 impl InterferenceVector {
@@ -191,78 +198,81 @@ impl InterferenceVector {
     }
 }
 
+pub struct InterferenceVectorIter<'a> {
+    set: &'a LikelyDenseIntegerSet,
+}
+
+impl<'a> InterferenceVectorIter<'a> {
+    pub fn iter(&self) -> super::likely_dense_integer_set::Iter<'a> {
+        self.set.iter()
+    }
+}
+
+impl<'a> Iterable for InterferenceVectorIter<'a> {
+    type Iter<'b>
+    = super::likely_dense_integer_set::Iter<'a>  where Self: 'b;
+
+    fn iter<'b>(&'b self) -> super::likely_dense_integer_set::Iter<'a> {
+        self.set.iter()
+    }
+}
+
 impl InterferenceGraph for InterferenceVector {
     type Iter<'a> = InterferenceVectorIter<'a>;
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
+
+    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
         InterferenceVectorIter {
-            vector: &self.vector,
-            size: self.size,
-            starting_index: 0,
-            index: 0,
+            set: &self.vector[u as usize],
         }
-    }
-
-    fn contains(&self, u: u32, v: u32) -> bool {
-        if u as usize >= self.vector.len() {
-            false
-        } else {
-            self.vector[u as usize].contains(v as _)
-        }
-    }
-
-    fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
-        let alrady_in = self.contains(u, v);
-        if u as usize >= self.vector.len() {
-            self.vector
-                .resize(u as usize + 1, LikelyDenseIntegerSet::new());
-        }
-        let is_new_entry = self.vector[u as usize].add(v as _);
-        self.size += !alrady_in as usize;
-
-        !alrady_in && is_new_entry
     }
 
     fn add(&mut self, u: u32, v: u32) {
         self.add_and_return_is_new_entry(u, v);
     }
 
-    fn clear(&mut self) {
-        self.vector.clear();
-        self.size = 0;
+    fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
+        let already_in = self.vector[u as usize].add(v);
+        self.size += !already_in as usize;
+        !already_in
     }
 
     fn may_clear(&mut self, u: u32) {
-        if (u as usize) < self.vector.len() {
-            self.vector[u as usize].clear();
-        }
+        self.vector[u as usize].clear();
     }
 
-    fn set_max_index(&mut self, n: u32) {
-        self.vector.resize(n as _, LikelyDenseIntegerSet::new());
+    fn clear(&mut self) {
+        for set in self.vector.iter_mut() {
+            set.clear();
+        }
+        self.size = 0;
     }
 
     fn for_each(&self, mut functor: impl FnMut(u32, u32)) {
         for (i, set) in self.vector.iter().enumerate() {
             for j in set.iter() {
-                functor(i as _, j as _);
+                functor(i as _, j);
             }
         }
     }
 
     fn size(&self) -> usize {
-        self.size as _
+        self.size
+    }
+
+    fn contains(&self, u: u32, v: u32) -> bool {
+        self.vector[u as usize].contains(v)
     }
 
     fn memory_use(&self) -> usize {
-        self.vector.iter().map(|x| x.memory_use()).sum()
+        self.vector.iter().map(|set| set.memory_use()).sum()
     }
 
     fn dump_memory_use_in_kb(&self) {
-        let mut memory_use = 0;
-        for set in self.vector.iter() {
-            memory_use += set.memory_use();
-        }
-        println!("InterferenceVector uses {} kB", memory_use / 1024);
+        eprint!("InterferenceGraph uses {} kB", self.memory_use() / 1024);
+    }
+
+    fn set_max_index(&mut self, n: u32) {
+        self.vector.resize(n as _, LikelyDenseIntegerSet::new());
     }
 }
 
@@ -280,8 +290,8 @@ impl<G: InterferenceGraph> InterferenceGraph for UndirectedEdgesDuplicatingAdapt
     type Iter<'a> = G::Iter<'a>
     where G: 'a;
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
-        self.graph.iter()
+    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+        self.graph.iter(u)
     }
 
     fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
@@ -344,8 +354,8 @@ impl<G: InterferenceGraph> InterferenceGraph for UndirectedEdgesDedupAdapter<G> 
         where G: 'a
     ;
 
-    fn iter<'a>(&'a self) -> Self::Iter<'a> {
-        self.graph.iter()
+    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+        self.graph.iter(u)
     }
 
     fn add_and_return_is_new_entry(&mut self, mut u: u32, mut v: u32) -> bool {
@@ -404,7 +414,6 @@ pub const MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH: usize = 400;
 
 pub type DefaultSmallInterferenceGraph = UndirectedEdgesDuplicatingAdapter<InterferenceBitVector>;
 pub type DefaultLargeInterferenceGraph = UndirectedEdgesDedupAdapter<InterferenceVector>;
-
 
 pub type SmallInterferenceGraph = DefaultSmallInterferenceGraph;
 pub type LargeInterferenceGraph = DefaultLargeInterferenceGraph;

@@ -1,6 +1,9 @@
 use macroassembler::{
-    assembler::{x86assembler::xmm0, TargetMacroAssembler, abstract_macro_assembler::Jump},
-    jit::gpr_info::{NON_PRESERVED_NON_ARGUMENT_GPR0, RETURN_VALUE_GPR, RETURN_VALUE_GPR2},
+    assembler::{abstract_macro_assembler::Jump, TargetMacroAssembler},
+    jit::{
+        fpr_info::RETURN_VALUE_FPR,
+        gpr_info::{NON_PRESERVED_NON_ARGUMENT_GPR0, RETURN_VALUE_GPR, RETURN_VALUE_GPR2},
+    },
 };
 
 use crate::{
@@ -13,8 +16,9 @@ use super::{
     arg::{Arg, ArgKind, ArgRole},
     code::Code,
     form_table::is_arm64,
+    generation_context::GenerationContext,
     inst::Inst,
-    tmp::Tmp, generation_context::GenerationContext,
+    tmp::Tmp,
 };
 
 /// Use this special for constructing a C call. Arg 0 is of course a Special arg that refers to the
@@ -51,12 +55,13 @@ impl CCallSpecial {
         + Self::NUM_RETURN_FP_ARGS;
 
     pub fn new() -> Self {
-        let mut clobbered =
-            RegisterSetBuilder::registers_to_save_for_ccall(RegisterSetBuilder::all_registers());
+        let mut clobbered = RegisterSetBuilder::registers_to_save_for_ccall(
+            RegisterSetBuilder::all_scalar_registers(),
+        );
 
         clobbered.remove(Reg::new_gpr(RETURN_VALUE_GPR));
         clobbered.remove(Reg::new_gpr(RETURN_VALUE_GPR2));
-        clobbered.remove(Reg::new_gpr(xmm0));
+        clobbered.remove(Reg::new_fpr(RETURN_VALUE_FPR));
 
         Self {
             clobbered_regs: clobbered,
@@ -67,10 +72,11 @@ impl CCallSpecial {
         &self,
         _code: &Code<'_>,
         inst: &Inst,
-        mut lambda: impl FnMut(Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, Arg, ArgRole, Bank, Width),
     ) {
         for i in 0..Self::NUM_CALLEE_ARGS {
             lambda(
+                Self::CALLEE_ARG_OFFSET + i,
                 inst.args[Self::CALLEE_ARG_OFFSET + i],
                 ArgRole::Use,
                 Bank::GP,
@@ -79,8 +85,8 @@ impl CCallSpecial {
         }
 
         for i in 0..Self::NUM_RETURN_GP_ARGS {
-            
             lambda(
+                Self::RETURN_GP_ARG_OFFSET + i,
                 inst.args[Self::RETURN_GP_ARG_OFFSET + i],
                 ArgRole::Def,
                 Bank::GP,
@@ -90,6 +96,7 @@ impl CCallSpecial {
 
         for i in 0..Self::NUM_RETURN_FP_ARGS {
             lambda(
+                Self::RETURN_FP_ARG_OFFSET + i,
                 inst.args[Self::RETURN_FP_ARG_OFFSET + i],
                 ArgRole::Def,
                 Bank::FP,
@@ -99,7 +106,7 @@ impl CCallSpecial {
 
         for i in Self::ARG_ARG_OFFSET..inst.args.len() {
             let bank = inst.args[i].bank();
-            lambda(inst.args[i], ArgRole::Use, bank, Width::W64)
+            lambda(i, inst.args[i], ArgRole::Use, bank, Width::W64)
         }
     }
 
@@ -107,10 +114,11 @@ impl CCallSpecial {
         &mut self,
         _code: &mut Code<'_>,
         inst: &mut Inst,
-        mut lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         for i in 0..Self::NUM_CALLEE_ARGS {
             lambda(
+                Self::CALLEE_ARG_OFFSET + i,
                 &mut inst.args[Self::CALLEE_ARG_OFFSET + i],
                 ArgRole::Use,
                 Bank::GP,
@@ -120,6 +128,7 @@ impl CCallSpecial {
 
         for i in 0..Self::NUM_RETURN_GP_ARGS {
             lambda(
+                Self::RETURN_GP_ARG_OFFSET + i,
                 &mut inst.args[Self::RETURN_GP_ARG_OFFSET + i],
                 ArgRole::Def,
                 Bank::GP,
@@ -129,6 +138,7 @@ impl CCallSpecial {
 
         for i in 0..Self::NUM_RETURN_FP_ARGS {
             lambda(
+                Self::RETURN_FP_ARG_OFFSET + i,
                 &mut inst.args[Self::RETURN_FP_ARG_OFFSET + i],
                 ArgRole::Def,
                 Bank::FP,
@@ -138,7 +148,7 @@ impl CCallSpecial {
 
         for i in Self::ARG_ARG_OFFSET..inst.args.len() {
             let bank = inst.args[i].bank();
-            lambda(&mut inst.args[i], ArgRole::Use, bank, Width::W64)
+            lambda(i, &mut inst.args[i], ArgRole::Use, bank, Width::W64)
         }
     }
 
@@ -195,7 +205,7 @@ impl CCallSpecial {
         }
 
         if inst.args[Self::RETURN_FP_ARG_OFFSET + 0]
-            != Arg::new_tmp(Tmp::from_reg(Reg::new_fpr(xmm0)))
+            != Arg::new_tmp(Tmp::from_reg(Reg::new_fpr(RETURN_VALUE_FPR)))
         {
             return false;
         }
@@ -225,27 +235,31 @@ impl CCallSpecial {
         }
     }
 
-    pub fn generate(inst: &Inst, jit: &mut TargetMacroAssembler, _: &mut GenerationContext) -> Jump {
+    pub fn generate(
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        _: &mut GenerationContext,
+    ) -> Jump {
         match inst.args[Self::CALLEE_ARG_OFFSET].kind() {
-            ArgKind::Imm
-            | ArgKind::BigImm => {
-                jit.mov(inst.args[Self::CALLEE_ARG_OFFSET].as_imm_ptr(), Self::SCRATCH_REGISTER);
+            ArgKind::Imm | ArgKind::BigImm => {
+                jit.mov(
+                    inst.args[Self::CALLEE_ARG_OFFSET].as_imm_ptr(),
+                    Self::SCRATCH_REGISTER,
+                );
                 jit.call_op(Some(Self::SCRATCH_REGISTER));
             }
-            
+
             ArgKind::Tmp => {
                 jit.call_op(Some(inst.args[Self::CALLEE_ARG_OFFSET].gpr()));
             }
 
-            ArgKind::Addr
-            | ArgKind::ExtendedOffsetAddr => {
+            ArgKind::Addr | ArgKind::ExtendedOffsetAddr => {
                 jit.call_op(Some(inst.args[Self::CALLEE_ARG_OFFSET].as_address()));
             }
 
-            _ => unreachable!()
+            _ => unreachable!(),
         }
 
-        
         Jump::default()
     }
 }

@@ -1,6 +1,7 @@
-use bitvec::vec::BitVec;
 use indexmap::IndexSet;
 use std::mem::{size_of, ManuallyDrop};
+
+use super::bitvector::{BitVector, BitVectorIter};
 
 /// This is effectively a std::variant<HashSet, Pair<BitVector, IndexType>>
 /// If it is in BitVector mode, it keeps track of the minimum value in the set, and has the bitVector shifted by the same amount.
@@ -14,6 +15,7 @@ pub struct LikelyDenseIntegerSet {
     max: u32,
     min: u32,
 }
+
 
 impl Drop for LikelyDenseIntegerSet {
     fn drop(&mut self) {
@@ -31,11 +33,11 @@ impl Drop for LikelyDenseIntegerSet {
 
 union LikelyDenseIntegerSetU {
     hashset: ManuallyDrop<IndexSet<u32>>,
-    bitvector: ManuallyDrop<BitVec<usize>>,
+    bitvector: ManuallyDrop<BitVector>,
 }
 
 enum IterVariant<'a> {
-    BitVector(bitvec::slice::IterOnes<'a, usize, bitvec::order::Lsb0>),
+    BitVector(BitVectorIter<'a>),
     HashSet(indexmap::set::Iter<'a, u32>),
 }
 
@@ -59,7 +61,7 @@ impl LikelyDenseIntegerSet {
     pub fn new() -> Self {
         Self {
             u: LikelyDenseIntegerSetU {
-                bitvector: ManuallyDrop::new(BitVec::new()),
+                bitvector: ManuallyDrop::new(BitVector::new()),
             },
             size: 0,
             max: 0,
@@ -76,7 +78,7 @@ impl LikelyDenseIntegerSet {
             if ix >= self.bitvector().len() {
                 return false;
             }
-            *self.bitvector().get(ix).unwrap()
+            self.bitvector().get(ix)
         } else {
             self.hashset().contains(&value)
         }
@@ -84,7 +86,7 @@ impl LikelyDenseIntegerSet {
 
     pub fn clear(&mut self) {
         if self.is_bitvector() {
-            self.bitvector_mut().clear();
+            self.bitvector_mut().clear_all();
         } else {
             self.hashset_mut().clear();
         }
@@ -94,94 +96,78 @@ impl LikelyDenseIntegerSet {
     }
 
     pub fn add(&mut self, value: u32) -> bool {
-        let compute_new_min = |this: &Self| -> u32 {
-            let rounded_down_value = value & !63;
-            this.min.min(rounded_down_value)
-        };
-
         if self.size == 0 {
+            assert!(self.is_bitvector());
             self.min = value & !63;
             self.max = value;
             self.size = 1;
-            
+            // not quickSet, as value - m_min might be 63, and the inline bit vector cannot store that value.
+            // So there might be some overflow here, forcing an allocation of an outline bit vector.
             let ix = value as usize - self.min as usize;
-            self.bitvector_mut().resize(ix + 1, false);
             self.bitvector_mut().set(ix, true);
             return true;
         }
 
-        if !self.is_bitvector() {
-            let is_new_entry = self.hashset_mut().insert(value);
+        let compute_new_min = |this: &Self| {
+            let rounded_down_value = value & !63;
+            this.min.min(rounded_down_value)
+        };
 
-            if !is_new_entry {
+        if !self.is_bitvector() {
+            if self.hashset().contains(&value) {
                 return false;
             }
-
-            self.min = compute_new_min(self) as u32;
+            self.hashset_mut().insert(value);
+            self.min = compute_new_min(self);
             self.max = self.max.max(value);
-
             let hash_set_size = self.hashset().capacity() * size_of::<u32>();
-            let would_be_bitvector_size =
-                (self.max as usize - self.min as usize + 1) / size_of::<usize>();
+            let would_be_bitvector_size = (self.max - self.min) / 8;
 
-            if would_be_bitvector_size * 2 < hash_set_size {
+            if would_be_bitvector_size * 2 < hash_set_size as u32 {
                 self.transition_to_bitvector();
             }
 
-            true
-        } else {
-            if value >= self.min && value <= self.max {
-                let min = self.min;
-                let is_new_entry = !self
-                    .bitvector_mut()
-                    .get(value as usize - min as usize)
-                    .unwrap();
-                self.bitvector_mut()
-                    .set(value as usize - min as usize, true);
-                if is_new_entry {
-                    self.size += 1;
-                }
-                return is_new_entry;
-            }
-
-            let new_min = compute_new_min(self) as usize;
-            let new_max = self.max.max(value) as usize;
-            let bitvector_size = (new_max - new_min) / size_of::<usize>();
-            let would_be_hashset_size = Self::estimated_hashset_size(self.size);
-
-            if would_be_hashset_size * 2 < bitvector_size {
-                self.transition_to_hash_set();
-                self.min = new_min as _;
-                self.max = new_max as _;
-                return self.hashset_mut().insert(value);
-            }
-
-            let min = self.min;
-            if value < self.min {
-                self.bitvector_mut()
-                    .shift_right((min as usize - value as usize) * 64);
-                self.min = new_min as _;
-            }
-            let min = self.min;
-            let ix = value as usize - min as usize;
-
-            if ix >= self.bitvector().len() {
-                self.bitvector_mut().resize(ix + 1, false);
-            }
-            let is_new_entry = !self
-                .bitvector_mut()
-                .get(value as usize - min as usize)
-                .unwrap();
-            self.bitvector_mut()
-                .set(value as usize - min as usize, true);
-
-            if is_new_entry {
-                self.size += 1;
-                self.min = compute_new_min(self) as u32;
-                self.max = self.max.max(value);
-            }
-            is_new_entry
+            return true;
         }
+
+        if value >= self.min && value <= self.max {
+            let ix = value as usize - self.min as usize;
+            let is_new_entry = !self.bitvector_mut().set(ix, true);
+            self.size += is_new_entry as usize;
+            return is_new_entry;
+        }
+
+        // We are in BitVector mode, and value is not in the bounds: we will definitely insert it as a new entry.
+        self.size += 1;
+
+        let new_min = compute_new_min(self);
+        let new_max = self.max.max(value);
+        let bitvector_size = (self.max - self.min) / 8;
+        let would_be_hashset_size = Self::estimated_hashset_size(self.size as _);
+
+        if would_be_hashset_size * 2 < bitvector_size as usize {
+            self.transition_to_hash_set();
+            let result = self.hashset_mut().insert(value);
+            assert!(result);
+            self.min = new_min;
+            self.max = new_max;
+            return true;
+        }
+
+        if value < self.min {
+            assert!(new_min < self.min);
+            let shift = self.min - new_min;
+            self.bitvector_mut()
+                .shift_right_by_multiple_of_64(shift as usize);
+            self.min = new_min;
+        }
+
+        let ix = value as usize - self.min as usize;
+
+        let is_new_entry = !self.bitvector_mut().set(ix, true);
+        assert!(is_new_entry);
+        self.max = new_max;
+        return true;
     }
 
     pub fn len(&self) -> usize {
@@ -193,7 +179,7 @@ impl LikelyDenseIntegerSet {
     pub fn iter(&self) -> Iter {
         if self.is_bitvector() {
             Iter {
-                iter: IterVariant::BitVector(self.bitvector().iter_ones()),
+                iter: IterVariant::BitVector(self.bitvector().iter()),
                 shift: self.min,
             }
         } else {
@@ -206,7 +192,7 @@ impl LikelyDenseIntegerSet {
 
     pub fn memory_use(&self) -> usize {
         let result = size_of::<Self>();
-        
+
         if self.is_bitvector() {
             return result + self.bitvector().len() / size_of::<usize>();
         } else {
@@ -224,11 +210,11 @@ impl LikelyDenseIntegerSet {
         would_be_hash_set_capacity * size_of::<u32>()
     }
 
-    fn bitvector(&self) -> &BitVec<usize> {
+    fn bitvector(&self) -> &BitVector {
         unsafe { &*self.u.bitvector }
     }
 
-    fn bitvector_mut(&mut self) -> &mut BitVec<usize> {
+    fn bitvector_mut(&mut self) -> &mut BitVector {
         unsafe { &mut *self.u.bitvector }
     }
 
@@ -244,7 +230,7 @@ impl LikelyDenseIntegerSet {
         assert!(self.is_bitvector());
         let mut new_set = IndexSet::with_capacity(self.size + 1);
 
-        for old_index in self.bitvector().iter_ones() {
+        for old_index in self.bitvector().iter() {
             new_set.insert(old_index as u32 + self.min);
         }
 
@@ -261,7 +247,8 @@ impl LikelyDenseIntegerSet {
     fn transition_to_bitvector(&mut self) {
         assert!(!self.is_bitvector());
 
-        let mut new_bitvector = bitvec::bitvec![0; self.max as usize - self.min as usize + 1];
+        let mut new_bitvector = BitVector::new();
+        new_bitvector.ensure_size(self.max as usize - self.min as usize + 1);
         self.size = 0;
         let hashset = unsafe { ManuallyDrop::take(&mut self.u.hashset) };
         for old_index in hashset.iter() {
@@ -294,5 +281,74 @@ impl Clone for LikelyDenseIntegerSet {
                 min: u32::MAX,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_dense_set() {
+        let mut set = LikelyDenseIntegerSet::new();
+        for i in 0..1000 {
+            assert!(set.add(i));
+        }
+        for i in 0..1000 {
+            assert!(!set.add(i));
+        }
+        for i in 0..1000 {
+            assert!(set.contains(i));
+        }
+        for i in 1000..2000 {
+            assert!(!set.contains(i));
+        }
+        assert_eq!(set.len(), 1000);
+        assert_eq!(set.iter().count(), 1000);
+        assert_eq!(set.iter().sum::<u32>(), 499500);
+        assert_eq!(set.iter().max(), Some(999));
+        assert_eq!(set.iter().min(), Some(0));
+        assert_eq!(set.iter().nth(500), Some(500));
+        assert_eq!(set.iter().nth(1000), None);
+        assert_eq!(set.iter().nth(1001), None);
+        assert_eq!(set.iter().nth(1002), None);
+        assert_eq!(set.iter().nth(1003), None);
+        assert_eq!(set.iter().nth(1004), None);
+        assert_eq!(set.iter().nth(1005), None);
+        assert_eq!(set.iter().nth(1006), None);
+        assert_eq!(set.iter().nth(1007), None);
+        assert_eq!(set.iter().nth(1008), None);
+        assert_eq!(set.iter().nth(1009), None);
+        assert_eq!(set.iter().nth(1010), None);
+        assert_eq!(set.iter().nth(1011), None);
+        assert_eq!(set.iter().nth(1012), None);
+        assert_eq!(set.iter().nth(1013), None);
+        assert_eq!(set.iter().nth(1014), None);
+        assert_eq!(set.iter().nth(1015), None);
+        assert_eq!(set.iter().nth(1016), None);
+        assert_eq!(set.iter().nth(1017), None);
+        assert_eq!(set.iter().nth(1018), None);
+        assert_eq!(set.iter().nth(1019), None);
+        assert_eq!(set.iter().nth(1020), None);
+        assert_eq!(set.iter().nth(1021), None);
+    }
+
+    #[test]
+    fn test_diff_set() {
+        let mut set = LikelyDenseIntegerSet::new();
+
+        set.add(64000);
+        set.add(64002);
+        set.add(64004);
+
+        assert!(set.contains(64000));
+        assert!(set.contains(64002));
+        assert!(set.contains(64004));
+
+        set.add(13);
+
+        assert!(set.contains(64000));
+        assert!(set.contains(64002));
+        assert!(set.contains(64004));
+        assert!(set.contains(13));
     }
 }

@@ -152,7 +152,7 @@ pub enum Opcode {
     /// usually assume that this is faster and results in less code than AtomicStrongCAS, though that's
     /// not necessarily true on Intel, if instruction selection does its job. Imagine that this opcode is
     /// as if you did this atomically:
-    //
+    /// ```mustfail
     /// template<typename T>
     /// bool AtomicWeakCAS(T expectedValue, T newValue, T* ptr)
     /// {
@@ -163,7 +163,7 @@ pub enum Opcode {
     ///     *ptr = newValue;
     ///     return true;
     /// }
-    //
+    // ```
     /// Note that all atomics put the pointer last to be consistent with how loads and stores work. This
     /// is a goofy tradition, but it's harmless, and better than being inconsistent.
     //
@@ -190,7 +190,7 @@ pub enum Opcode {
     /// Atomic compare and swap that returns the old value. Does not have the nondeterminism of WeakCAS.
     /// This is a bit more code and a bit slower in some cases, though not by a lot. Imagine that this
     /// opcode is as if you did this atomically:
-    //
+    /// ```mustfail
     /// template<typename T>
     /// T AtomicStrongCAS(T expectedValue, T newValue, T* ptr)
     /// {
@@ -199,7 +199,7 @@ pub enum Opcode {
     ///         *ptr = newValue;
     ///     return oldValue
     /// }
-    //
+    /// ```
     /// AtomicStrongCAS sign-extends its result for subwidth operations.
     //
     /// Note that AtomicWeakCAS and AtomicStrongCAS sort of have this kind of equivalence:
@@ -221,8 +221,6 @@ pub enum Opcode {
     AtomicXchgSub,
     AtomicXchgXor,
 
-    /// FIXME: Maybe we should have AtomicXchgNeg.
-    /// https://bugs.webkit.org/show_bug.cgi?id=169252
 
     /// Atomically exchange a value with a memory location. Syntax:
     //

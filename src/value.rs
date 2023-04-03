@@ -1,4 +1,7 @@
-use std::{hash::Hash, ops::Range};
+use std::{
+    hash::{Hash, Hasher},
+    ops::Range,
+};
 
 use tinyvec::TinyVec;
 
@@ -48,136 +51,24 @@ pub struct Value {
 pub struct ValueId(pub usize);
 
 impl ValueId {
+    pub fn key(self, proc: &Procedure) -> Option<ValueKey> {
+        proc.value(self).key()
+    }
+
+    pub fn kind(self, proc: &Procedure) -> Kind {
+        proc.value(self).kind
+    }
+
+    pub fn opcode(self, proc: &Procedure) -> Opcode {
+        proc.value(self).kind.opcode()
+    }
+
     pub fn child(self, proc: &Procedure, index: usize) -> ValueId {
         proc.value(self).children[index]
     }
 
     pub fn child_mut(self, proc: &mut Procedure, index: usize) -> &mut ValueId {
         &mut proc.value_mut(self).children[index]
-    }
-
-    pub fn materialize(self, proc: &mut Procedure) -> ValueId {
-        let typ = proc.value(self).typ();
-        use Opcode::*;
-        match proc.value(self).kind.opcode() {
-            Opcode::FramePointer => proc.add(Value::new(
-                Opcode::FramePointer,
-                typ,
-                NumChildren::Zero,
-                &[],
-                ValueData::None,
-            )),
-            Identity | Opaque | Abs | Floor | Ceil | Sqrt | Neg | Depend | SExt8 | SExt16
-            | SExt8To64 | SExt16To64 | SExt32 | ZExt32 | Clz | Trunc | IToD | IToF
-            | FloatToDouble | DoubleToFloat => {
-                let child = self.child(proc, 0);
-                let kind = proc.value(self).kind;
-                proc.add(Value::new(
-                    kind,
-                    typ,
-                    NumChildren::One,
-                    &[child],
-                    ValueData::None,
-                ))
-            }
-
-            Add | Sub | Mul | Div | UDiv | Mod | UMod | FMax | FMin | BitAnd | BitOr | BitXor
-            | Shl | SShr | ZShr | RotR | RotL | Equal | NotEqual | LessThan | GreaterThan
-            | Above | Below | AboveEqual | BelowEqual | EqualOrUnordered => {
-                let child0 = self.child(proc, 0);
-                let child1 = self.child(proc, 1);
-                let kind = proc.value(self).kind;
-                proc.add(Value::new(
-                    kind,
-                    typ,
-                    NumChildren::Two,
-                    &[child0, child1],
-                    ValueData::None,
-                ))
-            }
-
-            Select => {
-                let child0 = self.child(proc, 0);
-                let child1 = self.child(proc, 1);
-                let child2 = self.child(proc, 2);
-                let kind = proc.value(self).kind;
-                proc.add(Value::new(
-                    kind,
-                    typ,
-                    NumChildren::Three,
-                    &[child0, child1, child2],
-                    ValueData::None,
-                ))
-            }
-
-            Const32 => {
-                let val = proc.value(self).as_int32().unwrap();
-                proc.add(Value::new(
-                    Opcode::Const32,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Const32(val),
-                ))
-            }
-
-            Const64 => {
-                let val = proc.value(self).as_int64().unwrap();
-                proc.add(Value::new(
-                    Opcode::Const64,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Const64(val),
-                ))
-            }
-
-            Const128 => {
-                let val = proc.value(self).as_int128().unwrap();
-                proc.add(Value::new(
-                    Opcode::Const128,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Const128(val),
-                ))
-            }
-
-            ConstFloat => {
-                let val = proc.value(self).as_float().unwrap();
-                proc.add(Value::new(
-                    Opcode::ConstFloat,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Float(val.to_bits()),
-                ))
-            }
-
-            ConstDouble => {
-                let val = proc.value(self).as_double().unwrap();
-                proc.add(Value::new(
-                    Opcode::ConstDouble,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Double(val.to_bits()),
-                ))
-            }
-
-            ArgumentReg => {
-                let reg = proc.value(self).argument_reg().unwrap();
-                proc.add(Value::new(
-                    Opcode::ArgumentReg,
-                    typ,
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::Argument(reg),
-                ))
-            }
-
-            _ => todo!(),
-        }
     }
 }
 
@@ -234,6 +125,20 @@ impl Value {
         }
     }
 
+    pub fn is_int64_of(&self, val: i64) -> bool {
+        match self.kind.opcode() {
+            Opcode::Const64 => self.as_int64() == Some(val),
+            _ => false,
+        }
+    }
+
+    pub fn is_int32_of(&self, val: i32) -> bool {
+        match self.kind.opcode() {
+            Opcode::Const64 => self.as_int32() == Some(val),
+            _ => false,
+        }
+    }
+
     pub fn is_int_of(&self, val: i64) -> bool {
         match self.kind.opcode() {
             Opcode::Const32 => self.as_int32() == Some(val as i32),
@@ -287,8 +192,8 @@ impl Value {
 
             Opcode::Load16Z | Opcode::Load16S | Opcode::Store16 => Width::W16,
 
-            Opcode::Load => width_for_type(proc.value(self.children[0]).typ()),
-            Opcode::Store => width_for_type(self.typ()),
+            Opcode::Store => width_for_type(proc.value(self.children[0]).typ()),
+            Opcode::Load => width_for_type(self.typ()),
 
             _ => Width::W8,
         }
@@ -300,8 +205,8 @@ impl Value {
 
             Opcode::Load16Z | Opcode::Load16S | Opcode::Store16 => Bank::GP,
 
-            Opcode::Load => bank_for_type(proc.value(self.children[0]).typ()),
-            Opcode::Store => bank_for_type(self.typ()),
+            Opcode::Store => bank_for_type(proc.value(self.children[0]).typ()),
+            Opcode::Load => bank_for_type(self.typ()),
 
             _ => Bank::GP,
         }
@@ -469,7 +374,6 @@ impl Value {
     }
 
     pub fn phi(&self) -> Option<ValueId> {
-        assert!(self.kind.opcode() == Opcode::Upsilon);
         match self.data {
             ValueData::Upsilon(phi) => phi,
             _ => None,
@@ -594,6 +498,10 @@ impl Value {
         }
     }
 
+    pub fn is_integer(&self) -> bool {
+        self.typ().is_int()
+    }
+
     pub fn has_int(&self) -> bool {
         match self.kind.opcode() {
             Opcode::Const32 | Opcode::Const64 => true,
@@ -707,6 +615,32 @@ impl Value {
         } else {
             return None;
         })
+    }
+
+    pub fn add_constant_i32(&self, other: i32) -> Option<Value> {
+        if self.has_float() {
+            Some(Self::make_const_float(
+                self.as_float().unwrap() + other as f32,
+            ))
+        } else if self.has_double() {
+            Some(Self::make_const_double(
+                self.as_double().unwrap() + other as f64,
+            ))
+        } else if self.has_int32() {
+            Some(Self::make_const32(
+                self.as_int32().unwrap().wrapping_add(other),
+            ))
+        } else if self.has_int64() {
+            Some(Self::make_const64(
+                self.as_int64().unwrap().wrapping_add(other as i64),
+            ))
+        } else if self.has_int128() {
+            Some(Self::make_const128(
+                self.as_int128().unwrap().wrapping_add(other as i128),
+            ))
+        } else {
+            None
+        }
     }
 
     pub fn add_constant(&self, other: &Value) -> Option<Value> {
@@ -1218,6 +1152,34 @@ impl Value {
         }
     }
 
+    pub fn fmax_constant(&self, other: &Value) -> Option<Value> {
+        if self.has_float() && other.has_float() {
+            Some(Self::make_const_float(
+                self.as_float()?.max(other.as_float()?),
+            ))
+        } else if self.has_double() && other.has_double() {
+            Some(Self::make_const_double(
+                self.as_double()?.max(other.as_double()?),
+            ))
+        } else {
+            None
+        }
+    }
+
+    pub fn fmin_constant(&self, other: &Value) -> Option<Value> {
+        if self.has_float() && other.has_float() {
+            Some(Self::make_const_float(
+                self.as_float()?.min(other.as_float()?),
+            ))
+        } else if self.has_double() && other.has_double() {
+            Some(Self::make_const_double(
+                self.as_double()?.min(other.as_double()?),
+            ))
+        } else {
+            None
+        }
+    }
+
     pub fn equal_constant(&self, other: &Value) -> TriState {
         if self.has_int32() && other.has_int32() {
             TriState::from_bool(self.as_int32().unwrap() == other.as_int32().unwrap())
@@ -1379,6 +1341,19 @@ impl Value {
             TriState::from_bool(x <= y)
         } else {
             TriState::Undeterminate
+        }
+    }
+
+    pub fn as_tri_state(&self) -> TriState {
+        match self.kind.opcode() {
+            Opcode::Const32 => tri_state(self.as_int32().unwrap() != 0),
+            Opcode::Const64 => tri_state(self.as_int64().unwrap() != 0),
+
+            Opcode::ConstDouble => tri_state(self.as_double().unwrap() != 0.0),
+
+            Opcode::ConstFloat => tri_state(self.as_float().unwrap() != 0.0),
+
+            _ => TriState::Undeterminate,
         }
     }
 
@@ -1605,6 +1580,119 @@ impl Value {
     pub fn result_bank(&self) -> Bank {
         bank_for_type(self.typ)
     }
+
+    pub fn is_negative_zero(&self) -> bool {
+        if self.has_double() {
+            let value = self.as_double().unwrap();
+
+            value == -0.0
+        } else if self.has_float() {
+            let value = self.as_float().unwrap();
+
+            value == -0.0
+        } else {
+            false
+        }
+    }
+
+    pub fn is_sensitive_to_nan(&self) -> bool {
+        self.kind.is_sensitive_to_nan()
+    }
+
+    pub fn key(&self) -> Option<ValueKey> {
+        Some(match self.kind.opcode() {
+            Opcode::FramePointer => ValueKey::new(self.kind, self.typ),
+            Opcode::Identity
+            | Opcode::Opaque
+            | Opcode::Abs
+            | Opcode::Floor
+            | Opcode::Ceil
+            | Opcode::Sqrt
+            | Opcode::Neg
+            | Opcode::Depend
+            | Opcode::SExt8
+            | Opcode::SExt16
+            | Opcode::SExt8To64
+            | Opcode::SExt16To64
+            | Opcode::SExt32
+            | Opcode::ZExt32
+            | Opcode::Clz
+            | Opcode::Trunc
+            | Opcode::IToD
+            | Opcode::IToF
+            | Opcode::DToI
+            | Opcode::FToI
+            | Opcode::FloatToDouble
+            | Opcode::DoubleToFloat => ValueKey::new_unary(self.kind, self.typ, self.children[0]),
+
+            Opcode::Add
+            | Opcode::Sub
+            | Opcode::Mul
+            | Opcode::Div
+            | Opcode::UDiv
+            | Opcode::Mod
+            | Opcode::UMod
+            | Opcode::FMax
+            | Opcode::FMin
+            | Opcode::BitAnd
+            | Opcode::BitOr
+            | Opcode::BitXor
+            | Opcode::Shl
+            | Opcode::SShr
+            | Opcode::ZShr
+            | Opcode::RotR
+            | Opcode::RotL
+            | Opcode::Equal
+            | Opcode::NotEqual
+            | Opcode::LessThan
+            | Opcode::LessEqual
+            | Opcode::GreaterThan
+            | Opcode::GreaterEqual
+            | Opcode::Above
+            | Opcode::AboveEqual
+            | Opcode::Below
+            | Opcode::BelowEqual
+            | Opcode::EqualOrUnordered => {
+                ValueKey::new_binary(self.kind, self.typ, self.children[0], self.children[1])
+            }
+
+            Opcode::Select => ValueKey::new_select(
+                self.kind,
+                self.typ,
+                self.children[0],
+                self.children[1],
+                self.children[2],
+            ),
+
+            Opcode::Const32 => {
+                ValueKey::new_int64(self.kind, self.typ(), self.as_int32().unwrap() as _)
+            }
+
+            Opcode::Const64 => ValueKey::new_int64(self.kind, self.typ(), self.as_int64().unwrap()),
+
+            Opcode::ConstDouble => {
+                ValueKey::new_double(self.kind, self.typ(), self.as_double().unwrap())
+            }
+
+            Opcode::ConstFloat => {
+                ValueKey::new_float(self.kind, self.typ(), self.as_float().unwrap())
+            }
+
+            Opcode::ArgumentReg => ValueKey::new_int64(
+                self.kind,
+                self.typ(),
+                self.argument_reg().unwrap().index() as _,
+            ),
+
+            Opcode::SlotBase => ValueKey::new_int64(
+                self.kind,
+                self.typ(),
+                self.slot_base_value().unwrap().index() as _,
+            ),
+
+            _ => return None,
+        })
+    }
 }
 
 /// We use this class to describe value representations at stackmaps. It's used both to force a
@@ -1627,6 +1715,12 @@ impl std::fmt::Debug for ValueRep {
             ValueRepKind::Constant => write!(f, "({})", self.value()),
             _ => Ok(()),
         }
+    }
+}
+
+impl std::fmt::Display for ValueRep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -1859,4 +1953,313 @@ impl KeyIndex for ValueId {
     fn index(&self) -> usize {
         self.0
     }
+}
+
+/// ValueKeys are useful for CSE. They abstractly describe the value that a Value returns when it
+/// executes. Any Value that has the same ValueKey is guaranteed to return the same value, provided
+/// that they return a non-empty ValueKey. Operations that have effects, or that can have their
+/// behavior affected by other operations' effects, will return an empty ValueKey. You have to use
+/// other mechanisms for doing CSE for impure operations.
+pub struct ValueKey {
+    pub kind: Kind,
+    pub typ: Type,
+    pub indices: ValueIndices,
+}
+
+impl ValueKey {
+    pub fn new(kind: Kind, ty: Type) -> Self {
+        Self {
+            kind,
+            typ: ty,
+            indices: ValueIndices { indices: [0; 4] },
+        }
+    }
+
+    pub fn new_int64(kind: Kind, typ: Type, value: i64) -> Self {
+        let mut this = Self::new(kind, typ);
+        {
+            this.indices.value = value;
+        }
+        this
+    }
+
+    pub fn new_double(kind: Kind, typ: Type, value: f64) -> Self {
+        let mut this = Self::new(kind, typ);
+        {
+            this.indices.double_value = value;
+        }
+        this
+    }
+
+    pub fn new_float(kind: Kind, typ: Type, value: f32) -> Self {
+        let mut this = Self::new(kind, typ);
+        {
+            this.indices.float_value = value;
+        }
+        this
+    }
+
+    pub fn new_unary(kind: Kind, typ: Type, child: ValueId) -> Self {
+        let mut this = Self::new(kind, typ);
+        unsafe {
+            this.indices.indices[0] = child.index();
+        }
+        this
+    }
+
+    pub fn new_binary(kind: Kind, typ: Type, left: ValueId, right: ValueId) -> Self {
+        let mut this = Self::new(kind, typ);
+        unsafe {
+            this.indices.indices[0] = left.index();
+            this.indices.indices[1] = right.index();
+        }
+        this
+    }
+
+    pub fn new_select(kind: Kind, typ: Type, cond: ValueId, left: ValueId, right: ValueId) -> Self {
+        let mut this = Self::new(kind, typ);
+        unsafe {
+            this.indices.indices[0] = cond.index();
+            this.indices.indices[1] = left.index();
+            this.indices.indices[2] = right.index();
+        }
+        this
+    }
+
+    pub fn kind(&self) -> Kind {
+        assert_ne!(self.opcode(), Opcode::Nop);
+        self.kind
+    }
+
+    pub fn opcode(&self) -> Opcode {
+       
+        self.kind.opcode()
+    }
+
+    pub fn typ(&self) -> Type {
+        self.typ
+    }
+
+    pub fn child_index(&self, index: usize) -> usize {
+        unsafe { self.indices.indices[index] }
+    }
+
+    pub fn child(&self, _proc: &Procedure, index: usize) -> ValueId {
+        ValueId(self.child_index(index))
+    }
+
+    pub fn can_materialize(&self) -> bool {
+        match self.opcode() {
+            Opcode::CheckAdd | Opcode::CheckSub | Opcode::CheckMul => false,
+            _ => true,
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            kind: Opcode::Oops.into(),
+            typ: Type::Void,
+            indices: ValueIndices { indices: [0; 4] },
+        }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        self.opcode().is_constant()
+    }
+
+    pub fn value(&self) -> i64 {
+        unsafe { self.indices.value }
+    }
+
+    pub fn double_value(&self) -> f64 {
+        unsafe { self.indices.double_value }
+    }
+
+    pub fn float_value(&self) -> f32 {
+        unsafe { self.indices.float_value }
+    }
+
+    pub fn int_constant(typ: Type, value: i64) -> Self {
+        match typ.kind() {
+            TypeKind::Int32 => Self::new_int64(Opcode::Const32.into(), typ, value),
+            TypeKind::Int64 => Self::new_int64(Opcode::Const64.into(), typ, value),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn materialize(&self, proc: &mut Procedure) -> ValueId {
+        // NOTE: We sometimes cannot return a ValueId for some key, like for Check and friends. That's because
+        // though those nodes have side exit effects. It would be weird to materialize anything that has a side
+        // exit. We can't possibly know enough about a side exit to know where it would be safe to emit one.
+        match self.opcode() {
+            Opcode::FramePointer => {
+                let value = proc.add(Value::new(
+                    self.kind(),
+                    self.typ(),
+                    NumChildren::Zero,
+                    &[],
+                    ValueData::None,
+                ));
+
+                value
+            }
+
+            Opcode::Identity
+            | Opcode::Opaque
+            | Opcode::Abs
+            | Opcode::Floor
+            | Opcode::Ceil
+            | Opcode::Sqrt
+            | Opcode::Neg
+            | Opcode::Depend
+            | Opcode::SExt8
+            | Opcode::SExt16
+            | Opcode::SExt8To64
+            | Opcode::SExt16To64
+            | Opcode::SExt32
+            | Opcode::ZExt32
+            | Opcode::Clz
+            | Opcode::Trunc
+            | Opcode::IToD
+            | Opcode::IToF
+            | Opcode::DToI
+            | Opcode::FToI
+            | Opcode::FloatToDouble
+            | Opcode::DoubleToFloat => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::One,
+                &[self.child(proc, 0)],
+                ValueData::None,
+            )),
+
+            Opcode::Add
+            | Opcode::Sub
+            | Opcode::Mul
+            | Opcode::Div
+            | Opcode::UDiv
+            | Opcode::Mod
+            | Opcode::UMod
+            | Opcode::FMax
+            | Opcode::FMin
+            | Opcode::BitAnd
+            | Opcode::BitOr
+            | Opcode::BitXor
+            | Opcode::Shl
+            | Opcode::SShr
+            | Opcode::ZShr
+            | Opcode::RotR
+            | Opcode::RotL
+            | Opcode::Equal
+            | Opcode::NotEqual
+            | Opcode::LessThan
+            | Opcode::LessEqual
+            | Opcode::GreaterThan
+            | Opcode::GreaterEqual
+            | Opcode::Above
+            | Opcode::AboveEqual
+            | Opcode::Below
+            | Opcode::BelowEqual
+            | Opcode::EqualOrUnordered => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Two,
+                &[self.child(proc, 0), self.child(proc, 1)],
+                ValueData::None,
+            )),
+
+            Opcode::Select => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Three,
+                &[
+                    self.child(proc, 0),
+                    self.child(proc, 1),
+                    self.child(proc, 2),
+                ],
+                ValueData::None,
+            )),
+
+            Opcode::Const32 => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::Const32(self.value() as i32),
+            )),
+
+            Opcode::Const64 => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::Const64(self.value()),
+            )),
+
+            Opcode::ConstDouble => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::Double(self.double_value().to_bits()),
+            )),
+
+            Opcode::ConstFloat => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::Float(self.float_value().to_bits()),
+            )),
+
+            Opcode::ArgumentReg => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::Argument(Reg::from_index(self.value() as _)),
+            )),
+
+            Opcode::SlotBase => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::SlotBase(StackSlotId(self.value() as _)),
+            )),
+
+            _ => ValueId(usize::MAX),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self != &Self::empty()
+    }
+}
+
+impl PartialEq for ValueKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.typ == other.typ
+            && unsafe { self.indices.indices == other.indices.indices }
+    }
+}
+
+impl Eq for ValueKey {}
+
+impl Hash for ValueKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.kind.hash(state);
+        self.typ.hash().hash(state);
+        unsafe {
+            self.indices.indices.hash(state);
+        }
+    }
+}
+
+pub union ValueIndices {
+    pub indices: [usize; 4],
+    pub value: i64,
+    pub double_value: f64,
+    pub float_value: f32,
 }

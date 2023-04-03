@@ -1,18 +1,29 @@
 use std::{ops::Range, rc::Rc};
 
+use macroassembler::assembler::TargetMacroAssembler;
+
+use crate::Options;
 use crate::{
+    air::{
+        special::{Special, SpecialId},
+        stack_slot::{StackSlot, StackSlotId, StackSlotKind},
+    },
     block::{is_block_dead, recompute_predecessors, BasicBlock, BlockId, FrequentBlock},
+    data_section::DataSection,
     dominators::{Dominators, Graph},
-    jit::reg::Reg,
+    effects::Effects,
+    jit::{reg::Reg, register_set::RegisterSetBuilder},
     kind::Kind,
     natural_loops::NaturalLoops,
     opcode::Opcode,
+    rpo::rpo_sort,
     sparse_collection::SparseCollection,
+    stackmap_generation_params::StackmapGenerationParams,
     typ::{Type, TypeKind},
     value::{NumChildren, Value, ValueData, ValueId},
-    variable::{Variable, VariableId}, air::{stack_slot::{StackSlot, StackSlotKind, StackSlotId}, special::{Special, SpecialId}}, effects::Effects, data_section::DataSection, rpo::rpo_sort,
+    variable::{Variable, VariableId},
+    ConstrainedValue, ValueRep, ValueRepKind,
 };
-use crate::Options;
 pub struct Procedure {
     pub(crate) options: Options,
     pub(crate) values: SparseCollection<Value>,
@@ -79,7 +90,7 @@ impl Procedure {
     pub fn num_entrypoints(&self) -> usize {
         self.num_entrypoints
     }
-    
+
     pub fn set_num_entrypoints(&mut self, num: usize) {
         self.num_entrypoints = num;
     }
@@ -96,12 +107,16 @@ impl Procedure {
         self.specials.at_mut(id).unwrap()
     }
 
+    pub fn add_special(&mut self, special: Special) -> SpecialId {
+        self.specials.add(special)
+    }
+
     pub fn add_stack_slot(&mut self, size: usize, stack_slot_kind: StackSlotKind) -> StackSlotId {
         let slot = StackSlot {
             byte_size: size as _,
             kind: stack_slot_kind,
             index: self.stack_slots.len(),
-            offset_from_fp: 0
+            offset_from_fp: 0,
         };
 
         self.stack_slots.push(slot);
@@ -128,7 +143,7 @@ impl Procedure {
     }
 
     pub fn value(&self, id: ValueId) -> &Value {
-        self.values.at(id).unwrap()
+        self.values.at(id).expect(&format!("{:?} not found", id))
     }
 
     pub fn value_mut(&mut self, id: ValueId) -> &mut Value {
@@ -187,7 +202,8 @@ impl Procedure {
 
     pub fn natural_loops(&self) -> Rc<NaturalLoops<Self>> {
         self.natural_loops
-            .as_ref().cloned()
+            .as_ref()
+            .cloned()
             .expect("Natural loops not computed")
     }
 
@@ -205,7 +221,13 @@ impl Procedure {
     }
 
     pub fn add_nop(&mut self) -> ValueId {
-        self.add(Value::new(Opcode::Nop, Type::Void, NumChildren::Zero, &[], ValueData::None))
+        self.add(Value::new(
+            Opcode::Nop,
+            Type::Void,
+            NumChildren::Zero,
+            &[],
+            ValueData::None,
+        ))
     }
 
     pub fn add_int_constant(&mut self, typ: Type, value: impl Into<i64>) -> ValueId {
@@ -453,29 +475,28 @@ impl Procedure {
                 break;
             }
         }
-
+        self.reset_value_owners();
         if !found_dead {
             return;
         }
-        
-        self.reset_value_owners();
-
 
         for value_id in (0..self.values.size()).map(ValueId) {
-            if let ValueData::Upsilon(ref phi) = self.value(value_id).data {
-                let phi_id = phi.unwrap();
-                let phi = self.value(phi_id);
+            if self.values.at(value_id).is_some() {
+                if let ValueData::Upsilon(ref phi) = self.value(value_id).data {
+                    let phi_id = phi.unwrap();
+                    let phi = self.value(phi_id);
 
-                if is_block_dead(self.block(phi.owner.expect("Owners should be computed"))) {
-                    self.values.at_mut(value_id).unwrap().replace_with_nop();
+                    if is_block_dead(self.block(phi.owner.expect("Owners should be computed"))) {
+                        self.values.at_mut(value_id).unwrap().replace_with_nop();
+                    }
                 }
             }
         }
 
         for block_id in (0..self.blocks.len()).map(BlockId) {
             if is_block_dead(self.block(block_id)) {
-                for value_id in std::mem::take(&mut self.block_mut(block_id).values) {
-                    self.delete_value(value_id);
+                for _value_id in std::mem::take(&mut self.block_mut(block_id).values) {
+                    //self.delete_value(value_id);
                 }
                 self.blocks[block_id.0].index = usize::MAX;
                 self.blocks[block_id.0].clear();
@@ -487,6 +508,10 @@ impl Procedure {
 
     pub fn delete_value(&mut self, value_id: ValueId) {
         self.values.remove(value_id);
+    }
+
+    pub fn delete_variable(&mut self, variable_id: VariableId) {
+        self.variables.remove(variable_id);
     }
 
     pub fn add_return(&mut self, value: ValueId) -> ValueId {
@@ -523,12 +548,21 @@ impl Procedure {
         ))
     }
 
-    pub fn add_ccall(&mut self, ret: Type, callee: ValueId, args: &[ValueId], effects: Effects) -> ValueId {
+    pub fn add_ccall(
+        &mut self,
+        ret: Type,
+        callee: ValueId,
+        args: &[ValueId],
+        effects: Effects,
+    ) -> ValueId {
         self.add(Value::new(
             Opcode::CCall,
             ret,
             NumChildren::VarArgs,
-            std::iter::once(callee).chain(args.iter().copied()).collect::<Vec<_>>().as_slice(),
+            std::iter::once(callee)
+                .chain(args.iter().copied())
+                .collect::<Vec<_>>()
+                .as_slice(),
             ValueData::CCallValue(effects),
         ))
     }
@@ -539,6 +573,102 @@ impl Procedure {
         let ptr = self.data_sections[index].data.as_mut_ptr();
 
         (index, ptr)
+    }
+
+    pub fn stackmap_append_constrained(&mut self, stackmap: ValueId, value: ConstrainedValue) {
+        self.stackmap_append(stackmap, value.value, value.rep);
+    }
+
+    pub fn stackmap_append(&mut self, stackmap: ValueId, value: ValueId, rep: ValueRep) {
+        if rep.kind() == ValueRepKind::ColdAny {
+            self.value_mut(stackmap).children.push(value);
+            return;
+        }
+
+        let stackmap_id = stackmap;
+        let num_children = self.value(stackmap).children.len();
+        let stackmap = self.value_mut(stackmap).stackmap_mut().unwrap();
+
+        while stackmap.reps.len() < num_children {
+            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+        }
+
+        stackmap.reps.push(rep);
+        self.value_mut(stackmap_id).children.push(value);
+    }
+
+    pub fn stackmap_append_some_register(&mut self, stackmap: ValueId, value: ValueId) {
+        self.stackmap_append(stackmap, value, ValueRep::new(ValueRepKind::SomeRegister));
+    }
+
+    pub fn stackmap_append_some_register_with_clobber(
+        &mut self,
+        stackmap: ValueId,
+        value: ValueId,
+    ) {
+        self.stackmap_append(
+            stackmap,
+            value,
+            ValueRep::new(ValueRepKind::SomeRegisterWithClobber),
+        );
+    }
+
+    pub fn stackmap_set_constrained_child(
+        &mut self,
+        stackmap: ValueId,
+        index: usize,
+        value: ConstrainedValue,
+    ) {
+        self.value_mut(stackmap).children[index] = value.value;
+        self.value_mut(stackmap).set_constraint(index, value.rep);
+    }
+
+    pub fn stackmap_clobber_early(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
+        self.value_mut(stackmap)
+            .stackmap_mut()
+            .unwrap()
+            .clobber_early(set);
+    }
+
+    pub fn stackmap_clobber_late(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
+        self.value_mut(stackmap)
+            .stackmap_mut()
+            .unwrap()
+            .clobber_late(set);
+    }
+
+    pub fn stackmap_clobber(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
+        self.stackmap_clobber_early(stackmap, set);
+        self.stackmap_clobber_late(stackmap, set);
+    }
+    pub fn patchpoint_set_result_constraints(&mut self, stackmap: ValueId, constraints: ValueRep) {
+        self.value_mut(stackmap)
+            .patchpoint_mut()
+            .unwrap()
+            .result_constraints[0] = constraints;
+    }
+
+    pub fn patchpoint_result_constraints(&self, stackmap: ValueId) -> ValueRep {
+        self.value(stackmap)
+            .patchpoint()
+            .unwrap()
+            .result_constraints[0]
+    }
+
+    pub fn stackmap_set_generator(
+        &mut self,
+        stackmap: ValueId,
+        generator: Rc<dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)>,
+    ) {
+        self.value_mut(stackmap).stackmap_mut().unwrap().generator = Some(generator);
+    }
+
+    pub fn patchpoint_effects_mut(&mut self, patchpoint: ValueId) -> &mut Effects {
+        &mut self.value_mut(patchpoint).patchpoint_mut().unwrap().effects
+    }
+
+    pub fn patchpoint_effects(&self, patchpoint: ValueId) -> &Effects {
+        &self.value(patchpoint).patchpoint().unwrap().effects
     }
 }
 

@@ -58,7 +58,7 @@ impl StackMapSpecial {
         inst: &mut Inst,
         mut role_mode: RoleMode,
         first_recoverable_index: Option<usize>,
-        mut callback: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        mut callback: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
         optional_def_arg_width: Option<Width>,
         code: &Code<'_>,
     ) {
@@ -70,7 +70,7 @@ impl StackMapSpecial {
         );
         assert!(inst.args[0].kind() == ArgKind::Special);
 
-        for i in 0..code.proc.value(inst.origin).children.len() {
+        for i in 0..code.proc.value(inst.origin).children.len() - num_ignored_b3_args {
             let mut arg = inst.args[i + num_ignored_air_args];
             let child = code
                 .proc
@@ -143,7 +143,7 @@ impl StackMapSpecial {
 
             let typ = code.proc.value(child.value).typ();
 
-            callback(&mut arg, role, bank_for_type(typ), width_for_type(typ));
+            callback(i + num_ignored_air_args, &mut arg, role, bank_for_type(typ), width_for_type(typ));
             inst.args[i + num_ignored_air_args] = arg;
         }
     }
@@ -154,7 +154,7 @@ impl StackMapSpecial {
         inst: &Inst,
         mut role_mode: RoleMode,
         first_recoverable_index: Option<usize>,
-        mut callback: impl FnMut(&Arg, ArgRole, Bank, Width),
+        mut callback: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
         optional_def_arg_width: Option<Width>,
         code: &Code<'_>,
     ) {
@@ -166,7 +166,7 @@ impl StackMapSpecial {
         );
         assert!(inst.args[0].kind() == ArgKind::Special);
 
-        for i in 0..code.proc.value(inst.origin).children.len() {
+        for i in 0..code.proc.value(inst.origin).children.len() - num_ignored_b3_args {
             let arg = inst.args[i + num_ignored_air_args];
             let child = code
                 .proc
@@ -239,7 +239,7 @@ impl StackMapSpecial {
 
             let typ = code.proc.value(child.value).typ();
 
-            callback(&arg, role, bank_for_type(typ), width_for_type(typ));
+            callback(i + num_ignored_air_args, &arg, role, bank_for_type(typ), width_for_type(typ));
         }
     }
 
@@ -324,14 +324,14 @@ impl StackMapSpecial {
             ArgKind::Tmp => ValueRep::reg(arg.reg()),
             ArgKind::Imm 
             | ArgKind::BigImm => ValueRep::constant(arg.value()),
-            ArgKind::ExtendedOffsetAddr | ArgKind::Stack => {
+            ArgKind::ExtendedOffsetAddr | ArgKind::Addr => {
                 if arg.base() == Tmp::from_reg(Reg::new_gpr(CALL_FRAME_REGISTER)) {
                     return ValueRep::stack(arg.offset() as _);
                 }
 
                 ValueRep::stack(arg.offset() as isize - code.frame_size as isize)
             }
-            _ => unreachable!()
+            _ => unreachable!("{}", arg),
         }
     }
 

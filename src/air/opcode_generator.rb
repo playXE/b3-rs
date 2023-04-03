@@ -750,7 +750,7 @@ writeH("opcode_utils") {
     #outp.puts "}"
 
     outp.puts "impl Inst {"
-    outp.puts "pub fn for_each_arg_simple(&self, mut func: impl FnMut(&Arg, ArgRole, Bank, Width)) {"
+    outp.puts "pub fn for_each_arg_simple(&self, mut func: impl FnMut(usize, &Arg, ArgRole, Bank, Width)) {"
     outp.puts "let num_operands = self.args.len();"
     outp.puts "let form_offset = (num_operands.wrapping_sub(1)) * num_operands / 2;"
     
@@ -759,7 +759,7 @@ writeH("opcode_utils") {
     outp.puts "for i in 0..num_operands {"
     outp.puts "let form = unsafe { *(form_base as *const u8).add(i) };"
     #outp.puts "if self.kind.opcode == Opcode::Branch32 { assert_eq!(decode_form_role(form), ArgRole::Use); }"
-    outp.puts "func(&self.args[i], decode_form_role(form), decode_form_bank(form), decode_form_width(form));"
+    outp.puts "func(i, &self.args[i], decode_form_role(form), decode_form_bank(form), decode_form_width(form));"
     outp.puts "}"
     outp.puts "}"
     outp.puts "}"
@@ -1205,7 +1205,7 @@ writeH("opcode_generated") {
 
     outp.puts "pub fn generate(&self, jit: &mut TargetMacroAssembler, context: &mut GenerationContext<'_>) -> Jump"
     outp.puts "{"
-
+    #outp.puts "jit.comment(format!(\"{}\", self));"
     outp.puts "let mut result = Jump::default();"
     matchInstOverloadForm(outp, :fast, "self") {
         | opcode, overload, form |

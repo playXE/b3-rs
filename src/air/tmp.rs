@@ -14,7 +14,11 @@ pub struct Tmp {
     value: i32,
 }
 
-
+impl Default for Tmp {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
 
 impl Tmp {
     pub fn bank(self) -> Bank {

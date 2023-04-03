@@ -1,6 +1,6 @@
 use macroassembler::assembler::TargetMacroAssembler;
 
-use crate::{procedure::Procedure, air::{code::Code, self}, lower_to_air::lower_to_air};
+use crate::{procedure::Procedure, air::{code::Code, self}, lower_to_air::lower_to_air, OptLevel, reduce_strength::reduce_strength, eliminate_dead_code::eliminate_dead_code, fix_ssa::fix_ssa, legalize_memory_offsets::legalize_memory_offsets, move_constants::move_constants, estimate_static_exec_counts::estimate_static_execution_counts};
 
 
 pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
@@ -12,14 +12,23 @@ pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
 pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     proc.reset_reachability();
     proc.dominators_or_compute();
-    super::fix_ssa::fix_ssa(proc);
-    super::legalize_memory_offsets::legalize_memory_offsets(proc);
+    
+    if proc.options.opt_level >= OptLevel::O2 {
+        
+        reduce_strength(proc);
+        fix_ssa(proc);
+   //     eliminate_dead_code(proc);
+    } else if proc.options.opt_level >= OptLevel::O1 {
+        //reduce_strength(proc);
+    }
 
-    super::move_constants::move_constants(proc);
-    super::estimate_static_exec_counts::estimate_static_execution_counts(proc);
-
+    legalize_memory_offsets(proc);
+    move_constants(proc);
+    legalize_memory_offsets(proc);
+    eliminate_dead_code(proc);
+    estimate_static_execution_counts(proc);
+    println!("{}", proc.display_());
     let code = lower_to_air(proc);
-
     code
 }
 

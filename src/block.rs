@@ -1,15 +1,20 @@
+use tinyvec::tiny_vec;
+
 use crate::{
     air::stack_slot::StackSlotId,
     dominators::{GraphNodeWorklist, GraphVisitOrder, PostOrderGraphNodeWorklist},
     effects::Effects,
     jit::reg::Reg,
     opcode::Opcode,
+    patchpoint_value::PatchpointValue,
     procedure::Procedure,
     sparse_collection::SparseElement,
+    stackmap_value::StackMapValue,
     typ::Type,
     utils::index_set::KeyIndex,
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
+    ConstrainedValue, ValueRep, ValueRepKind,
 };
 use std::ops::{Deref, DerefMut, Range};
 
@@ -430,6 +435,18 @@ impl<'a> BasicBlockBuilder<'a> {
         self.procedure.add_to_block(self.block, value);
     }
 
+    pub fn slot_base(&mut self, slot: StackSlotId) -> ValueId {
+        let x = self.procedure.add(Value::new(
+            Opcode::SlotBase,
+            Type::Int64,
+            NumChildren::Zero,
+            &[],
+            ValueData::SlotBase(slot),
+        ));
+        self.add_value(x);
+        x
+    }
+
     pub fn const32(&mut self, val: i32) -> ValueId {
         let x = self.procedure.add_int_constant(Type::Int32, val);
         self.add_value(x);
@@ -616,7 +633,7 @@ impl<'a> BasicBlockBuilder<'a> {
             Opcode::Store,
             Type::Void,
             NumChildren::Two,
-            &[ptr, value],
+            &[value, ptr],
             ValueData::MemoryValue {
                 offset,
                 range: range.unwrap_or(0..usize::MAX),
@@ -1013,8 +1030,11 @@ impl<'a> BasicBlockBuilder<'a> {
                 .block_mut(self.block)
                 .successor_list
                 .push((target, Frequency::Normal));
-            
-            self.procedure.block_mut(target).predecessor_list.push(self.block);
+
+            self.procedure
+                .block_mut(target)
+                .predecessor_list
+                .push(self.block);
         }
 
         let id = self.procedure.add(value);
@@ -1040,7 +1060,10 @@ impl<'a> BasicBlockBuilder<'a> {
             .successor_list
             .push(not_taken);
 
-        self.procedure.block_mut(taken).predecessor_list.push(self.block);
+        self.procedure
+            .block_mut(taken)
+            .predecessor_list
+            .push(self.block);
         self.procedure
             .block_mut(not_taken.0)
             .predecessor_list
@@ -1068,6 +1091,62 @@ impl<'a> BasicBlockBuilder<'a> {
         let value = self.procedure.add(value);
 
         self.add_value(value);
+    }
+
+    pub fn patchpoint(&mut self, typ: Type) -> ValueId {
+        let value = Value::new(
+            Opcode::Patchpoint,
+            typ,
+            NumChildren::Zero,
+            &[],
+            ValueData::Patchpoint(PatchpointValue {
+                base: StackMapValue {
+                    reps: vec![],
+                    generator: None,
+                    early_clobbered: Default::default(),
+                    late_clobbered: Default::default(),
+                    used_registers: Default::default(),
+                },
+                effects: Effects::for_call(),
+                result_constraints: tiny_vec!([ValueRep; 1] =>
+                    if typ == Type::Void
+                    {
+                         ValueRep::new(ValueRepKind::WarmAny)
+                    } else {
+                        ValueRep::new(ValueRepKind::SomeRegister)
+                }),
+                num_fp_scratch_registers: 0,
+                num_gp_scratch_registers: 0,
+            }),
+        );
+
+        let value = self.procedure.add(value);
+        self.add_value(value);
+        value
+    }
+
+    pub fn check(&mut self, predicate: ValueId) -> ValueId {
+        let value = Value::new(
+            Opcode::Check,
+            Type::Void,
+            NumChildren::One,
+            &[predicate],
+            ValueData::StackMap(StackMapValue {
+                reps: vec![],
+                generator: None,
+                early_clobbered: Default::default(),
+                late_clobbered: Default::default(),
+                used_registers: Default::default(),
+            }),
+        );
+
+        let value = self.procedure.add(value);
+        self.procedure.stackmap_append_constrained(
+            value,
+            ConstrainedValue::new(predicate, ValueRep::new(ValueRepKind::WarmAny)),
+        );
+        self.add_value(value);
+        value
     }
 
     pub fn argument(&mut self, reg: Reg, typ: Type) -> ValueId {

@@ -1,52 +1,43 @@
-#![allow(dead_code, unused_mut, unused_variables)]
-use std::collections::{HashMap, HashSet};
-
-use bitvec::vec::BitVec;
+use indexmap::IndexSet;
+use macroassembler::assembler::TargetAssembler;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use tinyvec::TinyVec;
 
-use super::{
-    arg::{Arg, ArgRole},
-    basic_block::BasicBlockId,
-    code::Code,
-    fix_spills_after_terminals::fix_spills_after_terminals,
-    form_table::is_x86,
-    insertion_set::InsertionSet,
-    inst::Inst,
-    liveness_adapter::{TmpLiveness, TmpLivenessAdapter},
-    opcode::Opcode,
-    pad_interference::pad_interference,
-    stack_slot::StackSlotKind,
-    tmp::{AbsoluteIndexed, Tmp},
-    tmp_width::TmpWidth,
-    use_counts::UseCounts,
-};
-use crate::{
-    bank::Bank,
-    jit::{reg::Reg, register_set::RegisterSet},
-    liveness::{IndexSparseSetEntry, Iterable, LocalCalc},
-    utils::interference_graph::*,
-    width::{bytes_for_width, Width},
-};
+use crate::bank::Bank;
+use crate::jit::reg::Reg;
+use crate::jit::register_set::RegisterSet;
+use crate::liveness::IndexSparseSetEntry;
+use crate::liveness::Iterable;
+use crate::liveness::Liveness;
+use crate::liveness::LivenessAdapter;
+use crate::liveness::LocalCalc;
+use crate::utils::bitvector::*;
+use crate::utils::interference_graph::*;
+use crate::width::bytes_for_width;
+use crate::width::Width;
 
-/// We have two register allocators, both fundamentally derived from Chaitin's Yorktown
-/// allocator:
-/// http://cs.gmu.edu/~white/CS640/p98-chaitin.pdf
-///
-/// We have an implementation of Briggs's optimistic allocator which is derivative of Chaitin's allocator:
-/// http://www.cs.utexas.edu/users/mckinley/380C/lecs/briggs-thesis-1992.pdf
-///
-/// And an implementation of Andrew Appel's Iterated Register Coalescing which is derivative of Briggs's allocator.
-/// http://www.cs.cmu.edu/afs/cs/academic/class/15745-s07/www/papers/george.pdf
-pub fn allocate_registers_by_graph_coloring(code: &mut Code) {
-    let use_counts = UseCounts::new(code);
-    let mut allocator = GraphColoringRegisterAllocation {
-        code: unsafe { std::mem::transmute(code) },
-        use_counts,
-    };
+use super::arg::Arg;
+use super::arg::ArgRole;
+use super::basic_block::BasicBlockId;
+use super::code::Code;
+use super::fix_spills_after_terminals::fix_spills_after_terminals;
+use super::form_table::is_x86;
+use super::insertion_set::InsertionSet;
+use super::inst::Inst;
+use super::liveness_adapter::TmpLivenessAdapter;
+use super::opcode::Opcode;
+use super::pad_interference::pad_interference;
+use super::stack_slot::StackSlotKind;
+use super::tmp::AbsoluteIndexed;
+use super::tmp::Tmp;
+use super::use_counts::UseCounts;
 
-    allocator.run();
-}
-
+/// Instead of keeping track of the move instructions, we just keep their operands around and use the index
+/// in the vector as the "identifier" for the move.
+#[derive(Clone, Copy)]
 struct MoveOperands {
     src_index: u32,
     dst_index: u32,
@@ -54,104 +45,121 @@ struct MoveOperands {
 
 /// The AbstractColoringAllocator defines all the code that is independant
 /// from the bank or register and can be shared when allocating registers.
-struct AbstractColoringAllocator<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+struct AbstractColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
     regs_in_priority_order: Vec<Reg>,
     last_precolored_register_index: u32,
     interference_edges: InterferenceSet,
     adjacency_list: Vec<TinyVec<[u32; 4]>>,
     degrees: Vec<u32>,
-
     biases: HashMap<u32, HashSet<u32>>,
-
     coalescing_candidates: Vec<MoveOperands>,
-    move_list: Vec<HashSet<usize>>,
-
+    move_list: Vec<IndexSet<usize>>,
     colored_tmp: Vec<Reg>,
     spilled_tmps: Vec<u32>,
-
     coalesced_tmps: Vec<u32>,
-
-    is_on_select_stack: BitVec<u32, bitvec::order::Lsb0>,
+    is_on_select_stack: BitVector,
     select_stack: Vec<u32>,
     simplify_worklist: Vec<u32>,
-    spill_worklist: BitVec<u32, bitvec::order::Lsb0>,
-
+    spill_worklist: BitVector,
     has_selected_spill: bool,
     has_coalesced_non_trivial_move: bool,
-
     coalesced_tmps_at_spill: Vec<u32>,
-
-    unspillable_temps: &'a BitVec<u32, bitvec::order::Lsb0>,
+    unspillable_tmps: &'a BitVector,
     use_counts: &'a UseCounts,
-    code: &'a mut Code<'a>,
-    pinned_regs: TinyVec<[Reg; 4]>,
+    code: &'a mut Code<'b>,
+
+    pinned_regs: TinyVec<[Tmp; 4]>,
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
-    AbstractColoringAllocator<'a, InterferenceSet, BANK>
+const TRACE_DEBUG: bool = false;
+
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>
 {
+    fn tmp_for_absolute_index(index: usize) -> Tmp {
+        if BANK == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
+        } else {
+            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index)
+        }
+    }
+
+
     fn new(
-        code: &'a mut Code<'a>,
-        regs_in_priority_order: Vec<Reg>,
+        code: &'a mut Code<'b>,
+        regs_in_priority_order: &Vec<Reg>,
         last_precolored_register_index: u32,
         tmp_array_size: usize,
-        unspillable_temps: &'a BitVec<u32, bitvec::order::Lsb0>,
+        unspillable_tmps: &'a BitVector,
         use_counts: &'a UseCounts,
         interference_edges: InterferenceSet,
     ) -> Self {
-        let mut allocator = Self {
-            regs_in_priority_order,
+        let mut this = Self {
+            regs_in_priority_order: regs_in_priority_order.clone(),
             last_precolored_register_index,
             interference_edges,
             adjacency_list: vec![TinyVec::new(); tmp_array_size],
             degrees: vec![0; tmp_array_size],
-
             biases: HashMap::new(),
-
             coalescing_candidates: Vec::new(),
-            move_list: vec![HashSet::new(); tmp_array_size],
-
-            colored_tmp: vec![Reg::default(); tmp_array_size],
+            move_list: vec![IndexSet::new(); tmp_array_size],
+            colored_tmp: vec![],
             spilled_tmps: Vec::new(),
-
             coalesced_tmps: vec![0; tmp_array_size],
-
-            is_on_select_stack: BitVec::new(),
+            is_on_select_stack: BitVector::with_capacity(tmp_array_size),
             select_stack: Vec::new(),
             simplify_worklist: Vec::new(),
-            spill_worklist: BitVec::new(),
-
+            spill_worklist: BitVector::with_capacity(tmp_array_size),
             has_selected_spill: false,
             has_coalesced_non_trivial_move: false,
-
             coalesced_tmps_at_spill: Vec::new(),
-
-            unspillable_temps,
+            unspillable_tmps,
             use_counts,
             code,
-            pinned_regs: Default::default(),
+            pinned_regs: TinyVec::new(),
         };
 
-        allocator.initialize_degrees(tmp_array_size);
-        allocator
+        this.initialize_degrees(tmp_array_size);
+
+        if TRACE_DEBUG {
+            print!("Unspillable tmps: [");
+            for i in 0..this.unspillable_tmps.len() {
+                if this.unspillable_tmps.quick_get(i) {
+                    print!("{}, ", Self::tmp_for_absolute_index(i));
+                }
+            }
+            println!("]");
+        }
+
+        this.adjacency_list.resize(tmp_array_size, TinyVec::new());
+        this.move_list.resize(tmp_array_size, IndexSet::new());
+        this.is_on_select_stack.ensure_size(tmp_array_size);
+        this.spill_worklist.ensure_size(tmp_array_size);
+
+        this
     }
 
-    fn tmp_to_index(&self, tmp: Tmp) -> u32 {
-        match BANK {
-            Bank::GP => AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp) as _,
-            Bank::FP => AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp) as _,
+    fn initialize_degrees(&mut self, tmp_array_size: usize) {
+        self.degrees.resize(tmp_array_size, 0);
+
+        let first_non_reg_index = self.last_precolored_register_index + 1;
+
+        for i in 0..first_non_reg_index {
+            self.degrees[i as usize] = u32::MAX;
         }
     }
 
-    fn register_count(&self) -> u32 {
-        self.regs_in_priority_order.len() as u32
+    fn register_count(&self) -> usize {
+        self.regs_in_priority_order.len()
     }
 
     fn get_alias(&self, tmp_index: u32) -> u32 {
         let mut alias = tmp_index;
-        while let Some(next_alias) = self.coalesced_tmps.get(alias as usize) {
-            alias = *next_alias;
+
+        while self.coalesced_tmps[alias as usize] != 0 {
+            alias = self.coalesced_tmps[alias as usize];
         }
+
         alias
     }
 
@@ -164,45 +172,37 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 
     fn add_to_spill(&mut self, to_spill: usize) {
-        if self.unspillable_temps.len() > to_spill && !self.unspillable_temps[to_spill] {
-            if self.spill_worklist.len() <= to_spill {
-                self.spill_worklist.resize(to_spill + 1, false);
-            }
-
-            self.spill_worklist.set(to_spill, true);
+        if self.unspillable_tmps.quick_get(to_spill) {
+            return;
         }
+
+        self.spill_worklist.set(to_spill, true);
     }
 
     fn is_precolored(&self, tmp_index: u32) -> bool {
         tmp_index <= self.last_precolored_register_index
     }
 
-    fn initialize_degrees(&mut self, tmp_array_size: usize) {
-        self.degrees.resize(tmp_array_size, 0);
-
-        let first_non_reg_index = self.last_precolored_register_index + 1;
-        for i in 0..first_non_reg_index {
-            self.degrees[i as usize] = u32::MAX;
+    fn index_to_tmp(index: u32) -> Tmp {
+        if BANK == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index as usize)
+        } else {
+            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index as usize)
         }
-        println!("first_non_reg_index: {}", first_non_reg_index);
-        println!("tmp_array_size: {}", tmp_array_size);
-        if first_non_reg_index < (tmp_array_size as u32 - first_non_reg_index) {
-            self.degrees[first_non_reg_index as usize..(tmp_array_size - first_non_reg_index as usize)]
-                .fill(0);
-        }
-        
     }
 
     fn add_edge_distinct(&mut self, a: u32, b: u32) {
-        let is_new_edge = self.add_interference_edge(a, b);
-
+        let is_new_edge = self.interference_edges.add_and_return_is_new_entry(a, b);
+       
         if is_new_edge {
             if !self.is_precolored(a) {
+                //debug_assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
                 self.degrees[a as usize] += 1;
             }
 
             if !self.is_precolored(b) {
+                //debug_assert!(!self.adjacency_list[b as usize].contains(&a), "edge {} {} already exists in adjlist: {:?}", Self::index_to_tmp(a), Self::index_to_tmp(b), self.adjacency_list[b as usize]);
                 self.adjacency_list[b as usize].push(a);
                 self.degrees[b as usize] += 1;
             }
@@ -210,14 +210,19 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 
     fn add_edge_distinct_without_degree_change(&mut self, a: u32, b: u32) -> bool {
-        let is_new_edge = self.add_interference_edge(a, b);
-
+        let is_new_edge = self.interference_edges.add_and_return_is_new_entry(a, b);
+        println!(
+            "add_edge_distinct_without_degree_change: {:?} {:?} {:?}",
+            a, b, is_new_edge
+        );
         if is_new_edge {
             if !self.is_precolored(a) {
+                //debug_assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
             }
 
             if !self.is_precolored(b) {
+                //debug_assert!(!self.adjacency_list[b as usize].contains(&a));
                 self.adjacency_list[b as usize].push(a);
             }
 
@@ -227,27 +232,19 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         false
     }
 
-    fn has_been_simplified(&self, index: u32) -> bool {
-        self.is_on_select_stack
-            .get(index as usize)
-            .map(|x| *x)
-            .unwrap_or(false)
-            || self
-                .coalesced_tmps
-                .get(index as usize)
-                .map(|&alias| alias != 0)
-                .unwrap_or(false)
-    }
-
-    fn for_each_adjacent(&self, tmp_index: u32, mut f: impl FnMut(u32)) {
-        for adjacent_tmp_index in self.adjacency_list[tmp_index as usize].iter().copied() {
-            if !self.has_been_simplified(adjacent_tmp_index) {
-                f(adjacent_tmp_index);
+    fn has_been_simplified(&self, tmp_index: u32) -> bool {
+        if cfg!(debug_assertions) {
+            if self.coalesced_tmps[tmp_index as usize] != 0 {
+                debug_assert!(self.get_alias(tmp_index) != tmp_index);
             }
         }
+
+        self.is_on_select_stack.quick_get(tmp_index as _)
+            || self.coalesced_tmps[tmp_index as usize] != 0
     }
 
     fn can_be_safely_coalesced(&self, u: u32, v: u32) -> bool {
+        debug_assert!(!self.is_precolored(v));
         if self.is_precolored(u) {
             return self.precolored_coalescing_heuristic(u, v);
         }
@@ -261,74 +258,102 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         // it is safe to combine the two nodes. The reason is that we know that if the graph
         // is colorable, we have fewer than K adjacents with high order and there is a color
         // for the current node.
+        debug_assert!(u != v);
+        debug_assert!(!self.is_precolored(u));
+        debug_assert!(!self.is_precolored(v));
 
-        if self.unspillable_temps.get(u as usize) != self.unspillable_temps.get(v as usize) {
+        if self.unspillable_tmps.get(u as _) != self.unspillable_tmps.get(v as _) {
             return false;
         }
 
-        let adjacency_of_u = &self.adjacency_list[u as usize];
-        let adjacency_of_v = &self.adjacency_list[v as usize];
+        let adjacnts_of_u = &self.adjacency_list[u as usize];
+        let adjacnts_of_v = &self.adjacency_list[v as usize];
 
-        let mut high_order_adjacents = vec![];
+        let mut high_order_adjacents = TinyVec::<
+            [u32; TargetAssembler::number_of_registers()
+                + TargetAssembler::number_of_fp_registers()],
+        >::new();
+        debug_assert!(
+            self.register_count()
+                <= TargetAssembler::number_of_registers()
+                    + TargetAssembler::number_of_fp_registers()
+        );
+        let mut num_candidates = adjacnts_of_u.len() + adjacnts_of_v.len();
 
-        let mut num_candidates = adjacency_of_u.len() + adjacency_of_v.len();
-
-        if num_candidates < self.register_count() as usize {
+        if num_candidates < self.register_count() {
             // Shortcut: if the total number of adjacents is less than the number of register, the condition is always met.
             return true;
         }
 
-        for adjacent_tmp_index in adjacency_of_u.iter().copied() {
+        for &adjacent_tmp_index in adjacnts_of_u.iter() {
+            debug_assert!(adjacent_tmp_index != u);
+            debug_assert!(adjacent_tmp_index != v);
+
             num_candidates -= 1;
 
             if !self.has_been_simplified(adjacent_tmp_index)
-                && self.degrees[adjacent_tmp_index as usize] >= self.register_count()
+                && self.degrees[adjacent_tmp_index as usize] >= self.register_count() as u32
             {
+                debug_assert!(high_order_adjacents
+                    .iter()
+                    .find(|&&x| x == adjacent_tmp_index)
+                    .is_none());
                 high_order_adjacents.push(adjacent_tmp_index);
-
-                if high_order_adjacents.len() >= self.register_count() as usize {
+                if high_order_adjacents.len() >= self.register_count() {
                     return false;
                 }
-            } else if high_order_adjacents.len() + num_candidates < self.register_count() as usize {
+            } else if high_order_adjacents.len() + num_candidates < self.register_count() {
                 return true;
             }
         }
 
-        for adjacent_tmp_index in adjacency_of_v.iter().copied() {
+        debug_assert!(num_candidates == adjacnts_of_v.len());
+        let last_high_order_adjacents_len = high_order_adjacents.len();
+        for &adjacent_tmp_index in adjacnts_of_v.iter() {
+            debug_assert!(adjacent_tmp_index != u);
+            debug_assert!(adjacent_tmp_index != v);
             num_candidates -= 1;
-
             if !self.has_been_simplified(adjacent_tmp_index)
-                && self.degrees[adjacent_tmp_index as usize] >= self.register_count()
-                && high_order_adjacents
+                && self.degrees[adjacent_tmp_index as usize] >= self.register_count() as u32
+                && high_order_adjacents[..last_high_order_adjacents_len]
                     .iter()
-                    .find(|x| x == &&adjacent_tmp_index)
+                    .find(|&&x| x == adjacent_tmp_index)
                     .is_none()
             {
+                debug_assert!(high_order_adjacents[last_high_order_adjacents_len..]
+                    .iter()
+                    .find(|&&x| x == adjacent_tmp_index)
+                    .is_none());
                 high_order_adjacents.push(adjacent_tmp_index);
-                if high_order_adjacents.len() >= self.register_count() as usize {
+                if high_order_adjacents.len() >= self.register_count() {
                     return false;
                 }
-            } else if high_order_adjacents.len() + num_candidates < self.register_count() as usize {
+            } else if high_order_adjacents.len() + num_candidates < self.register_count() {
                 return true;
             }
         }
 
+        debug_assert!(num_candidates == 0);
+        debug_assert!(high_order_adjacents.len() < self.register_count());
         true
     }
 
     fn precolored_coalescing_heuristic(&self, u: u32, v: u32) -> bool {
-        assert!(self.is_precolored(u) && !self.is_precolored(v));
+        if TRACE_DEBUG {
+            println!("precolored_coalescing_heuristic: u = {}, v = {}", u, v);
+        }
 
+        debug_assert!(self.is_precolored(u));
+        debug_assert!(!self.is_precolored(v));
         // If any adjacent of the non-colored node is not an adjacent of the colored node AND has a degree >= K
         // there is a risk that this node needs to have the same color as our precolored node. If we coalesce such
         // move, we may create an uncolorable graph.
-        let adjacents_of_v = &self.adjacency_list[v as usize];
-
-        for adjacency_tmp_index in adjacents_of_v.iter().copied() {
-            if !self.is_precolored(adjacency_tmp_index)
-                && !self.has_been_simplified(adjacency_tmp_index)
-                && self.degrees[adjacency_tmp_index as usize] >= self.register_count()
-                && !self.has_inteferece_edge(u, adjacency_tmp_index)
+        let adjacnts_of_v = &self.adjacency_list[v as usize];
+        for &adjacent_tmp_index in adjacnts_of_v.iter() {
+            if !self.is_precolored(adjacent_tmp_index)
+                && !self.has_been_simplified(adjacent_tmp_index)
+                && self.degrees[adjacent_tmp_index as usize] >= self.register_count() as u32
+                && !self.has_interference_edge(u, adjacent_tmp_index)
             {
                 return false;
             }
@@ -339,7 +364,7 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
     fn add_bias(&mut self, u: u32, v: u32) {
         // We implement biased coloring as proposed by Briggs. See section
-        // 5.3.3 of his thesis for more information: http://www.cs.utexas.edu/users/mckinley/380C/lecs/briggs-thesis-1992.pdf
+        // 5.3.3 of his thesis for more information: <http://www.cs.utexas.edu/users/mckinley/380C/lecs/briggs-thesis-1992.pdf>
         // The main idea of biased coloring is this:
         // We try to coalesce a move between u and v, but the conservative heuristic
         // fails. We don't want coalesce the move because we don't want to risk
@@ -348,13 +373,17 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         // So, when we go to color the tmps, we'll remember that we really want the
         // same register for u and v, and if legal, we will assign them to the same register.
         if !self.is_precolored(u) {
-            let mut set = self.biases.entry(u).or_insert_with(|| HashSet::new());
-            set.insert(u);
+            self.biases
+                .entry(u)
+                .or_insert_with(|| HashSet::new())
+                .insert(v);
         }
 
         if !self.is_precolored(v) {
-            let mut set = self.biases.entry(v).or_insert_with(|| HashSet::new());
-            set.insert(v);
+            self.biases
+                .entry(v)
+                .or_insert_with(|| HashSet::new())
+                .insert(u);
         }
     }
 
@@ -367,88 +396,116 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
             }
         }
 
-        let mut spill_worklist = self.spill_worklist.iter_ones();
+        debug_assert!(
+            !self.spill_worklist.is_empty(),
+            "select_spill() called but spill_worklist is empty"
+        );
 
-        let mut victim_index = spill_worklist.next().unwrap();
+        let mut iterator = self.spill_worklist.iter();
 
-        let mut max_score = 0f32;
+        let mut victim_index = iterator
+            .next()
+            .expect("select_spill() called but spill_worklist is empty");
 
-        for index in spill_worklist {
-            let uses = self.use_counts.num_warm_uses_and_defs::<BANK>(index);
+        let mut max_score = 0.0f32;
 
-            if uses == 0.0 || uses.is_nan() {
-                victim_index = index;
+        for tmp_index in iterator {
+            let uses = self.use_counts.num_warm_uses_and_defs::<BANK>(tmp_index);
+
+            if uses == 0.0 {
+                victim_index = tmp_index;
                 break;
             }
 
             // Higher score means more desirable to spill. Lower scores maximize the likelihood that a tmp
             // gets a register.
-            let mut score = self.degrees[index as usize] as f32 / uses;
+            let degree = self.degrees[tmp_index as usize] as f32;
+            let mut tmp_score = degree / uses;
 
-            if self.use_counts.is_const_def::<BANK>(index) {
-                score *= 2.0;
+            // If it's a constant, then it's not as bad to spill. We can rematerialize it in many
+            // cases.
+            if self.use_counts.is_const_def::<BANK>(tmp_index) {
+                tmp_score *= 2.0;
             }
 
-            if score > max_score {
-                max_score = score;
-                victim_index = index;
+            if tmp_score > max_score {
+                max_score = tmp_score;
+                victim_index = tmp_index;
             }
         }
 
-        victim_index as _
+        debug_assert!(!self.unspillable_tmps.get(victim_index as _));
+        debug_assert!(!self.is_precolored(victim_index as _));
+
+        if TRACE_DEBUG {
+            println!(
+                "Selecting spill {}({})",
+                victim_index,
+                Self::tmp_for_absolute_index(victim_index)
+            );
+        }
+
+        victim_index as u32
     }
 
     fn assign_colors(&mut self) {
-        assert!(self.simplify_worklist.is_empty());
-        assert!(self.spill_worklist.is_empty());
-
-        self.clear_interference_edges();
+        debug_assert!(self.simplify_worklist.is_empty());
+        debug_assert!(self.spill_worklist.is_empty());
+        self.interference_edges.clear();
 
         self.degrees.clear();
         self.move_list.clear();
         self.simplify_worklist.clear();
-        self.spill_worklist.clear();
+        self.spill_worklist.clear_all();
 
+        // Try to color the Tmp on the stack.
         self.colored_tmp
             .resize(self.adjacency_list.len(), Reg::default());
 
         {
             let mut now_aliased_biases = TinyVec::<[u32; 4]>::new();
 
-            for key in self.biases.keys().copied() {
+            for &key in self.biases.keys() {
                 if key != self.get_alias(key) {
                     now_aliased_biases.push(key);
                 }
             }
 
             for key in now_aliased_biases {
-                let mut keys_biases = self.biases.remove(&key).unwrap();
-                let is_new_entry = self
-                    .biases
-                    .insert(self.get_alias(key), Default::default())
-                    .is_none();
+                let keys_biases = self.biases.remove(&key).unwrap();
+                let mut is_new_entry = false;
+                let add_result = self.biases.entry(self.get_alias(key)).or_insert_with(|| {
+                    is_new_entry = true;
+                    HashSet::new()
+                });
 
                 if is_new_entry {
-                    self.biases
-                        .get_mut(&self.get_alias(key))
-                        .unwrap()
-                        .extend(keys_biases);
+                    debug_assert!(add_result.is_empty());
+                    let _ = std::mem::replace(add_result, keys_biases);
                 } else {
-                    self.biases
-                        .get_mut(&self.get_alias(key))
-                        .unwrap()
-                        .extend(keys_biases.drain());
+                    for &tmp in keys_biases.iter() {
+                        add_result.insert(tmp);
+                    }
                 }
             }
         }
 
-        while let Some(tmp_index) = self.select_stack.pop() {
+        while !self.select_stack.is_empty() {
+            let tmp_index = self.select_stack.pop().unwrap();
+            debug_assert!(!self.is_precolored(tmp_index));
+            debug_assert!(self.colored_tmp[tmp_index as usize] == Reg::default());
+            debug_assert!(self.get_alias(tmp_index) == tmp_index);
+
             let mut colored_registers = RegisterSet::default();
 
-            for adjacent_tmp_idnex in self.adjacency_list[tmp_index as usize].iter().copied() {
-                let alias_tmp_index = self.get_alias(adjacent_tmp_idnex);
+            for adjacent_tmp_index in self.adjacency_list[tmp_index as usize].iter() {
+                let alias_tmp_index = self.get_alias(*adjacent_tmp_index);
                 let reg = self.colored_tmp[alias_tmp_index as usize];
 
+                debug_assert!(
+                    !self.is_precolored(alias_tmp_index)
+                        || (self.is_precolored(alias_tmp_index) && reg != Reg::default())
+                );
                 if reg != Reg::default() {
                     colored_registers.add(reg, Width::W64)
                 }
@@ -456,18 +513,17 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
             let mut color_assigned = false;
 
-            let biases = self.biases.get(&tmp_index);
-
-            if let Some(bias) = biases {
-                for desired_bias in bias.iter().copied() {
-                    let desired_color = self.colored_tmp[desired_bias as usize];
-
-                    if desired_color != Reg::default() {
-                        if !colored_registers.contains(desired_color, Width::W64) {
-                            self.colored_tmp[tmp_index as usize] = desired_color;
-                            color_assigned = true;
-                            break;
-                        }
+            let item = self.biases.get(&tmp_index);
+            if let Some(set) = item {
+                for &desired_bias in set.iter() {
+                    let desired_color = self.colored_tmp[self.get_alias(desired_bias) as usize];
+                    
+                    if desired_color != Reg::default()
+                        && !colored_registers.contains(desired_color, Width::W64)
+                    {
+                        self.colored_tmp[tmp_index as usize] = desired_color;
+                        color_assigned = true;
+                        break;
                     }
                 }
             }
@@ -492,70 +548,12 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         if self.spilled_tmps.is_empty() {
             self.coalesced_tmps_at_spill.clear();
         } else {
-            self.colored_tmp.clear();
+            self.coalesced_tmps.clear();
         }
     }
 
-    fn add_interference_edge(&mut self, u: u32, v: u32) -> bool {
-        self.interference_edges.add_and_return_is_new_entry(u, v)
-    }
-
-    fn has_inteferece_edge(&self, u: u32, v: u32) -> bool {
+    fn has_interference_edge(&self, u: u32, v: u32) -> bool {
         self.interference_edges.contains(u, v)
-    }
-
-    fn clear_interference_edges(&mut self) {
-        self.interference_edges.clear();
-    }
-
-    fn dump_interference_graph_in_dot<W>(&mut self, fmt: &mut W) -> std::fmt::Result
-    where
-        W: std::fmt::Write,
-    {
-        writeln!(fmt, "graph InterferenceGraph {{").unwrap();
-        let mut tmps_with_interference = HashSet::new();
-
-        let tmp_from_index = |x: u32| {
-            if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(x as _)
-            } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(x as _)
-            }
-        };
-
-        let absolute_index = |tmp: &Tmp| {
-            if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(tmp)
-            } else {
-                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(tmp)
-            }
-        };
-
-        self.interference_edges.for_each(|u, v| {
-            tmps_with_interference.insert(tmp_from_index(u));
-            tmps_with_interference.insert(tmp_from_index(v));
-        });
-
-        for tmp in tmps_with_interference {
-            let tmp_index = absolute_index(&tmp);
-            if tmp_index < self.degrees.len() {
-                writeln!(
-                    fmt,
-                    "    {} [label=\"{}({})\"]",
-                    tmp.internal_value(),
-                    tmp,
-                    self.degrees[tmp_index]
-                )?;
-            } else {
-                writeln!(fmt, "    {} [label=\"{}\"]", tmp.internal_value(), tmp)?;
-            }
-        }
-
-        self.interference_edges.for_each(|u, v| {
-            writeln!(fmt, "    {} -- {}", tmp_from_index(u), tmp_from_index(v)).unwrap();
-        });
-
-        writeln!(fmt, "}}")
     }
 }
 
@@ -566,19 +564,15 @@ struct MoveSet {
 }
 
 impl MoveSet {
-    fn new() -> Self {
-        Self {
-            position_in_move_list: 0,
-            move_list: Vec::new(),
-            low_priority_move_list: Vec::new(),
-        }
-    }
-
     fn add_move(&mut self) -> usize {
         let next_index = self.position_in_move_list;
         self.position_in_move_list += 1;
         self.move_list.push(next_index);
         next_index
+    }
+
+    fn start_adding_low_priority_moves(&mut self) {
+        debug_assert!(self.low_priority_move_list.is_empty());
     }
 
     fn add_low_priority_move(&mut self) -> usize {
@@ -588,37 +582,6 @@ impl MoveSet {
         next_index
     }
 
-    fn for_each_move(&self, mut f: impl FnMut(usize)) {
-        for index in self.move_list.iter().copied() {
-            if index != usize::MAX {
-                f(index);
-            }
-        }
-    }
-
-    fn for_each_move_mut(&mut self, mut f: impl FnMut(&mut usize)) {
-        for index in self.move_list.iter_mut() {
-            if *index != usize::MAX {
-                f(index);
-            }
-        }
-    }
-
-    fn for_each_low_priority_move(&self, mut f: impl FnMut(usize)) {
-        for index in self.low_priority_move_list.iter().copied() {
-            if index != usize::MAX {
-                f(index);
-            }
-        }
-    }
-
-    fn for_each_low_priority_move_mut(&mut self, mut f: impl FnMut(&mut usize)) {
-        for index in self.low_priority_move_list.iter_mut() {
-            if *index != usize::MAX {
-                f(index);
-            }
-        }
-    }
 
     fn clear(&mut self) {
         self.position_in_move_list = 0;
@@ -627,18 +590,20 @@ impl MoveSet {
     }
 }
 
-struct Briggs<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> {
-    base: AbstractColoringAllocator<'a, InterferenceSet, BANK>,
+struct Briggs<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+    base: AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>,
     worklist_moves: MoveSet,
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, InterferenceSet, BANK> {
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    Briggs<'a, 'b, InterferenceSet, BANK>
+{
     fn new(
-        code: &'a mut Code<'a>,
-        regs_in_priority_order: Vec<Reg>,
+        code: &'a mut Code<'b>,
+        regs_in_priority_order: &Vec<Reg>,
         last_precolored_register_index: u32,
         tmp_array_size: usize,
-        unspillable_temps: &'a BitVec<u32, bitvec::order::Lsb0>,
+        unspillable_tmps: &'a BitVector,
         use_counts: &'a UseCounts,
         interference_edges: InterferenceSet,
     ) -> Self {
@@ -648,35 +613,50 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
                 regs_in_priority_order,
                 last_precolored_register_index,
                 tmp_array_size,
-                unspillable_temps,
+                unspillable_tmps,
                 use_counts,
                 interference_edges,
             ),
-            worklist_moves: MoveSet::new(),
+            worklist_moves: MoveSet {
+                position_in_move_list: 0,
+                move_list: vec![],
+                low_priority_move_list: vec![],
+            },
         }
     }
+
+    fn for_each_adjacent(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, u32)) {
+        for i in 0..self.adjacency_list[tmp_index as usize].len() {
+            if !self.has_been_simplified(self.adjacency_list[tmp_index as usize][i]) {
+                function(self, self.adjacency_list[tmp_index as usize][i]);
+            }
+        }
+    }
+
 
     fn allocate(&mut self) {
         let mut changed;
 
-        let this2 = unsafe { &mut *(self as *mut Self) };
-
-        let mut coalesce_move = |mov: &mut usize, changed: &mut bool| {
-            let coalesced = this2.coalesce(mov);
-
-            if coalesced {
+        let coalesce_move = |this: &mut Self, mov: &mut usize, changed: &mut bool| {
+            if this.coalesce(mov) {
                 *changed = true;
-                // We won't need to handle this move in the future since it's already coalesced.
                 *mov = usize::MAX;
             }
         };
 
-        // We first coalesce until we can't coalesce any more.
         loop {
             changed = false;
-            self.worklist_moves.for_each_move_mut(|mov| {
-                coalesce_move(mov, &mut changed);
-            });
+            //for &index in self.move_list.iter().filter(|x| **x != usize::MAX) {
+            //  f(index);
+            //}
+            for i in 0..self.worklist_moves.move_list.len() {
+                let mut mov = self.worklist_moves.move_list[i];
+                if mov != usize::MAX {
+                    coalesce_move(self, &mut mov, &mut changed);
+
+                    self.worklist_moves.move_list[i] = mov;
+                }
+            }
 
             if !changed {
                 break;
@@ -685,9 +665,15 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
 
         loop {
             changed = false;
-            self.worklist_moves.for_each_low_priority_move_mut(|mov| {
-                coalesce_move(mov, &mut changed);
-            });
+
+            for i in 0..self.worklist_moves.low_priority_move_list.len() {
+                let mut mov = self.worklist_moves.low_priority_move_list[i];
+                if mov != usize::MAX {
+                    coalesce_move(self, &mut mov, &mut changed);
+
+                    self.worklist_moves.low_priority_move_list[i] = mov;
+                }
+            }
 
             if !changed {
                 break;
@@ -702,18 +688,46 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
         // added to the select stack, it's not on either list, but only on the select stack.
         // Once on the select stack, logically, it's no longer in the interference graph.
 
-        self.make_initial_worklist();
+        let assert_invariants = |this: &Self| {
+            let first_non_reg_index = this.last_precolored_register_index + 1;
+            let register_count = this.register_count() as u32;
 
+            for i in first_non_reg_index..this.degrees.len() as u32 {
+                if this.get_alias(i) != i {
+                    continue;
+                }
+
+                if this.is_on_select_stack.contains(i as _) {
+                    debug_assert!(!this.simplify_worklist.contains(&i) && !this.spill_worklist.contains(i as _));
+                    continue;
+                }
+
+                let degree = this.degrees[i as usize];
+
+                if degree >= register_count {
+                    debug_assert!(this.unspillable_tmps.get(i as _) || this.spill_worklist.contains(i as _));
+                    debug_assert!(!this.simplify_worklist.contains(&i));
+                    continue;
+                }
+
+                debug_assert!(this.simplify_worklist.contains(&i));
+            }
+        };
+
+        self.make_initial_worklist();
+        assert_invariants(self);
         loop {
             changed = false;
 
             while self.simplify_worklist.len() != 0 {
                 self.simplify();
+                assert_invariants(self);
             }
 
             if !self.spill_worklist.is_empty() {
                 self.select_spill();
                 changed = true;
+                debug_assert!(self.simplify_worklist.len() == 1);
             }
 
             if !changed {
@@ -721,7 +735,21 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
             }
         }
 
+        debug_assert!(self.simplify_worklist.len() == 0);
+        debug_assert!(self.spill_worklist.is_empty());
+
+        let first_non_reg_index = self.last_precolored_register_index + 1;
+        for i in first_non_reg_index..self.degrees.len() as u32 {
+            debug_assert!(self.has_been_simplified(i));
+        }
+
         self.assign_colors();
+    }
+
+    fn select_spill(&mut self) {
+        let victim_index = self.base.select_spill();
+        self.spill_worklist.quick_clear(victim_index as _);
+        self.simplify_worklist.push(victim_index);
     }
 
     fn coalesce(&mut self, move_index: &mut usize) -> bool {
@@ -733,15 +761,45 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
             std::mem::swap(&mut u, &mut v);
         }
 
+        if TRACE_DEBUG {
+            let utmp = if BANK == Bank::GP {
+                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(u as _)
+            } else {
+                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(u as _)
+            };
+
+            let vtmp = if BANK == Bank::GP {
+                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(v as _)
+            } else {
+                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(v as _)
+            };
+
+            print!(
+                "Coalescing move at index {} u = {}, v = {}     ",
+                move_index, utmp, vtmp
+            );
+        }
+
         if u == v {
+            if TRACE_DEBUG {
+                println!("Already Coalesced. They're equal.");
+            }
+
             return false;
         }
 
-        if self.is_precolored(v) || self.has_inteferece_edge(u, v) {
+        if self.is_precolored(v) || self.interference_edges.contains(u, v) {
             // No need to ever consider this move again if it interferes.
             // No coalescing will remove the interference.
-
             *move_index = usize::MAX;
+
+            if self.is_precolored(v) {
+                debug_assert!(self.is_precolored(u));
+            }
+
+            if TRACE_DEBUG {
+                println!("Constrained");
+            }
 
             return false;
         }
@@ -750,92 +808,146 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
             self.combine(u, v);
             self.has_coalesced_non_trivial_move = true;
 
+            if TRACE_DEBUG {
+                println!("Safe Coalescing");
+            }
+
             return true;
         }
 
         self.add_bias(u, v);
 
+        if TRACE_DEBUG {
+            println!("Failed Coalescing.");
+        }
+
         false
     }
 
     fn combine(&mut self, u: u32, v: u32) {
+        debug_assert!(self.coalesced_tmps[v as usize] == 0);
         self.coalesced_tmps[v as usize] = u;
 
-        let this2 = unsafe { &mut *(self as *mut Self) };
-
-        for mov in self.move_list[v as usize].iter().copied() {
-            this2.move_list[u as usize].insert(mov);
+        for i in 0..self.move_list[v as usize].len() {
+            let mov = self.move_list[v as usize][i];
+            self.move_list[u as usize].insert(mov);
         }
 
-        self.for_each_adjacent(v, |adjacent_tmp_index| {
-            if this2.add_edge_distinct_without_degree_change(adjacent_tmp_index, u) {
+        self.for_each_adjacent(v, |this, adjacent_tmp_index| {
+            if this.add_edge_distinct_without_degree_change(adjacent_tmp_index, u) {
                 // If we added a new edge between the adjacentTmp and u, it replaces the edge
                 // that existed with v.
                 // The degree of adjacentTmp remains the same since the edge just changed from u to v.
                 // All we need to do is update the degree of u.
-                if !this2.is_precolored(u) {
-                    this2.degrees[u as usize] += 1;
+                if !this.is_precolored(u) {
+                    this.degrees[u as usize] += 1;
                 }
             } else {
-                this2.decrement_degree(adjacent_tmp_index);
+                // If we already had an edge between the adjacentTmp and u, the degree of u
+                // is already correct. The degree of the adjacentTmp decreases since the edge
+                // with v is no longer relevant (we can think of it as merged with the edge with u).
+                this.decrement_degree(adjacent_tmp_index);
             }
         });
     }
 
-    fn decrement_degree(&mut self, tmp_index: u32) {
-        self.degrees[tmp_index as usize] -= 1;
-    }
-
-    fn decrement_degree_in_simplification(&mut self, tmp_index: u32) {
-        let old_degree = self.degrees[tmp_index as usize];
-        self.degrees[tmp_index as usize] = old_degree - 1;
-
-        if old_degree == self.register_count() {
-            self.spill_worklist.set(tmp_index as usize, false);
-            self.simplify_worklist.push(tmp_index);
-        }
-    }
-
     fn make_initial_worklist(&mut self) {
         self.simplify_worklist.clear();
-        self.spill_worklist.clear();
+        self.spill_worklist.clear_all();
+
+        if TRACE_DEBUG {
+            println!("------------------\nMaking initial worklist");
+        }
 
         let first_non_reg_index = self.last_precolored_register_index + 1;
         let register_count = self.register_count();
 
         for i in first_non_reg_index as usize..self.degrees.len() {
+            debug_assert!(!self.is_precolored(i as _));
+
             if self.has_been_simplified(i as _) {
                 continue;
             }
 
             let degree = self.degrees[i];
-
-            if degree < register_count {
-                self.simplify_worklist.push(i as u32);
+            let tmp = if BANK == Bank::GP {
+                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(i)
             } else {
+                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(i)
+            };
+
+            if degree < register_count as u32 {
+                if TRACE_DEBUG {
+                    println!(
+                        "Adding {}({}) with degree {} to simplify worklist",
+                        i, tmp, degree
+                    );
+                }
+                self.simplify_worklist.push(i as _);
+            } else {
+                if TRACE_DEBUG {
+                    println!(
+                        "Adding {}({}) with degree {} to spill worklist",
+                        i, tmp, degree
+                    );
+                }
                 self.add_to_spill(i);
             }
         }
     }
 
-    /// Low-degree vertex can always be colored: just pick any of the color taken by any
-    /// other adjacent verices.
-    /// The "Simplify" phase takes a low-degree out of the interference graph to simplify it.
+    // Low-degree vertex can always be colored: just pick any of the color taken by any
+    // other adjacent verices.
+    // The "Simplify" phase takes a low-degree out of the interference graph to simplify it.
     fn simplify(&mut self) {
         let last_index = self.simplify_worklist.pop().unwrap();
 
+        debug_assert!(!self.is_on_select_stack.get(last_index as usize));
+        debug_assert!(!self.select_stack.contains(&last_index));
+        debug_assert!(!self.spill_worklist.contains(last_index as _));
         self.select_stack.push(last_index);
         self.is_on_select_stack.set(last_index as usize, true);
-        let this2 = unsafe { &mut *(self as *mut Self) };
-        self.for_each_adjacent(last_index, |adjacent_tmp_index| {
-            this2.decrement_degree_in_simplification(adjacent_tmp_index);
+
+        if TRACE_DEBUG {
+            let ix = if BANK == Bank::GP {
+                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(last_index as _)
+            } else {
+                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(last_index as _)
+            };
+
+            println!(
+                "Simplifying {}({}) by adding it to select stack",
+                last_index, ix
+            );
+        }
+
+        self.for_each_adjacent(last_index, |this, adjacent_tmp_index| {
+            this.decrement_degree_in_simplification(adjacent_tmp_index);
         });
     }
 
-    fn select_spill(&mut self) {
-        let victim_index = self.base.select_spill();
-        self.spill_worklist.set(victim_index as usize, false);
-        self.simplify_worklist.push(victim_index);
+    fn decrement_degree(&mut self, tmp_index: u32) {
+        debug_assert!(self.degrees[tmp_index as usize] != 0);
+        let old_degree = self.degrees[tmp_index as usize];
+        self.degrees[tmp_index as usize] = old_degree - 1;
+    }
+
+    fn decrement_degree_in_simplification(&mut self, tmp_index: u32) {
+        debug_assert!(self.degrees[tmp_index as usize] != 0);
+        let old_degree = self.degrees[tmp_index as usize];
+        self.degrees[tmp_index as usize] = old_degree - 1;
+
+        if old_degree == self.register_count() as u32 {
+            debug_assert!(self.degrees[tmp_index as usize] < self.register_count() as u32);
+
+            if TRACE_DEBUG {
+                println!("Moving tmp {} from spill list to simplify list because it's degree is now less than K", tmp_index);
+            }
+
+            self.spill_worklist.quick_clear(tmp_index as _);
+            debug_assert!(!self.simplify_worklist.contains(&tmp_index));
+            self.simplify_worklist.push(tmp_index);
+        }
     }
 
     fn assign_colors(&mut self) {
@@ -844,92 +956,564 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> Briggs<'a, Interf
     }
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Deref
-    for Briggs<'a, InterferenceSet, BANK>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> Deref
+    for Briggs<'a, 'b, InterferenceSet, BANK>
 {
-    type Target = AbstractColoringAllocator<'a, InterferenceSet, BANK>;
+    type Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>;
 
     fn deref(&self) -> &Self::Target {
         &self.base
     }
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::DerefMut
-    for Briggs<'a, InterferenceSet, BANK>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> DerefMut
+    for Briggs<'a, 'b, InterferenceSet, BANK>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
     }
 }
-
-struct ColoringAllocator<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> {
-    allocator: Briggs<'a, InterferenceSet, BANK>,
-    tmp_width: &'a TmpWidth,
+#[allow(dead_code)]
+struct OrderedMoveSet {
+    position_in_move_list: Vec<usize>,
+    move_list: Vec<usize>,
+    low_priority_move_list: Vec<usize>,
+    first_low_priority_move_index: usize,
 }
 
-fn tmp_array_size<const BANK: Bank>(code: &Code) -> usize {
-    let num_tmps = code.num_tmps(BANK);
+#[allow(dead_code)]
+impl OrderedMoveSet {
+    fn new() -> Self {
+        Self {
+            position_in_move_list: Vec::new(),
+            move_list: Vec::new(),
+            low_priority_move_list: Vec::new(),
+            first_low_priority_move_index: 0,
+        }
+    }
 
-    if BANK == Bank::GP {
-        AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(num_tmps))
-    } else {
-        AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(num_tmps))
+    fn add_move(&mut self) -> usize {
+        debug_assert!(self.low_priority_move_list.is_empty());
+        debug_assert!(self.first_low_priority_move_index == 0);
+
+        let next_index = self.position_in_move_list.len();
+        let position = self.move_list.len();
+        self.move_list.push(next_index);
+        self.position_in_move_list.push(position);
+        next_index
+    }
+
+    fn start_adding_low_priority_moves(&mut self) {
+        debug_assert!(self.low_priority_move_list.is_empty());
+        debug_assert!(self.first_low_priority_move_index == 0);
+
+        self.first_low_priority_move_index = self.move_list.len();
+    }
+
+    fn add_low_priority_move(&mut self) -> usize {
+        debug_assert!(self.first_low_priority_move_index == self.move_list.len());
+
+        let next_index = self.position_in_move_list.len();
+        let position = self.low_priority_move_list.len();
+        self.low_priority_move_list.push(next_index);
+        self.position_in_move_list.push(position);
+
+        debug_assert!(next_index >= self.first_low_priority_move_index);
+
+        next_index
+    }
+
+    fn is_empty(&self) -> bool {
+        self.move_list.is_empty() && self.low_priority_move_list.is_empty()
+    }
+
+    fn contains(&self, index: usize) -> bool {
+        self.position_in_move_list[index] != usize::MAX
+    }
+
+    fn take_move(&mut self, move_index: usize) {
+        let position_in_move_list = self.position_in_move_list[move_index];
+
+        if position_in_move_list == usize::MAX {
+            return;
+        }
+
+        if move_index < self.first_low_priority_move_index {
+            debug_assert!(self.move_list[position_in_move_list] == move_index);
+            let last_index = self.move_list.last().copied().unwrap();
+            self.position_in_move_list[last_index] = position_in_move_list;
+            self.move_list[position_in_move_list] = last_index;
+            self.move_list.pop();
+        } else {
+            debug_assert!(self.low_priority_move_list[position_in_move_list] == move_index);
+            let last_index = self.low_priority_move_list.last().copied().unwrap();
+            self.position_in_move_list[last_index] = position_in_move_list;
+            self.low_priority_move_list[position_in_move_list] = last_index;
+            self.low_priority_move_list.pop();
+        }
+
+        self.position_in_move_list[move_index] = usize::MAX;
+
+        debug_assert!(!self.contains(move_index));
+    }
+
+    fn take_last_move(&mut self) -> usize {
+        let last_index = if !self.move_list.is_empty() {
+            self.move_list.pop().unwrap()
+        } else {
+            self.low_priority_move_list.pop().unwrap()
+        };
+
+        self.position_in_move_list[last_index] = usize::MAX;
+
+        debug_assert!(!self.contains(last_index));
+
+        last_index
+    }
+
+    fn return_move(&mut self, index: usize) {
+        // This assertion is a bit strict but that is how the move list should be used. The only kind of moves that can
+        // return to the list are the ones that we previously failed to coalesce with the conservative heuristics.
+        // Values should not be added back if they were never taken out when attempting coalescing.
+        debug_assert!(!self.contains(index));
+
+        if index < self.first_low_priority_move_index {
+            let position = self.move_list.len();
+            self.move_list.push(index);
+            self.position_in_move_list[index] = position;
+        } else {
+            let position = self.low_priority_move_list.len();
+            self.low_priority_move_list.push(index);
+            self.position_in_move_list[index] = position;
+        }
+
+        debug_assert!(self.contains(index));
+    }
+
+    fn clear(&mut self) {
+        self.position_in_move_list.clear();
+        self.move_list.clear();
+        self.low_priority_move_list.clear();
+        self.first_low_priority_move_index = 0;
+    }
+
+    fn total_number_of_moves(&self) -> usize {
+        self.move_list.len() + self.low_priority_move_list.len()
     }
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
-    ColoringAllocator<'a, InterferenceSet, BANK>
+#[allow(dead_code)]
+struct IRC<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+    base: AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>,
+    // Work lists.
+    /// Low-degree, Move related.
+    freeze_worklist: IndexSet<u32>,
+    /// Set of "move" enabled for possible coalescing.
+    worklist_moves: OrderedMoveSet,
+    /// Set of "move" not yet ready for coalescing.
+    active_moves: BitVector,
+    /// Set of Tmps whose moves are now ready for possible coalescing.
+    moves_to_enable: BitVector,
+}
+
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Deref
+    for IRC<'a, 'b, InterferenceSet, BANK>
 {
-    pub fn new(
-        code: &'a mut Code<'a>,
+    type Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::DerefMut
+    for IRC<'a, 'b, InterferenceSet, BANK>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
+#[allow(dead_code)]
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    IRC<'a, 'b, InterferenceSet, BANK>
+{
+    fn new(
+        code: &'a mut Code<'b>,
+        regs_in_priority_order: &Vec<Reg>,
+        last_precolored_register_index: u32,
+        tmp_array_size: usize,
+        unspillable_tmps: &'a BitVector,
         use_counts: &'a UseCounts,
-        unspillable_tmps: &'a BitVec<u32, bitvec::order::LocalBits>,
-        interference_set: InterferenceSet,
-        tmp_width: &'a TmpWidth,
+        interference_edges: InterferenceSet,
+    ) -> Self {
+        Self {
+            base: AbstractColoringAllocator::new(
+                code,
+                regs_in_priority_order,
+                last_precolored_register_index,
+                tmp_array_size,
+                unspillable_tmps,
+                use_counts,
+                interference_edges,
+            ),
+            freeze_worklist: IndexSet::new(),
+            worklist_moves: OrderedMoveSet::new(),
+            active_moves: BitVector::new(),
+            moves_to_enable: BitVector::with_capacity(tmp_array_size),
+        }
+    }
+
+    fn allocate(&mut self) {
+        self.active_moves
+            .ensure_size(self.worklist_moves.total_number_of_moves());
+        debug_assert!(
+            self.active_moves.len() >= self.coalescing_candidates.len(),
+            "The activeMove set should be big enough for the quick operations of BitVector."
+        );
+        self.make_worklist();
+
+        loop {
+            if !self.simplify_worklist.is_empty() {
+                self.simplify();
+            } else if !self.moves_to_enable.is_empty() {
+                self.enable_moves();
+            } else if !self.worklist_moves.is_empty() {
+                self.coalesce();
+            } else if !self.freeze_worklist.is_empty() {
+                self.freeze();
+            } else if !self.spill_worklist.is_empty() {
+                self.select_spill();
+            }
+
+            if self.simplify_worklist.is_empty()
+                && self.worklist_moves.is_empty()
+                && self.freeze_worklist.is_empty()
+                && self.spill_worklist.is_empty()
+            {
+                break;
+            }
+        }
+
+        self.assign_colors();
+    }
+
+    fn make_worklist(&mut self) {
+        let first_non_reg_index = self.last_precolored_register_index + 1;
+
+        for i in first_non_reg_index as usize..self.degrees.len() {
+            let degree = self.degrees[i];
+            if degree >= self.register_count() as u32 {
+                self.add_to_spill(i as _);
+            } else if !self.move_list[i].is_empty() {
+                self.freeze_worklist.insert(i as _);
+            } else {
+                self.simplify_worklist.push(i as _);
+            }
+        }
+    }
+    /// Low-degree vertex can always be colored: just pick any of the color taken by any
+    /// other adjacent vertices.
+    /// The "Simplify" phase takes a low-degree out of the interference graph to simplify it.
+    fn simplify(&mut self) {
+        let last_index = self.simplify_worklist.pop().unwrap();
+
+        debug_assert!(!self.select_stack.contains(&last_index));
+        debug_assert!(!self.is_on_select_stack.get(last_index as _));
+
+        self.select_stack.push(last_index);
+        self.is_on_select_stack.set(last_index as _, true);
+
+        self.for_each_adjacent(last_index, |this, adjacent_tmp_index| {
+            this.decrement_degree(adjacent_tmp_index);
+        });
+    }
+
+    fn coalesce(&mut self) {
+        let move_index = self.worklist_moves.take_last_move();
+        let move_operands = self.coalescing_candidates[move_index];
+
+        let mut u = self.get_alias(move_operands.src_index);
+        let mut v = self.get_alias(move_operands.dst_index);
+
+        if self.is_precolored(v) {
+            std::mem::swap(&mut u, &mut v);
+        }
+
+        if TRACE_DEBUG {
+            println!(
+                "Coalescing move at index {} u = {}, v = {}",
+                move_index, u, v
+            );
+        }
+
+        if u == v {
+            self.add_worklist(u);
+
+            if TRACE_DEBUG {
+                println!("    Coalesced");
+            }
+        } else if self.is_precolored(v) || self.interference_edges.contains(u, v) {
+            self.add_worklist(u);
+            self.add_worklist(v);
+
+            if TRACE_DEBUG {
+                println!("    Constrained");
+            }
+        } else if self.can_be_safely_coalesced(u, v) {
+            self.combine(u, v);
+            self.add_worklist(u);
+            self.has_coalesced_non_trivial_move = true;
+
+            if TRACE_DEBUG {
+                println!("    Safe Coalescing");
+            }
+        } else {
+            self.active_moves.quick_set(move_index as _, true);
+
+            if TRACE_DEBUG {
+                println!("    Failed coalescing, added to active moves.");
+            }
+
+            self.add_bias(u, v);
+        }
+    }
+
+    fn add_worklist(&mut self, tmp_index: u32) {
+        if !self.is_precolored(tmp_index)
+            && self.degrees[tmp_index as usize] < self.register_count() as u32
+            && !self.is_move_related(tmp_index)
+        {
+            self.freeze_worklist.remove(&tmp_index);
+            self.simplify_worklist.push(tmp_index);
+        }
+    }
+
+    fn combine(&mut self, u: u32, v: u32) {
+        if !self.freeze_worklist.remove(&v) {
+            self.spill_worklist.quick_clear(v as _);
+        }
+
+        debug_assert!(self.coalesced_tmps[v as usize] == 0);
+        self.coalesced_tmps[v as usize] = u;
+
+        for i in 0..self.move_list[v as usize].len() {
+            let v_mov = self.move_list[v as usize][i];
+            self.move_list[u as usize].insert(v_mov);
+        }
+
+        self.for_each_adjacent(v, |this, adjacent_tmp_index| {
+            if this.add_edge_distinct_without_degree_change(adjacent_tmp_index, u) {
+                // If we added a new edge between the adjacentTmp and u, it replaces the edge
+                // that existed with v.
+                // The degree of adjacentTmp remains the same since the edge just changed from u to v.
+                // All we need to do is update the degree of u.
+                if !this.is_precolored(u) {
+                    this.degrees[u as usize] += 1;
+                }
+            } else {
+                // If we already had an edge between the adjacentTmp and u, the degree of u
+                // is already correct. The degree of the adjacentTmp decreases since the edge
+                // with v is no longer relevant (we can think of it as merged with the edge with u).
+                this.decrement_degree(adjacent_tmp_index);
+            }
+        });
+
+        if self.degrees[u as usize] >= self.register_count() as u32
+            && self.freeze_worklist.remove(&u)
+        {
+            self.add_to_spill(u as _);
+        }
+    }
+
+    fn freeze(&mut self) {
+        let victim_index = self.freeze_worklist.pop().unwrap();
+        debug_assert!(
+            self.get_alias(victim_index) == victim_index,
+            "coalesce() should not leave aliased Tmp in the worklist"
+        );
+        self.simplify_worklist.push(victim_index);
+        self.freeze_moves(victim_index);
+    }
+
+    fn freeze_moves(&mut self, tmp_index: u32) {
+        self.for_each_node_moves(tmp_index, |this, move_index| {
+            if !this.active_moves.quick_clear(move_index) {
+                this.worklist_moves.take_move(move_index);
+            }
+
+            let move_operands = &this.coalescing_candidates[move_index];
+
+            let src_tmp_index = move_operands.src_index;
+            let dst_tmp_index = move_operands.dst_index;
+
+            let original_other_tmp = if src_tmp_index != tmp_index {
+                src_tmp_index
+            } else {
+                dst_tmp_index
+            };
+            let other_tmp_index = this.get_alias(original_other_tmp);
+
+            if this.degrees[other_tmp_index as usize] < this.register_count() as u32
+                && !this.is_move_related(other_tmp_index)
+            {
+                if this.freeze_worklist.remove(&other_tmp_index) {
+                    this.simplify_worklist.push(other_tmp_index);
+                }
+            }
+        });
+    }
+
+    fn decrement_degree(&mut self, tmp_index: u32) {
+        debug_assert!(self.degrees[tmp_index as usize] != 0);
+        let old_degree = self.degrees[tmp_index as usize];
+        self.degrees[tmp_index as usize] = old_degree - 1;
+
+        if old_degree == self.register_count() as u32 {
+            self.lazy_enable_moves_on_value_and_adjacents(tmp_index);
+            self.spill_worklist.quick_clear(tmp_index as _);
+
+            if self.is_move_related(tmp_index) {
+                self.freeze_worklist.insert(tmp_index);
+            } else {
+                self.simplify_worklist.push(tmp_index);
+            }
+        }
+    }
+
+    fn select_spill(&mut self) {
+        let victim_index = self.base.select_spill();
+        self.spill_worklist.quick_clear(victim_index as _);
+        self.simplify_worklist.push(victim_index);
+        self.freeze_moves(victim_index);
+    }
+
+    fn assign_colors(&mut self) {
+        debug_assert!(self.freeze_worklist.is_empty());
+        self.worklist_moves.clear();
+        self.base.assign_colors();
+    }
+
+    fn for_each_adjacent(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, u32)) {
+        for i in 0..self.adjacency_list[tmp_index as usize].len() {
+            if !self.has_been_simplified(self.adjacency_list[tmp_index as usize][i]) {
+                function(self, self.adjacency_list[tmp_index as usize][i]);
+            }
+        }
+    }
+
+    fn is_move_related(&self, tmp_index: u32) -> bool {
+        for &move_index in self.move_list[tmp_index as usize].iter() {
+            if self.active_moves.quick_get(move_index as _)
+                || self.worklist_moves.contains(move_index)
+            {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn for_each_node_moves(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, usize)) {
+        for i in 0..self.move_list[tmp_index as usize].len() {
+            let move_index = self.move_list[tmp_index as usize][i];
+
+            if self.active_moves.quick_get(move_index as _)
+                || self.worklist_moves.contains(move_index)
+            {
+                function(self, move_index);
+            }
+        }
+    }
+
+    fn lazy_enable_moves_on_value_and_adjacents(&mut self, tmp_index: u32) {
+        self.moves_to_enable.quick_set(tmp_index as usize, true);
+        self.for_each_adjacent(tmp_index, |this, adjacent_tmp_index| {
+            this.moves_to_enable
+                .quick_set(adjacent_tmp_index as usize, true);
+        });
+    }
+
+    fn enable_moves_on_value(&mut self, tmp_index: u32) {
+        for i in 0..self.move_list[tmp_index as usize].len() {
+            let move_index = self.move_list[tmp_index as usize][i];
+
+            if self.active_moves.quick_clear(move_index) {
+                self.worklist_moves.return_move(move_index);
+            }
+        }
+    }
+
+    fn enable_moves(&mut self) {
+        for i in 0..self.moves_to_enable.len() {
+            if self.moves_to_enable.quick_get(i) {
+                self.enable_moves_on_value(i as u32);
+            }
+        }
+
+        self.moves_to_enable.clear_all();
+    }
+}
+
+struct ColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+    allocator: Briggs<'a, 'b, InterferenceSet, BANK>,
+}
+
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    ColoringAllocator<'a, 'b, InterferenceSet, BANK>
+{
+    fn new(
+        code: &'a mut Code<'b>,
+        use_counts: &'a UseCounts,
+        unspillable_tmps: &'a BitVector,
+        graph: InterferenceSet,
     ) -> Self {
         let regs_in_priority_order = code.regs_in_priority_order(BANK).to_vec();
-        let last_reg = if BANK == Bank::GP {
+        let tmp_array_size = code.num_tmps(BANK);
+        let tmp_array_size = if BANK == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(tmp_array_size))
+        } else {
+            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(tmp_array_size))
+        };
+        let last_precolored_register_index = if BANK == Bank::GP {
             AbsoluteIndexed::<{ Bank::GP }>::last_machine_register_index()
         } else {
             AbsoluteIndexed::<{ Bank::FP }>::last_machine_register_index()
         };
-        let tmp_array_size = tmp_array_size::<BANK>(code);
 
         let mut this = Self {
             allocator: Briggs::new(
                 code,
-                regs_in_priority_order,
-                last_reg as _,
+                &regs_in_priority_order,
+                last_precolored_register_index as _,
                 tmp_array_size,
                 unspillable_tmps,
                 use_counts,
-                interference_set,
+                graph,
             ),
-            tmp_width,
         };
 
-        this.allocator
-            .code
-            .pinned_regs
-            .to_register_set()
-            .for_each(|reg| {
-                if (BANK == Bank::GP && reg.is_gpr()) || (BANK == Bank::FP && reg.is_fpr()) {
-                    this.allocator.pinned_regs.push(reg);
-                    this.allocator.regs_in_priority_order.push(reg);
-                }
-            });
+        let pinned_set = this.allocator.code.pinned_regs.to_register_set();
 
-        let index = if BANK == Bank::GP {
+        pinned_set.for_each(|reg| {
+            if (BANK == Bank::GP && reg.is_gpr()) || (BANK == Bank::FP && reg.is_fpr()) {
+                this.allocator.pinned_regs.push(Tmp::from_reg(reg));
+                this.allocator.regs_in_priority_order.push(reg);
+            }
+        });
+
+        let absolute_index = if BANK == Bank::GP {
             AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
-                this.code.num_tmps(BANK),
+                this.allocator.code.num_tmps(BANK),
             ))
         } else {
             AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(
-                this.code.num_tmps(BANK),
+                this.allocator.code.num_tmps(BANK),
             ))
         };
 
-        this.interference_edges.set_max_index(index as _);
+        this.allocator
+            .interference_edges
+            .set_max_index(absolute_index as _);
 
         this.initialize_precolored_tmp();
         this.build();
@@ -937,12 +1521,57 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         this
     }
 
-    fn tmp_from_absolute_index(index: usize) -> Tmp {
+    fn tmp_for_absolute_index(absolute_index: usize) -> Tmp {
         if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(absolute_index)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(absolute_index)
         }
+    }
+
+    fn initialize_precolored_tmp(&mut self) {
+        let n = self.allocator.last_precolored_register_index + 1;
+        self.allocator.colored_tmp.resize(n as _, Reg::default());
+
+        for i in 1..=self.allocator.last_precolored_register_index {
+            let tmp = Self::tmp_for_absolute_index(i as _);
+            debug_assert!(tmp.is_reg());
+            self.allocator.colored_tmp[i as usize] = tmp.reg();
+        }
+    }
+
+    fn get_alias(&self, tmp: Tmp) -> Tmp {
+        let ix = Self::tmp_to_index(tmp);
+        let alias = self.allocator.get_alias(ix as _);
+        Self::tmp_for_absolute_index(alias as _)
+    }
+
+    fn get_alias_when_spilling(&self, tmp: Tmp) -> Tmp {
+        if self.allocator.coalesced_tmps_at_spill.is_empty() {
+            return tmp;
+        }
+
+        let mut alias_index = Self::tmp_to_index(tmp) as u32;
+
+        while self.allocator.coalesced_tmps_at_spill[alias_index as usize] != 0 {
+            alias_index = self.allocator.coalesced_tmps_at_spill[alias_index as usize];
+        }
+
+        Self::tmp_for_absolute_index(alias_index as _)
+    }
+
+    fn requires_spilling(&self) -> bool {
+        !self.allocator.spilled_tmps.is_empty()
+    }
+
+    fn allocated_reg(&self, tmp: Tmp) -> Reg {
+        let reg = self.allocator.colored_tmp[Self::tmp_to_index(tmp) as usize];
+        debug_assert!(reg.is_set());
+        reg
+    }
+
+    fn is_useless_move(inst: &Inst) -> bool {
+        may_be_coalescable_impl::<BANK>(inst) && inst.args[0].tmp() == inst.args[1].tmp()
     }
 
     fn tmp_to_index(tmp: Tmp) -> usize {
@@ -953,98 +1582,75 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         }
     }
 
-    fn is_useless_move(&self, inst: &Inst) -> bool {
-        Self::may_be_coalescable_impl(inst, None) && inst.args[0].tmp() == inst.args[1].tmp()
-    }
-
-    fn get_alias(&self, tmp: Tmp) -> Tmp {
-        Self::tmp_from_absolute_index(self.allocator.get_alias(Self::tmp_to_index(tmp) as _) as _)
-    }
-
-    fn get_alias_when_spilling(&mut self, tmp: Tmp) -> Tmp {
-        if self.coalesced_tmps_at_spill.is_empty() {
-            return tmp;
-        }
-
-        let mut alias_index = Self::tmp_to_index(tmp);
-
-        while let Some(next_alias_index) = self.coalesced_tmps_at_spill.get(alias_index) {
-            if next_alias_index == &0 {
-                break;
-            }
-
-            alias_index = *next_alias_index as usize;
-        }
-
-        Self::tmp_from_absolute_index(alias_index as _)
-    }
-
-    fn requires_spilling(&self) -> bool {
-        !self.spilled_tmps.is_empty()
-    }
-
-    fn allocate_reg(&mut self, tmp: Tmp) -> Reg {
-        let reg = self.colored_tmp[Self::tmp_to_index(tmp) as usize];
-
-        if reg == Reg::default() {
-            panic!("FATAL: No color for {}\nCode:\n{}", tmp, self.code);
-        }
-
-        reg
-    }
-
-    fn initialize_precolored_tmp(&mut self) {
-        let ix = self.last_precolored_register_index;
-        self.colored_tmp.resize(ix as usize + 1, Reg::default());
-        for i in 1..self.last_precolored_register_index {
-            let tmp = Self::tmp_from_absolute_index(i as _);
-            self.colored_tmp[i as usize] = tmp.reg();
-        }
-    }
     fn build(&mut self) {
-        self.coalescing_candidates.clear();
-        self.worklist_moves.clear();
+        self.allocator.coalescing_candidates.clear();
+        self.allocator.worklist_moves.clear();
 
-        let this2 = unsafe { &mut *(self as *mut Self) };
-        let this3 = unsafe { &mut *(self as *mut Self as *mut Self) };
-        let mut tmp_liveness =
-            TmpLivenessAdapter::<BANK>::new(unsafe { std::mem::transmute(&mut this2.code) });
-        {
-            let mut liveness = TmpLiveness::new(&mut tmp_liveness);
+        // FIXME: It seems like we don't need to recompute liveness. We just need to update its data
+        // structures so that it knows that the newly introduced temporaries are not live at any basic
+        // block boundary. This should trivially be true for now.
 
-            for block in (0..self.code.blocks.len()).map(BasicBlockId) {
-                let mut local_calc = LocalCalc::new(&mut liveness, block);
+        let code_ptr = self.allocator.base.code as *mut Code<'b>;
 
-                for inst_index in (0..self.code.block(block).len()).rev() {
-                    let inst = &this3.code.block(block)[inst_index];
-                    let next_inst = if inst_index + 1 < self.code.block(block).len() {
-                        Some(&this3.code.block(block)[inst_index + 1])
-                    } else {
-                        None
-                    };
+        let mut adapter = TmpLivenessAdapter::<BANK>::new(unsafe { &mut *code_ptr });
+        let mut liveness = Liveness::new(&mut adapter);
+        liveness.compute();
 
-                    self.build_for_inst(Some(inst), next_inst, &local_calc);
-                    local_calc.execute(inst_index);
-                }
+        for i in 0..self.allocator.code.blocks.len() {
+            let block = BasicBlockId(i);
 
-                self.build_for_inst(None, Some(&this3.code.block(block)[0]), &local_calc);
+            let mut local_calc = LocalCalc::new(&mut liveness, block);
+
+            for inst_index in (0..local_calc.liveness.adapter.cfg().block(block).len()).rev() {
+                let inst = local_calc.liveness.adapter.cfg().block(block)[inst_index].clone();
+                let next_inst = local_calc
+                    .liveness
+                    .adapter
+                    .cfg()
+                    .block(block)
+                    .get(inst_index + 1)
+                    .cloned();
+
+                self.build_for(Some(&inst), next_inst.as_ref(), &local_calc);
+                local_calc.execute(inst_index);
             }
+
+            self.build_for(
+                None,
+                local_calc.liveness.adapter.cfg().block(block).first(),
+                &local_calc,
+            );
         }
 
         self.build_low_priority_move_list();
     }
-    fn build_for_inst<'b, 'c>(
+
+    fn build_for(
         &mut self,
         prev_inst: Option<&Inst>,
         next_inst: Option<&Inst>,
-        local_calc: &LocalCalc<'b, 'c, TmpLivenessAdapter<BANK>>,
+        local_calc: &LocalCalc<TmpLivenessAdapter<BANK>>,
     ) {
-        let this2 = unsafe { &mut *(self as *mut Self as *mut Self) };
-        let this3 = unsafe { &mut *(this2 as *mut Self as *mut Self) };
+        if TRACE_DEBUG {
+            println!("Building between {:?} and {:?}:", prev_inst, next_inst);
+            print!("live values: [");
+            for live_tmp in local_calc.live().iter() {
+                let tmp = if BANK == Bank::GP {
+                    AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(live_tmp.key() as _)
+                } else {
+                    AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(live_tmp.key() as _)
+                };
+                print!("{},", tmp);
+            }
+            println!("]");
+        }
+
+        let mut edges = TinyVec::<[(Tmp, Tmp); 8]>::new();
+
         Inst::for_each_def_with_extra_clobbered_regs(
             prev_inst,
             next_inst,
-            this2.code,
+            self.allocator.code,
             |arg, _, arg_bank, _, preserve64| {
                 if arg_bank != BANK {
                     return;
@@ -1053,79 +1659,132 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
                 // All the Def()s interfere with each other and with all the extra clobbered Tmps.
                 // We should not use forEachDefWithExtraClobberedRegs() here since colored Tmps
                 // do not need interference edges in our implementation.
-
                 Inst::for_each_def(
                     prev_inst,
                     next_inst,
-                    this3.code,
+                    self.allocator.code,
                     |other_arg, _, arg_bank, def_width| {
                         if arg_bank != BANK {
                             return;
                         }
 
                         if def_width <= Width::W64 && preserve64 {
+                            if TRACE_DEBUG {
+                                println!("skipping def-live edge: {}, {} since {} preserves enough lower bits", arg, other_arg, arg);
+                            }
                             return;
                         }
 
-                        self.add_edge(arg, other_arg);
+                        if TRACE_DEBUG {
+                            println!("    Adding def-def edge: {}, {} (prev={:?}, next={:?})", arg, other_arg, prev_inst, next_inst);
+                        }
+                        edges.push((arg, other_arg));
                     },
                 );
             },
         );
 
-        if let Some(prev_inst) = prev_inst.filter(|x| self.may_be_coalescable(x)) {
+        for &(a, b) in edges.iter() {
+            self.add_edge(a, b);
+        }
+
+        if let Some(prev_inst) = prev_inst.filter(|inst| self.may_be_coalescable(inst)) {
             // We do not want the Use() of this move to interfere with the Def(), even if it is live
             // after the Move. If we were to add the interference edge, it would be impossible to
             // coalesce the Move even if the two Tmp never interfere anywhere.
             let mut def_tmp = Tmp::empty();
             let mut use_tmp = Tmp::empty();
 
-            prev_inst.for_each_tmp(this2.code, |arg_tmp, role, _, _| {
+            prev_inst.for_each_arg(self.allocator.code, |_, arg_tmp, role, _, _| {
+                if !arg_tmp.is_tmp() {
+                    return;
+                }
                 if role.is_late_def() {
-                    def_tmp = arg_tmp;
+                    def_tmp = arg_tmp.tmp();
                 } else {
-                    assert!(role.is_early_use());
-                    use_tmp = arg_tmp;
+                    debug_assert!(role.is_early_use());
+                    use_tmp = arg_tmp.tmp();
                 }
             });
 
-            let next_move_index = self.coalescing_candidates.len();
-
-            self.coalescing_candidates.push(MoveOperands {
+            let next_move_index = self.allocator.coalescing_candidates.len();
+            self.allocator.coalescing_candidates.push(MoveOperands {
                 src_index: Self::tmp_to_index(use_tmp) as _,
                 dst_index: Self::tmp_to_index(def_tmp) as _,
             });
 
-            let new_index_in_worklist = self.worklist_moves.add_move();
-            assert_eq!(new_index_in_worklist, next_move_index);
+            let new_index_in_worklist = self.allocator.worklist_moves.add_move();
+            debug_assert!(new_index_in_worklist == next_move_index);
 
             for arg in prev_inst.args.iter() {
-                let list = &mut self.move_list[Self::tmp_to_index(arg.tmp())];
+                let list = &mut self.allocator.move_list[Self::tmp_to_index(arg.tmp())];
                 list.insert(next_move_index);
             }
 
-            let mut consider_edge = |live_tmp: Tmp| {
+            let consider_edge = |this: &mut Self, live_tmp: Tmp| {
                 if live_tmp != use_tmp {
-                    this2.add_edge(def_tmp, live_tmp);
+                    if TRACE_DEBUG {
+                        println!(
+                            "    Adding def-live for coalescable: {}, {}",
+                            def_tmp, live_tmp
+                        );
+                    }
+                    this.add_edge(def_tmp, live_tmp);
                 }
             };
 
-            for live_tmp in local_calc.live().iter() {
-                consider_edge(Self::tmp_from_absolute_index(live_tmp.key()));
+            for live_tmp in local_calc
+                .live()
+                .iter()
+                .map(|ix| Self::tmp_for_absolute_index(ix.key()))
+            {
+                consider_edge(self, live_tmp);
             }
 
-            for i in 0..self.pinned_regs.len() {
-                consider_edge(Self::tmp_from_absolute_index(self.pinned_regs[i].index()));
+            for i in 0..self.allocator.pinned_regs.len() {
+                let pinned_reg = self.allocator.pinned_regs[i];
+
+                consider_edge(self, pinned_reg);
             }
 
-            self.add_edges(None, next_inst, local_calc.live());
+            self.add_edges(None, next_inst, local_calc.live())
         } else {
-            self.add_edges(prev_inst, next_inst, local_calc.live());
+            self.add_edges(prev_inst, next_inst, local_calc.live())
         }
     }
 
-    fn may_be_coalescable(&self, inst: &Inst) -> bool {
-        Self::may_be_coalescable_impl(inst, None)
+    fn build_low_priority_move_list(&mut self) {
+        if !is_x86() || true {
+            return;
+        }
+
+        self.allocator
+            .worklist_moves
+            .start_adding_low_priority_moves();
+
+        for i in 0..self.allocator.code.blocks.len() {
+            let block = BasicBlockId(i);
+
+            for inst_index in 0..self.allocator.code.block(block).len() {
+                let inst = &self.allocator.code.block(block)[inst_index];
+
+                if let Some(def_arg_index) = inst.should_try_aliasing_def(self.allocator.code) {
+                    let op1 = inst.args[def_arg_index - 2];
+                    let op2 = inst.args[def_arg_index - 1];
+                    let dest = inst.args[def_arg_index];
+
+                    if op1 == dest || op2 == dest {
+                        continue;
+                    }
+
+                    if self.may_be_coalesced(op1, dest) {
+                        self.add_to_low_priority_coalescing_candidates(op1, dest);
+                    } else if op1 != op2 && self.may_be_coalesced(op2, dest) {
+                        self.add_to_low_priority_coalescing_candidates(op2, dest);
+                    }
+                }
+            }
+        }
     }
 
     fn may_be_coalesced(&self, left: Arg, right: Arg) -> bool {
@@ -1147,226 +1806,172 @@ impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank>
         let left_index = Self::tmp_to_index(left_tmp);
         let right_index = Self::tmp_to_index(right_tmp);
 
-        !self.has_inteferece_edge(left_index as _, right_index as _)
+        !self
+            .allocator
+            .interference_edges
+            .contains(left_index as _, right_index as _)
     }
 
-    fn add_low_priority_coalescing_candidates(&mut self, left: Arg, right: Arg) {
+    fn add_to_low_priority_coalescing_candidates(&mut self, left: Arg, right: Arg) {
+        debug_assert!(self.may_be_coalesced(left, right));
+
         let left_tmp = left.tmp();
         let right_tmp = right.tmp();
 
         let left_index = Self::tmp_to_index(left_tmp);
         let right_index = Self::tmp_to_index(right_tmp);
 
-        let next_move_index = self.coalescing_candidates.len();
-        self.coalescing_candidates.push(MoveOperands {
+        let next_move_index = self.allocator.coalescing_candidates.len();
+        self.allocator.coalescing_candidates.push(MoveOperands {
             src_index: left_index as _,
             dst_index: right_index as _,
         });
 
-        let new_index_in_worklsit = self.worklist_moves.add_low_priority_move();
-        assert_eq!(new_index_in_worklsit as u32, next_move_index as u32);
-        self.move_list[left_index].insert(next_move_index as _);
-        self.move_list[right_index].insert(next_move_index as _);
+        let new_index_in_worklist = self.allocator.worklist_moves.add_low_priority_move();
+        debug_assert!(new_index_in_worklist == next_move_index);
+        self.allocator.move_list[left_index].insert(next_move_index);
+        self.allocator.move_list[right_index].insert(next_move_index);
     }
 
-    fn build_low_priority_move_list(&mut self) {
-        if !is_x86() {
-            return;
-        }
-    }
-
-    fn add_edges<'b>(
+    fn add_edges(
         &mut self,
         prev_inst: Option<&Inst>,
         next_inst: Option<&Inst>,
-        live_tmps: Iterable<'b, TmpLivenessAdapter<BANK>>,
+        live_tmps: Iterable<TmpLivenessAdapter<BANK>>,
     ) {
-        let this2 = unsafe { &mut *(self as *mut Self as *mut Self) };
-
+        let mut edges = TinyVec::<[(Tmp, Tmp); 8]>::new();
+        let pinned_regs = &self.allocator.pinned_regs;
         Inst::for_each_def_with_extra_clobbered_regs(
             prev_inst,
             next_inst,
-            this2.code,
-            |arg, _, arg_bank, _, preserve64| {
+            self.allocator.code,
+            |tmp, _, arg_bank, _, _preserve64| {
                 if arg_bank != BANK {
                     return;
                 }
 
                 for live_tmp in live_tmps.iter() {
-                    /*let live_tmp_width = self.tmp_width[live_tmp.key()];
+                    let live_tmp = Self::tmp_for_absolute_index(live_tmp.key());
 
-                    if live_tmp_width <= Width::W64 && preserve64 {
-                        continue;
-                    }*/
-                    if preserve64 {
-                        continue;
-                    }
-                    let tmp = Self::tmp_from_absolute_index(live_tmp.key());
-                    self.add_edge(arg, tmp);
+                    debug_assert!(live_tmp.is_gp() == (BANK == Bank::GP));
+                    println!("      Adding def-live edge {}, {}", tmp, live_tmp);
+                    edges.push((tmp, live_tmp));
                 }
 
-                for i in 0..self.pinned_regs.len() {
-                    let tmp = Tmp::from_reg(self.pinned_regs[i]);
-                    self.add_edge(arg, tmp);
+                for pinned_reg_tmp in pinned_regs {
+                    edges.push((tmp, *pinned_reg_tmp));
                 }
             },
         );
+
+        for (a, b) in edges {
+            self.add_edge(a, b);
+        }
     }
 
     fn add_edge(&mut self, a: Tmp, b: Tmp) {
         self.allocator
-            .add_edge(Self::tmp_to_index(a) as _, Self::tmp_to_index(b) as _);
+            .add_edge(Self::tmp_to_index(a) as u32, Self::tmp_to_index(b) as u32);
     }
 
-    fn may_be_coalescable_impl(inst: &Inst, tmp_width: Option<&TmpWidth>) -> bool {
-        match BANK {
-            Bank::GP => match inst.kind.opcode {
-                Opcode::Move | Opcode::Move32 => {}
-                _ => return false,
-            },
-
-            Bank::FP => match inst.kind.opcode {
-                Opcode::MoveFloat | Opcode::MoveDouble => {}
-                _ => return false,
-            },
-        }
-        // Avoid the three-argument coalescable spill moves.
-        if inst.args.len() != 2 {
-            return false;
-        }
-
-        if !inst.args[0].is_tmp() || !inst.args[1].is_tmp() {
-            return false;
-        }
-
-        // We can coalesce a Move32 so long as either of the following holds:
-        // - The input is already zero-filled.
-        // - The output only cares about the low 32 bits.
-        //
-        // Note that the input property requires an analysis over ZDef's, so it's only valid so long
-        // as the input gets a register. We don't know if the input gets a register, but we do know
-        // that if it doesn't get a register then we will still emit this Move32.
-        if inst.kind.opcode == Opcode::Move32 {
-            return false; // TODO: check if the input is zero-filled.
-        }
-
-        true
+    fn may_be_coalescable(&self, inst: &Inst) -> bool {
+        may_be_coalescable_impl::<BANK>(inst)
     }
 }
 
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Deref
-    for ColoringAllocator<'a, InterferenceSet, BANK>
-{
-    type Target = Briggs<'a, InterferenceSet, BANK>;
+fn may_be_coalescable_impl<const BANK: Bank>(inst: &Inst) -> bool {
+    match BANK {
+        Bank::GP => match inst.kind.opcode {
+            Opcode::Move32 | Opcode::Move => (),
+            _ => return false,
+        },
 
-    fn deref(&self) -> &Self::Target {
-        &self.allocator
-    }
-}
-
-impl<'a, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::DerefMut
-    for ColoringAllocator<'a, InterferenceSet, BANK>
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.allocator
-    }
-}
-
-struct GraphColoringRegisterAllocation<'a, 'b> {
-    code: &'a mut Code<'b>,
-    use_counts: UseCounts,
-}
-
-impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
-    fn run(&mut self) {
-        pad_interference(self.code);
-
-        self.allocate_on_bank::<{ Bank::GP }>();
-        self.allocate_on_bank::<{ Bank::FP }>();
-
-        fix_spills_after_terminals(self.code);
+        Bank::FP => match inst.kind.opcode {
+            Opcode::MoveFloat | Opcode::MoveDouble => (),
+            _ => return false,
+        },
     }
 
-    fn allocate_on_bank<const BANK: Bank>(&mut self) {
-        // FIXME: If a Tmp is used only from a Scratch role and that argument is !admitsStack, then
-        // we should add the Tmp to unspillableTmps. That will help avoid relooping only to turn the
-        // Tmp into an unspillable Tmp.
-        // https://bugs.webkit.org/show_bug.cgi?id=152699
+    if inst.args.len() != 2 {
+        return false;
+    }
 
-        let mut unspillable_tmps = self.compute_unspillable_tmps::<BANK>();
+    if !inst.args[0].is_tmp() || !inst.args[1].is_tmp() {
+        return false;
+    }
+
+    if inst.kind.opcode == Opcode::Move32 {
+        return false;
+    }
+
+    true
+}
+struct GraphColoringRegisterAllocation<'a> {
+    use_counts: &'a UseCounts,
+}
+
+impl<'a> GraphColoringRegisterAllocation<'a> {
+    fn new(use_counts: &'a UseCounts) -> Self {
+        Self { use_counts }
+    }
+
+    fn run(&mut self, code: &mut Code) {
+        pad_interference(code);
+        println!("{}", code);
+        self.allocate_on_bank::<{ Bank::GP }>(code);
+        self.allocate_on_bank::<{ Bank::FP }>(code);
+
+        fix_spills_after_terminals(code);
+    }
+
+    fn allocate_on_bank<const BANK: Bank>(&mut self, code: &mut Code) {
+        let mut unspillable_tmps = self.compute_unspillable_tmps::<{ BANK }>(code);
 
         let mut num_iterations = 0;
         let mut done = false;
 
         while !done {
             num_iterations += 1;
-
-            if self.code.num_tmps(BANK) < 400 {
+            println!("num_iterations: {}", num_iterations);
+            if code.num_tmps(BANK) < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
                 let graph = SmallInterferenceGraph::new(InterferenceBitVector::new());
-
-                let this = unsafe { &mut *(self as *mut Self as *mut Self) };
-                let unspillable = unsafe {
-                    &*(&mut unspillable_tmps as *mut BitVec<u32, bitvec::order::LocalBits>)
-                };
-                let mut allocator = ColoringAllocator::<_, BANK>::new(
-                    this.code,
-                    &this.use_counts,
-                    &unspillable,
-                    graph,
-                    &TmpWidth {},
-                );
-
-                allocator.allocate();
+                let cloned = unspillable_tmps.clone();
+                let mut allocator =
+                    ColoringAllocator::<_, BANK>::new(code, self.use_counts, &cloned, graph);
+                allocator.allocator.allocate();
 
                 if !allocator.requires_spilling() {
-                    self.assign_registers_to_tmp(&mut allocator);
-
+                    Self::assign_registers_to_tmp(&mut allocator);
                     done = true;
                 } else {
-                    self.add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
-                    done = false;
+                    Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                    done = false
                 }
-
-                drop(unspillable);
             } else {
                 let graph = LargeInterferenceGraph::new(InterferenceVector::new());
 
-                let this = unsafe { &mut *(self as *mut Self as *mut Self) };
-                let unspillable = unsafe {
-                    &*(&mut unspillable_tmps as *mut BitVec<u32, bitvec::order::LocalBits>)
-                };
-                let mut allocator = ColoringAllocator::<_, BANK>::new(
-                    this.code,
-                    &this.use_counts,
-                    &unspillable,
-                    graph,
-                    &TmpWidth {},
-                );
-
-                allocator.allocate();
+                let cloned = unspillable_tmps.clone();
+                let mut allocator =
+                    ColoringAllocator::<_, BANK>::new(code, self.use_counts, &cloned, graph);
+                allocator.allocator.allocate();
 
                 if !allocator.requires_spilling() {
-                    self.assign_registers_to_tmp(&mut allocator);
-
+                    Self::assign_registers_to_tmp(&mut allocator);
                     done = true;
                 } else {
-                    self.add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
-                    done = false;
+                    Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                    done = false
                 }
+            }
+
+            if num_iterations > 50 {
+                break;
             }
         }
     }
 
-    fn absolute_index<const BANK: Bank>(tmp: &Tmp) -> usize {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(tmp)
-        } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(tmp)
-        }
-    }
-
-    fn compute_unspillable_tmps<const BANK: Bank>(&self) -> BitVec<u32, bitvec::order::LocalBits> {
-        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+    fn compute_unspillable_tmps<const BANK: Bank>(&self, code: &Code) -> BitVector {
+        #[derive(Clone, Copy)]
         struct Range {
             first: usize,
             last: usize,
@@ -1385,7 +1990,7 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
             }
         }
 
-        let num_tmps = self.code.num_tmps(BANK);
+        let num_tmps = code.num_tmps(BANK);
         let array_size = if BANK == Bank::GP {
             AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(num_tmps))
         } else {
@@ -1396,18 +2001,21 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
 
         let mut global_index = 0;
 
-        for block in self.code.blocks.iter() {
-            for inst in block.insts.iter() {
-                inst.for_each_arg(self.code, |arg, _, arg_bank, _| {
-                    let arg_index = arg as *const Arg as usize - inst.args.as_ptr() as usize;
-                    let arg_index = arg_index / std::mem::size_of::<Arg>();
-                    if arg.is_tmp() && inst.admits_stack(arg_index, self.code) {
+        for block in code.blocks.iter() {
+            for inst in block.iter() {
+                inst.for_each_arg(code, |arg_index, arg, _, arg_bank, _| {
+                    if arg.is_tmp() && inst.admits_stack(arg_index, code) {
                         if arg_bank != BANK {
                             return;
                         }
 
                         let tmp = arg.tmp();
-                        let range = &mut ranges[Self::absolute_index::<BANK>(&tmp)];
+                        let index = if BANK == Bank::GP {
+                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                        } else {
+                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                        };
+                        let range = &mut ranges[index];
                         range.count += 1;
                         range.admit_stack_count += 1;
 
@@ -1425,8 +2033,12 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                         if tmp.is_gp() != (BANK == Bank::GP) {
                             return;
                         }
-
-                        let range = &mut ranges[Self::absolute_index::<BANK>(&tmp)];
+                        let index = if BANK == Bank::GP {
+                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                        } else {
+                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                        };
+                        let range = &mut ranges[index];
                         range.count += 1;
 
                         if global_index < range.first {
@@ -1444,50 +2056,40 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
             global_index += 1;
         }
 
-        let mut unspillable_tmps = BitVec::new();
-        unspillable_tmps.resize(array_size, false);
-        let last_i = if BANK == Bank::GP {
+        let mut unspillable_tmps = BitVector::with_capacity(array_size);
+
+        let start = if BANK == Bank::GP {
             AbsoluteIndexed::<{ Bank::GP }>::last_machine_register_index()
         } else {
             AbsoluteIndexed::<{ Bank::FP }>::last_machine_register_index()
         };
 
-        println!("{} {}", last_i, ranges.len());
-
-        for i in last_i + 1..ranges.len() {
-            let range = ranges[i];
+        for i in start + 1..ranges.len() {
+            let range = &ranges[i];
 
             if range.last.wrapping_sub(range.first) <= 1 && range.count > range.admit_stack_count {
-                unspillable_tmps.set(i, true);
+                unspillable_tmps.quick_set(i, true);
             }
         }
+
         unspillable_tmps
     }
 
-    fn assign_registers_to_tmp<'c, Set: InterferenceGraph, const BANK: Bank>(
-        &mut self,
-        allocator: &mut ColoringAllocator<'c, Set, BANK>,
+    fn assign_registers_to_tmp<InterferenceSet: InterferenceGraph, const BANK: Bank>(
+        allocator: &mut ColoringAllocator<InterferenceSet, BANK>,
     ) {
-        for block in (0..self.code.blocks.len()).map(BasicBlockId) {
-            // Give Tmp a valid register.
-            for inst_index in 0..self.code.block(block).len() {
-                let this = unsafe { &mut *(self as *mut Self as *mut Self) };
-                let inst = &mut self.code.block_mut(block)[inst_index];
-                let may_be_coalescable = allocator.may_be_coalescable(inst);
+        let code_ptr = allocator.allocator.base.code as *mut Code;
+        for i in 0..allocator.allocator.code.blocks.len() {
+            let block = BasicBlockId(i);
 
-                // Move32 is cheaper if we know that it's equivalent to a Move. It's
-                // equivalent if the destination's high bits are not observable or if the source's high
-                // bits are all zero. Note that we don't have the opposite optimization for other
-                // architectures, which may prefer Move over Move32, because Move is canonical already.
-                if BANK == Bank::GP
-                    && inst.kind.opcode == Opcode::Move
-                    && inst.args[0].is_tmp()
-                    && inst.args[1].is_tmp()
-                {
-                    // TODO
-                }
+            for inst_index in 0..allocator.allocator.code.block(block).len() {
+                let mut inst = allocator.allocator.code.block_mut(block)[inst_index].clone();
 
-                inst.for_each_tmp_fast_mut(this.code, |tmp| {
+                // The mayBeCoalescable() method will change its mind for some operations after we
+                // complete register allocation. So, we record this before starting.
+                let may_be_coalescable = allocator.may_be_coalescable(&inst);
+
+                inst.for_each_tmp_fast_mut(unsafe { &mut *code_ptr }, |tmp| {
                     if tmp.is_reg() || tmp.bank() != BANK {
                         return;
                     }
@@ -1496,7 +2098,8 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                     let assigned_tmp = if alias_tmp.is_reg() {
                         Tmp::from_reg(alias_tmp.reg())
                     } else {
-                        let reg = allocator.allocate_reg(alias_tmp);
+                        let reg = allocator.allocated_reg(alias_tmp);
+
                         Tmp::from_reg(reg)
                     };
 
@@ -1506,13 +2109,19 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                 if may_be_coalescable
                     && inst.args[0].is_tmp()
                     && inst.args[1].is_tmp()
-                    && inst.args[0].tmp() == inst.args[1].tmp()
+                    && inst.args[0] == inst.args[1]
                 {
-                    *inst = Inst::default();
+                    inst = Inst::default();
                 }
+
+                allocator.allocator.code.block_mut(block)[inst_index] = inst;
             }
 
-            self.code.block_mut(block).retain(|x| x != &Inst::default());
+            allocator
+                .allocator
+                .code
+                .block_mut(block)
+                .retain(|inst| inst != &Inst::default());
         }
     }
 
@@ -1526,143 +2135,158 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
         }
     }
 
-    fn add_spill_and_fill<'c, Set: InterferenceGraph, const BANK: Bank>(
-        &mut self,
-        allocator: &mut ColoringAllocator<'c, Set, BANK>,
-        unspillable_tmps: &mut BitVec<u32, bitvec::order::LocalBits>,
+    fn add_spill_and_fill<InterferenceSet: InterferenceGraph, const BANK: Bank>(
+        allocator: &mut ColoringAllocator<InterferenceSet, BANK>,
+        unspillable_tmps: &mut BitVector,
     ) {
-        let mut stack_slots = HashMap::new();
+        let mut stackslots = HashMap::new();
+        let code_ptr = allocator.allocator.base.code as *mut Code;
+        for &tmp in allocator.allocator.spilled_tmps.iter() {
+            let tmp = if BANK == Bank::GP {
+                Tmp::gp_tmp_for_index(tmp as _)
+            } else {
+                Tmp::fp_tmp_for_index(tmp as _)
+            };
 
-        for tmp in allocator
-            .spilled_tmps
-            .iter()
-            .map(|x| ColoringAllocator::<Set, BANK>::tmp_from_absolute_index(*x as usize))
-        {
-            let index = ColoringAllocator::<Set, BANK>::tmp_to_index(tmp);
-            if unspillable_tmps.len() <= index {
-                unspillable_tmps.resize(index + 1, false);
-            }
+            let index = if BANK == Bank::GP {
+                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+            } else {
+                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+            };
+
             unspillable_tmps.set(index, true);
 
-            let stack_slot = self.code.add_stack_slot(
+            let stackslot = unsafe { &mut *code_ptr }.add_stack_slot(
                 Self::stack_slot_minimum_width(Width::W64),
-                super::stack_slot::StackSlotKind::Spill,
+                StackSlotKind::Spill,
             );
+            let is_new_tmp = stackslots.insert(tmp, stackslot).is_none();
 
-            stack_slots.insert(tmp, stack_slot);
+            debug_assert!(is_new_tmp);
         }
 
         let mut insertion_set = InsertionSet::new();
 
-        for block in (0..self.code.blocks.len()).map(BasicBlockId) {
+        let code_ptr = allocator.allocator.base.code as *mut Code;
+
+        for i in 0..allocator.allocator.base.code.blocks.len() {
+            let block = BasicBlockId(i);
             let mut has_aliased_tmps = false;
 
-            for inst_index in 0..self.code.block(block).len() {
+            for inst_index in 0..allocator.allocator.base.code.block(block).len() {
+                let mut inst = allocator.allocator.base.code.block_mut(block)[inst_index].clone();
+
                 let mut did_spill = false;
-                let mut need_scratch = false;
+                let mut needs_scratch = false;
 
-                let this2 = unsafe { &mut *(self as *mut Self as *mut Self) };
-                let this3 = unsafe { &mut *(self as *mut Self as *mut Self) };
-                let mut inst = &mut this3.code.block_mut(block)[inst_index];
-                let inst2 = unsafe { &*(inst as *mut Inst as *mut Inst) };
-                inst.for_each_arg_mut(self.code, |arg, role, arg_bank, width| {
-                    if !arg.is_tmp() {
-                        return;
-                    }
+                inst.for_each_arg_mut(
+                    unsafe { &mut *code_ptr },
+                    |arg_index, arg, role, arg_bank, width| {
+                        if !arg.is_tmp() {
+                            return;
+                        }
 
-                    if arg.bank() != BANK {
-                        return;
-                    }
+                        if arg_bank != BANK {
+                            return;
+                        }
 
-                    if arg.is_reg() {
-                        return;
-                    }
+                        if arg.is_reg() {
+                            return;
+                        }
 
-                    let stack_slot_entry = stack_slots.get(&arg.tmp());
+                        if let Some(stack_slot) = stackslots.get(&arg.tmp()).copied() {
+                            let mut needs_scratch_if_spilled_in_place = false;
 
-                    if let Some(stack_slot_entry) = stack_slot_entry.copied() {
-                        let mut needs_scratch_in_spilled_in_place = false;
-                        let index =
-                            arg as *mut Arg as usize - inst2.args.as_ptr() as *const Inst as usize;
-                        let arg_index = index / std::mem::size_of::<Arg>();
-                        if !inst2.admits_stack(arg_index, this2.code) {
-                            match inst2.kind.opcode {
-                                Opcode::Move
-                                | Opcode::MoveDouble
-                                | Opcode::MoveFloat
-                                | Opcode::Move32 => {
-                                    let otehr_arg_index = index ^ 1;
-                                    let other_arg = &inst2.args[otehr_arg_index];
+                            if !allocator.allocator.base.code.block(block)[inst_index]
+                                .admits_stack(arg_index, allocator.allocator.base.code)
+                            {
+                                match allocator.allocator.base.code.block(block)[inst_index]
+                                    .kind
+                                    .opcode
+                                {
+                                    Opcode::Move
+                                    | Opcode::MoveDouble
+                                    | Opcode::MoveFloat
+                                    | Opcode::Move32 => {
+                                        let other_arg_index = arg_index ^ 1;
+                                        let other_arg = allocator.allocator.base.code.block(block)
+                                            [inst_index]
+                                            .args[other_arg_index];
 
-                                    if inst2.args.len() == 2
-                                        && other_arg.is_stack()
-                                        && this2.code.stack_slot(other_arg.stack_slot()).kind
-                                            == StackSlotKind::Spill
-                                    {
-                                        needs_scratch_in_spilled_in_place = true;
+                                        if allocator.allocator.base.code.block(block)[inst_index]
+                                            .args
+                                            .len()
+                                            == 2
+                                            && other_arg.is_stack()
+                                            && allocator
+                                                .allocator
+                                                .base
+                                                .code
+                                                .stack_slot(other_arg.stack_slot())
+                                                .is_spill()
+                                        {
+                                            needs_scratch_if_spilled_in_place = true;
+                                        }
+                                        return;
                                     }
-                                }
 
-                                _ => (),
+                                    _ => return,
+                                }
+                            }
+
+                            // If the Tmp holds a constant then we want to rematerialize its
+                            // value rather than loading it from the stack. In order for that
+                            // optimization to kick in, we need to avoid placing the Tmp's stack
+                            // address into the instruction.
+
+                            let index = if BANK == Bank::GP {
+                                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&arg.tmp())
+                            } else {
+                                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&arg.tmp())
+                            };
+
+                            if !role.is_cold_use()
+                                && allocator.allocator.use_counts.is_const_def::<BANK>(index)
+                            {
+                                return;
+                            }
+
+                            let spill_width = Width::W64;
+
+                            allocator
+                                .allocator
+                                .base
+                                .code
+                                .stack_slot_mut(stack_slot)
+                                .byte_size = bytes_for_width(spill_width) as _;
+
+                            *arg = Arg::new_stack(stack_slot, 0);
+
+                            did_spill = true;
+
+                            if needs_scratch_if_spilled_in_place {
+                                needs_scratch = true;
                             }
                         }
-                        // If the Tmp holds a constant then we want to rematerialize its
-                        // value rather than loading it from the stack. In order for that
-                        // optimization to kick in, we need to avoid placing the Tmp's stack
-                        // address into the instruction.
-                        if !role.is_cold_use()
-                            && this2.use_counts.is_const_def::<BANK>(
-                                ColoringAllocator::<Set, BANK>::tmp_to_index(arg.tmp()),
-                            )
-                        {
-                            return;
-                        }
+                    },
+                );
 
-                        let spill_width = Width::W64;
-
-                        if role.is_any_def() && width < spill_width {
-                            // Either there are users of this tmp who will use more than width,
-                            // or there are producers who will produce more than width non-zero
-                            // bits.
-                            // FIXME: It's not clear why we should have to return here. We have
-                            // a ZDef fixup in allocateStack. And if this isn't a ZDef, then it
-                            // doesn't seem like it matters what happens to the high bits. Note
-                            // that this isn't the case where we're storing more than what the
-                            // spill slot can hold - we already got that covered because we
-                            // stretch the spill slot on demand. One possibility is that it's ZDefs of
-                            // smaller width than 32-bit.
-                            // https://bugs.webkit.org/show_bug.cgi?id=169823
-                            return;
-                        }
-
-                        this2.code.stack_slot_mut(stack_slot_entry).byte_size =
-                            bytes_for_width(width) as _;
-
-                        *arg = Arg::new_stack(stack_slot_entry, 0);
-                        did_spill = true;
-
-                        if needs_scratch_in_spilled_in_place {
-                            need_scratch = true;
-                        }
-                    }
-                });
-
-                if need_scratch {
+                if needs_scratch {
                     let inst_bank = match inst.kind.opcode {
-                        Opcode::Move | Opcode::Move32 => Bank::GP,
+                        Opcode::Move32 | Opcode::Move => Bank::GP,
                         Opcode::MoveFloat | Opcode::MoveDouble => Bank::FP,
                         _ => unreachable!(),
                     };
 
-                    let tmp = self.code.new_tmp(inst_bank);
-                    let index = ColoringAllocator::<Set, BANK>::tmp_to_index(tmp);
+                    let tmp = allocator.allocator.base.code.new_tmp(inst_bank);
 
-                    if index >= unspillable_tmps.len() {
-                        unspillable_tmps.resize(index + 1, false);
-                    }
+                    let index = if BANK == Bank::GP {
+                        AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                    } else {
+                        AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                    };
 
                     unspillable_tmps.set(index, true);
-
                     inst.args.push(Arg::new_tmp(tmp));
 
                     // Without this, a chain of spill moves would need two registers, not one, because
@@ -1674,32 +2298,33 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                     // caused it to report hasLateUseOrDef in Inst::needsPadding.
                     insertion_set
                         .insert_inst(inst_index, Inst::new(Opcode::Nop.into(), inst.origin, &[]));
+                    allocator.allocator.base.code.block_mut(block)[inst_index] = inst;
                     continue;
                 }
-
-                inst.for_each_tmp_mut(self.code, |tmp, role, arg_bank, _| {
-                    if tmp.is_reg() || tmp.bank() != BANK {
+                let origin = inst.origin;
+                // For every other case, add Load/Store as needed.
+                inst.for_each_tmp_mut(unsafe { &mut *code_ptr }, |tmp, role, arg_bank, _| {
+                    if tmp.is_reg() || arg_bank != BANK {
                         return;
                     }
 
-                    let stack_slot_entry = stack_slots.get(&tmp);
-
-                    if let Some(stack_slot_entry) = stack_slot_entry {
+                    if let Some(stack_slot) = stackslots.get(tmp).copied() {
                         let spill_width = Width::W64;
 
-                        let mov = match BANK {
-                            Bank::GP => Opcode::Move,
-                            Bank::FP => Opcode::MoveDouble,
+                        let mov = if BANK == Bank::GP {
+                            Opcode::Move
+                        } else {
+                            Opcode::MoveDouble
                         };
 
-                        let new_tmp = this2.code.new_tmp(BANK);
-
+                        let new_tmp = allocator.allocator.base.code.new_tmp(BANK);
                         *tmp = new_tmp;
-                        let index = ColoringAllocator::<Set, BANK>::tmp_to_index(new_tmp);
 
-                        if index >= unspillable_tmps.len() {
-                            unspillable_tmps.resize(index + 1, false);
-                        }
+                        let index = if BANK == Bank::GP {
+                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&new_tmp)
+                        } else {
+                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&new_tmp)
+                        };
 
                         unspillable_tmps.set(index, true);
 
@@ -1707,19 +2332,18 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                             return;
                         }
 
-                        let arg = Arg::new_stack(*stack_slot_entry, 0);
-
+                        let arg = Arg::new_stack(stack_slot, 0);
                         if role.is_any_use() {
                             insertion_set.insert_inst(
                                 inst_index,
-                                Inst::new(mov.into(), inst2.origin, &[arg, Arg::new_tmp(*tmp)]),
+                                Inst::new(mov.into(), origin, &[arg, Arg::new_tmp(*tmp)]),
                             );
                         }
 
                         if role.is_any_def() {
                             insertion_set.insert_inst(
                                 inst_index + 1,
-                                Inst::new(mov.into(), inst2.origin, &[Arg::new_tmp(*tmp), arg]),
+                                Inst::new(mov.into(), origin, &[Arg::new_tmp(*tmp), arg]),
                             );
                         }
                     } else {
@@ -1732,15 +2356,28 @@ impl<'a: 'b, 'b> GraphColoringRegisterAllocation<'a, 'b> {
                         return;
                     }
                 });
+
+                allocator.allocator.base.code.block_mut(block)[inst_index] = inst;
             }
 
-            insertion_set.execute(self.code, block);
+            insertion_set.execute(allocator.allocator.base.code, block);
 
             if has_aliased_tmps {
-                self.code
+                allocator
+                    .allocator
+                    .base
+                    .code
                     .block_mut(block)
-                    .retain(|inst| !allocator.is_useless_move(inst));
+                    .retain(|inst| {
+                        !ColoringAllocator::<InterferenceSet, BANK>::is_useless_move(inst)
+                    });
             }
         }
     }
+}
+
+pub fn allocate_registers_by_graph_coloring(code: &mut Code) {
+    let use_counts = UseCounts::new(code);
+    let mut allocator = GraphColoringRegisterAllocation::new(&use_counts);
+    allocator.run(code);
 }

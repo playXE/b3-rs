@@ -7,10 +7,12 @@ use crate::air::helpers::{move_for_type, relaxed_move_for_type};
 use crate::air::insertion_set::InsertionSet;
 use crate::air::kind::Kind;
 use crate::air::opcode::Opcode as AirOpcode;
-use crate::air::special::Special;
+use crate::air::special::{Special, SpecialId, SpecialKind};
 use crate::bank::Bank;
 use crate::block::{blocks_in_pre_order, Frequency};
+use crate::check_special::CheckSpecial;
 use crate::patchpoint_special::PatchpointSpecial;
+use crate::stackmap_special::RoleMode;
 use crate::typ::TypeKind;
 use crate::utils::phase_scope;
 use crate::value::{Value, ValueData, ValueRep, ValueRepKind};
@@ -817,7 +819,8 @@ impl<'a> LowerToAir<'a> {
 
         let result = self.tmp(self.value);
 
-        if is_valid_form(opcode, &[ArgKind::Tmp, ArgKind::Tmp, ArgKind::Tmp]) {
+        if is_valid_form(opcode, &[ArgKind::Imm, ArgKind::Tmp, ArgKind::Tmp]) {
+            
             if !NOT_COMMUTATIVE {
                 if let Some(arg) = self.imm_from_value(right) {
                     let left_tmp = self.tmp(left);
@@ -837,6 +840,7 @@ impl<'a> LowerToAir<'a> {
         }
 
         if is_valid_form(opcode, &[ArgKind::BitImm, ArgKind::Tmp, ArgKind::Tmp]) {
+            
             if !NOT_COMMUTATIVE {
                 if let Some(right_arg) = self.bit_imm(right) {
                     let left_tmp = self.tmp(left);
@@ -859,6 +863,7 @@ impl<'a> LowerToAir<'a> {
         }
 
         if is_valid_form(opcode, &[ArgKind::BitImm64, ArgKind::Tmp, ArgKind::Tmp]) {
+            
             if !NOT_COMMUTATIVE {
                 if let Some(right_arg) = self.bit_imm64(right) {
                     let left_tmp = self.tmp(left);
@@ -3473,7 +3478,7 @@ impl<'a> LowerToAir<'a> {
                         }
 
                         StackArgument => {
-                            let arg = Arg::new_call_arg(rep.offset_from_fp() as _);
+                            let arg = Arg::new_call_arg(rep.offset_from_sp() as _);
                             inst.args.push(arg);
                             after.push(Inst::new(
                                 move_for_type(typ).into(),
@@ -3598,6 +3603,51 @@ impl<'a> LowerToAir<'a> {
             Opcode::Identity | Opcode::Opaque => {
                 assert!(self.tmp(self.value.child(self.code.proc, 0)) == self.tmp(self.value));
             }
+
+            Opcode::CheckAdd | Opcode::CheckSub | Opcode::CheckMul => {
+                let result = self.tmp(self.value);
+                let left = self.child_id(self.value, 0);
+                let right = self.child_id(self.value, 0);
+
+                if self.value.opcode(self.code.proc) == Opcode::CheckSub && self.value(left).is_int_of(0) {
+                    let right = self.tmp(right);
+                    self.append(AirOpcode::Move, &[Arg::new_tmp(right), Arg::new_tmp(result)]);
+
+                    let opcode = self.try_opcode_for_type(
+                        AirOpcode::BranchNeg32,
+                        AirOpcode::BranchNeg64,
+                        AirOpcode::Oops,
+                        AirOpcode::Oops,
+                        self.value(self.value).typ(),
+                    );
+
+                    let check_special = self.ensure_check_special(opcode.into(), 2, RoleMode::SameAsRep);
+
+                    let mut inst = Inst::new(AirOpcode::Patch.into(), self.value, &[Arg::new_special(check_special)]);
+                    inst.args.push(Arg::new_res_cond(ResultCondition::Overflow));
+                    inst.args.push(Arg::new_tmp(result));
+
+                    self.fill_stackmap(&mut inst, self.value, 2);
+
+                    self.insts.last_mut().unwrap().push(inst);
+                    return;
+                }
+            }
+
+            Opcode::Check => {
+                let branch = self.create_branch(self.value.child(self.code.proc, 0), false).unwrap();
+
+                let special = self.ensure_check_special(branch.kind, branch.args.len(), RoleMode::SameAsRep);
+
+                let mut inst = Inst::new(AirOpcode::Patch.into(), self.value, &[Arg::new_special(special)]);
+                inst.args.extend_from_slice(&branch.args);
+
+                self.fill_stackmap(&mut inst, self.value, 1);
+
+                self.insts.last_mut().unwrap().push(inst);
+                return;
+            }
+
             opcode => todo!("NYI: Could not lower {:?}", opcode),
         }
     }
@@ -3684,6 +3734,14 @@ impl<'a> LowerToAir<'a> {
 
             inst.args.push(arg);
         }
+    }
+
+    fn ensure_check_special(&mut self, kind: air::kind::Kind, num_args: usize, stackmap_role: RoleMode) -> SpecialId {
+        let check = CheckSpecial::new(kind, num_args, stackmap_role);
+        self.code.proc.add_special(Special {
+            index: 0,
+            kind: SpecialKind::Check(check)
+        })
     }
 
     fn value(&self, value: ValueId) -> &Value {

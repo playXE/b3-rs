@@ -17,6 +17,10 @@ pub struct PureCSE {
 }
 
 impl PureCSE {
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
     pub fn new() -> Self {
         Self {
             map: HashMap::new(),

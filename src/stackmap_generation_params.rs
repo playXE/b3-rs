@@ -4,16 +4,16 @@ use crate::{value::{ValueId, ValueRep}, air::{generation_context::GenerationCont
 
 // NOTE: It's possible to capture StackmapGenerationParams by value, but not all of the methods will
 // work if you do that.
-pub struct StackmapGenerationParams<'a> {
+pub struct StackmapGenerationParams<'a, 'b> {
     value: ValueId,
     reps: Vec<ValueRep>,
     pub(crate) gp_scratch: Vec<u8>,
     pub(crate) fp_scratch: Vec<u8>,
-    context: &'a mut GenerationContext<'a>
+    context: &'a mut GenerationContext<'b>
 }
 
-impl<'a> StackmapGenerationParams<'a> {
-    pub(crate) fn new(value: ValueId, reps: Vec<ValueRep>, context: &'a mut GenerationContext<'a>) -> Self {
+impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
+    pub(crate) fn new(value: ValueId, reps: Vec<ValueRep>, context: &'a mut GenerationContext<'b>) -> Self {
         Self {
             value,
             reps,
@@ -49,10 +49,10 @@ impl<'a> StackmapGenerationParams<'a> {
     ///
     /// This gives you the used register set that's useful for allocating scratch registers. This set
     /// is defined as:
-    ///
-    ///     (usedRegisters() | (RegisterSetBuilder::calleeSaveRegisters() - proc.calleeSaveRegisters()))
-    ///     - gpScratchRegisters - fpScratchRegisters
-    ///
+    /// ```mustfail
+    ///     (used_registers() | (RegisterSetBuilder::callee_saved_registers() - proc.callee_saved_registers()))
+    ///     - gp_scratchRegisters - fp_scratchRegisters
+    /// ```
     /// I.e. it is like used_registers() but also includes unsaved callee-saves and excludes scratch
     /// registers.
     ///
@@ -112,7 +112,7 @@ impl<'a> StackmapGenerationParams<'a> {
     }
 }
 
-impl std::ops::Index<usize> for StackmapGenerationParams<'_> {
+impl std::ops::Index<usize> for StackmapGenerationParams<'_, '_> {
     type Output = ValueRep;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -120,7 +120,7 @@ impl std::ops::Index<usize> for StackmapGenerationParams<'_> {
     }
 }
 
-impl std::ops::Deref for StackmapGenerationParams<'_> {
+impl std::ops::Deref for StackmapGenerationParams<'_, '_> {
     type Target = [ValueRep];
 
     fn deref(&self) -> &Self::Target {

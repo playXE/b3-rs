@@ -17,6 +17,12 @@ pub struct RegisterSetBuilder {
     upper_bits: RegisterBitmap,
 }
 
+impl Default for RegisterSetBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl std::fmt::Display for RegisterSetBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut i = 0;

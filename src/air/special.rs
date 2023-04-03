@@ -1,8 +1,18 @@
 use macroassembler::assembler::{abstract_macro_assembler::Jump, TargetMacroAssembler};
 
-use crate::{sparse_collection::SparseElement, stackmap_special::StackMapSpecial, bank::Bank, width::Width, patchpoint_special::PatchpointSpecial, check_special::CheckSpecial, jit::register_set::RegisterSetBuilder};
+use crate::{
+    bank::Bank, check_special::CheckSpecial, jit::register_set::RegisterSetBuilder,
+    patchpoint_special::PatchpointSpecial, sparse_collection::SparseElement,
+    stackmap_special::StackMapSpecial, width::Width,
+};
 
-use super::{arg::{Arg, ArgRole}, inst::Inst, code::Code, ccall_special::CCallSpecial, generation_context::GenerationContext};
+use super::{
+    arg::{Arg, ArgRole},
+    ccall_special::CCallSpecial,
+    code::Code,
+    generation_context::GenerationContext,
+    inst::Inst,
+};
 
 pub struct Special {
     pub index: usize,
@@ -15,54 +25,116 @@ pub enum SpecialKind {
     Check(CheckSpecial),
 }
 
-
 impl Special {
-
-    pub fn generate<'a>(&self, inst: &Inst, jit: &mut TargetMacroAssembler, gc: &'a mut GenerationContext<'a>) -> Jump {
+    pub fn generate<'a>(
+        &self,
+        inst: &Inst,
+        jit: &mut TargetMacroAssembler,
+        gc: &'a mut GenerationContext<'a>,
+    ) -> Jump {
         match self.kind {
             SpecialKind::CCall(ref _special) => CCallSpecial::generate(inst, jit, gc),
             SpecialKind::Patchpoint(ref _special) => PatchpointSpecial::generate(inst, jit, gc),
-            SpecialKind::Check(ref _special) => todo!(),
+            SpecialKind::Check(ref special) => special.generate(inst, jit, gc),
         }
     }
 
-    pub fn for_each_arg(&self, code: &Code<'_>, inst: &Inst, mut lambda: impl FnMut(&Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg(
+        &self,
+        code: &Code<'_>,
+        inst: &Inst,
+        mut lambda: impl FnMut(usize, &Arg, ArgRole, Bank, Width),
+    ) {
         match self {
-            Special { kind: SpecialKind::CCall(special), .. } => special.for_each_arg(code, inst, |arg, role, bank, width| lambda(&arg, role, bank, width)),
-            Special { kind: SpecialKind::Patchpoint(special), .. } => special.for_each_arg(code, inst, lambda),
-            Special { kind: SpecialKind::Check(special), .. } => special.for_each_arg(code, inst, |arg, role, bank, width| lambda(&arg, role, bank, width)),
+            Special {
+                kind: SpecialKind::CCall(special),
+                ..
+            } => special.for_each_arg(code, inst, |ix, arg, role, bank, width| {
+                lambda(ix, &arg, role, bank, width)
+            }),
+            Special {
+                kind: SpecialKind::Patchpoint(special),
+                ..
+            } => special.for_each_arg(code, inst, lambda),
+            Special {
+                kind: SpecialKind::Check(special),
+                ..
+            } => special.for_each_arg(code, inst, |ix, arg, role, bank, width| {
+                lambda(ix, &arg, role, bank, width)
+            }),
         }
     }
 
-    pub fn for_each_arg_mut(&mut self, code: &mut Code<'_>, inst: &mut Inst, lambda: impl FnMut(&mut Arg, ArgRole, Bank, Width)) {
+    pub fn for_each_arg_mut(
+        &mut self,
+        code: &mut Code<'_>,
+        inst: &mut Inst,
+        lambda: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
+    ) {
         match self {
-            Special { kind: SpecialKind::CCall(special), .. } => special.for_each_arg_mut(code, inst, lambda),
-            Special { kind: SpecialKind::Patchpoint(special), .. } => special.for_each_arg_mut(code, inst, lambda),
-            Special { kind: SpecialKind::Check(special), .. } => special.for_each_arg_mut(code, inst, lambda),
+            Special {
+                kind: SpecialKind::CCall(special),
+                ..
+            } => special.for_each_arg_mut(code, inst, lambda),
+            Special {
+                kind: SpecialKind::Patchpoint(special),
+                ..
+            } => special.for_each_arg_mut(code, inst, lambda),
+            Special {
+                kind: SpecialKind::Check(special),
+                ..
+            } => special.for_each_arg_mut(code, inst, lambda),
         }
     }
 
     pub fn is_valid(&self, code: &Code<'_>, inst: &Inst) -> bool {
         match self {
-            Special { kind: SpecialKind::CCall(special), .. } => special.is_valid(code, inst),
-            Special { kind: SpecialKind::Patchpoint(special), .. } => special.is_valid(code, inst),
-            Special { kind: SpecialKind::Check(special), .. } => special.is_valid(code, inst),
+            Special {
+                kind: SpecialKind::CCall(special),
+                ..
+            } => special.is_valid(code, inst),
+            Special {
+                kind: SpecialKind::Patchpoint(special),
+                ..
+            } => special.is_valid(code, inst),
+            Special {
+                kind: SpecialKind::Check(special),
+                ..
+            } => special.is_valid(code, inst),
         }
     }
 
     pub fn admits_stack(&self, code: &Code<'_>, inst: &Inst, arg_index: usize) -> bool {
         match self {
-            Special { kind: SpecialKind::CCall(special), .. } => special.admits_stack(code, inst, arg_index),
-            Special { kind: SpecialKind::Patchpoint(special), .. } => special.admits_stack(code, inst, arg_index),
-            Special { kind: SpecialKind::Check(special), .. } => special.admits_stack(code, inst, arg_index),
+            Special {
+                kind: SpecialKind::CCall(special),
+                ..
+            } => special.admits_stack(code, inst, arg_index),
+            Special {
+                kind: SpecialKind::Patchpoint(special),
+                ..
+            } => special.admits_stack(code, inst, arg_index),
+            Special {
+                kind: SpecialKind::Check(special),
+                ..
+            } => special.admits_stack(code, inst, arg_index),
         }
     }
 
     pub fn is_terminal(&self, code: &Code<'_>, inst: &Inst) -> bool {
         match self {
-            Special { kind: SpecialKind::CCall(_special), .. } => false,
-            Special { kind: SpecialKind::Patchpoint(special), .. } => special.is_terminal(code, inst),
-            Special { kind: SpecialKind::Check(_special), .. } => false,
+            Special {
+                kind: SpecialKind::CCall(_special),
+                ..
+            } => false,
+            Special {
+                kind: SpecialKind::Patchpoint(special),
+                ..
+            } => special.is_terminal(code, inst),
+            Special {
+                kind: SpecialKind::Check(_special),
+                ..
+            } => false,
         }
     }
 
@@ -97,28 +169,40 @@ impl Special {
     /// performance of the liveness analysis.
     ///
     /// Currently, we do (1) for B3 stackmaps.
-    pub fn report_used_registers(&self, code: &mut Code<'_>, inst: &Inst, used_registers: &RegisterSetBuilder) {
+    pub fn report_used_registers(
+        &self,
+        code: &mut Code<'_>,
+        inst: &Inst,
+        used_registers: &RegisterSetBuilder,
+    ) {
         match self.kind {
-            SpecialKind::Check(_) => StackMapSpecial::report_used_registers(code, inst, used_registers),
-            SpecialKind::Patchpoint(_) => StackMapSpecial::report_used_registers(code, inst, used_registers),
-            _ => ()
+            SpecialKind::Check(_) => {
+                StackMapSpecial::report_used_registers(code, inst, used_registers)
+            }
+            SpecialKind::Patchpoint(_) => {
+                StackMapSpecial::report_used_registers(code, inst, used_registers)
+            }
+            _ => (),
         }
     }
 
     pub fn extra_early_clobbered_regs(&self, code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
         match self.kind {
             SpecialKind::CCall(_) => RegisterSetBuilder::new(),
-            SpecialKind::Check(_) | SpecialKind::Patchpoint(_) => StackMapSpecial::extra_early_clobbered_regs(code, inst),
+            SpecialKind::Check(_) | SpecialKind::Patchpoint(_) => {
+                StackMapSpecial::extra_early_clobbered_regs(code, inst)
+            }
         }
     }
 
     pub fn extra_clobbered_regs(&self, code: &Code<'_>, inst: &Inst) -> RegisterSetBuilder {
         match self.kind {
             SpecialKind::CCall(ref call) => call.clobbered_regs,
-            SpecialKind::Check(_) | SpecialKind::Patchpoint(_) => StackMapSpecial::extra_clobbered_regs(code, inst),
+            SpecialKind::Check(_) | SpecialKind::Patchpoint(_) => {
+                StackMapSpecial::extra_clobbered_regs(code, inst)
+            }
         }
     }
-
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]

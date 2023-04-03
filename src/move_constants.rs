@@ -6,35 +6,37 @@ use crate::{
     insertion_set::InsertionSet,
     opcode::Opcode,
     procedure::Procedure,
-    utils::{index_set::{IndexMap, IndexSet}, phase_scope::phase_scope},
-    value::{Value, ValueId}, typ::Type,
+    typ::Type,
+    utils::{
+        index_set::{IndexMap, IndexSet},
+        phase_scope::phase_scope,
+    },
+    value::{Value, ValueId},
 };
 
 /// Moves large constants around, with the goal of placing them in the optimal points in the program.
 pub fn move_constants(proc: &mut Procedure) {
     phase_scope("b3::move_constants", || {
-        
         let mut move_constants = MoveConstants {
             proc,
             insertion_set: InsertionSet::new(),
         };
 
-        move_constants.hoist_constants(|value| {
+        /*move_constants.hoist_constants(|value| {
             matches!(
                 value.kind.opcode(),
-                Opcode::ConstFloat | Opcode::ConstDouble 
+                Opcode::ConstFloat | Opcode::ConstDouble
             )
-        });
-        
+        });*/
+
         move_constants.lower_materialization_cost_heavy_constants();
 
-        move_constants.hoist_constants(|value| {
+        /*move_constants.hoist_constants(|value| {
             matches!(
                 value.kind.opcode(),
                 Opcode::Const32 | Opcode::Const64 | Opcode::ArgumentReg
             )
-        });
-        
+        });*/
     });
 }
 
@@ -79,23 +81,25 @@ impl<'a> MoveConstants<'a> {
                     let mut child = self.proc.value(value).children[i];
 
                     if filter(self.proc.value(child)) {
-                        let result = value_for_constant.insert(child, child);
+                        let key = child.key(self.proc).unwrap();
 
-                        if let None = result {
-                            // Assume that this block is where we want to materialize the value.
-                            self.proc.value_mut(child).owner = Some(block);
+                        if let Some(canonical) = value_for_constant.get(&key) {
+                            child = *canonical;
+                            self.proc.value_mut(value).children[i] = child;
+                            // Determine the least common dominator. That's the lowest place in the CFG where
+                            // we could materialize the constant while still having only one materialization
+                            // in the resulting code.
+
+                            while !dominators
+                                .dominates(self.proc.value(child).owner.unwrap(), block)
+                            {
+                                self.proc.value_mut(child).owner =
+                                    dominators.idom(self.proc.value(child).owner.unwrap());
+                            }
                             continue;
-                        }
-                        // Make 'value' use the canonical constant rather than the one it was using.
-                        child = result.unwrap();
-                        self.proc.value_mut(value).children[i] = child;
-
-                        // Determine the least common dominator. That's the lowest place in the CFG where
-                        // we could materialize the constant while still having only one materialization
-                        // in the resulting code.
-                        while !dominators.dominates(self.proc.value(child).owner.unwrap(), block) {
-                            self.proc.value_mut(child).owner =
-                                dominators.idom(self.proc.value(child).owner.unwrap());
+                        } else {
+                            value_for_constant.insert(key, child);
+                            self.proc.value_mut(child).owner = Some(block);
                         }
                     }
                 }
@@ -111,7 +115,12 @@ impl<'a> MoveConstants<'a> {
             let mut block = self.proc.value(entry).owner;
 
             while let Some(bb) = block {
-                if self.proc.block(bb).frequency() < self.proc.block(block.unwrap()).frequency() {
+                if self.proc.block(bb).frequency()
+                    < self
+                        .proc
+                        .block(self.proc.value(entry).owner.unwrap())
+                        .frequency()
+                {
                     self.proc.value_mut(entry).owner = Some(bb);
                 }
 
@@ -132,9 +141,8 @@ impl<'a> MoveConstants<'a> {
                 let value = self.proc.block(block)[i];
 
                 if filter(self.proc.value(value)) {
-                    if value_for_constant.get(&value) == Some(&value) {
+                    if value_for_constant.get(&value.key(self.proc).unwrap()) == Some(&value) {
                         let nop = self.proc.add_nop();
-
                         self.proc.block_mut(block)[i] = nop;
                     } else {
                         Value::replace_with_nop_ignoring_type(&mut self.proc.value_mut(value));
@@ -172,7 +180,7 @@ impl<'a> MoveConstants<'a> {
                         return;
                     }
 
-                    assert!(value_for_constant.get(&child) == Some(&child));
+                    assert!(value_for_constant.get(&child.key(this.proc).unwrap()) == Some(&child));
 
                     if this.proc.value(child).owner != Some(block) {
                         // This constant isn't our problem. It's going to be materialized in another
@@ -182,14 +190,14 @@ impl<'a> MoveConstants<'a> {
 
                     // We're supposed to materialize this constant in this block, and we haven't
                     // done it yet.
-                  
+
                     this.insertion_set.insert_value(value_index, child);
                     this.proc.value_mut(child).owner = None;
                 };
 
                 let value = self.proc.block(block)[value_index];
 
-                if self.proc.value_mut(value).memory_value().is_some() {
+                if false && self.proc.value_mut(value).memory_value().is_some() {
                     let pointer = self.proc.value(value).children.last().copied().unwrap();
 
                     if self.proc.value(pointer).has_int64() && filter(&self.proc.value(pointer)) {
@@ -209,7 +217,7 @@ impl<'a> MoveConstants<'a> {
                             let p = this.proc.value(pointer).as_int64().unwrap() as usize;
                             let q = other_pointer.as_int64().unwrap() as usize;
 
-                            c + p - q
+                            c.wrapping_add(p).wrapping_sub(q)
                         };
 
                         let best_pointer = find_best_constant(self, &|this, candidate_pointer| {
@@ -232,7 +240,7 @@ impl<'a> MoveConstants<'a> {
                                 offset as i32;
                         }
                     }
-                } else {
+                } else if false {
                     match self.proc.value(value).kind.opcode() {
                         Opcode::Add | Opcode::Sub => {
                             let is_add = self.proc.value(value).kind.opcode() == Opcode::Add;
@@ -263,7 +271,7 @@ impl<'a> MoveConstants<'a> {
                                     materialize(self, best_addend.unwrap());
 
                                     let op = Value::new(
-                                        if is_add { Opcode::Add } else { Opcode::Sub },
+                                        if is_add { Opcode::Sub } else { Opcode::Add },
                                         typ,
                                         crate::value::NumChildren::Two,
                                         &[child, best_addend.unwrap()],
@@ -271,7 +279,7 @@ impl<'a> MoveConstants<'a> {
                                     );
 
                                     let new_value = self.proc.add(op);
-
+                                    self.insertion_set.insert_value(value_index, new_value);
                                     self.proc.value_mut(value).replace_with_identity(new_value);
                                 }
                             }
@@ -317,12 +325,12 @@ impl<'a> MoveConstants<'a> {
 
             match val.kind.opcode() {
                 Opcode::ConstDouble => {
-                    const_table.insert(value, double_size);
+                    const_table.insert(value.key(self.proc).unwrap(), double_size);
                     double_size += 1;
                 }
 
                 Opcode::ConstFloat => {
-                    const_table.insert(value, float_size);
+                    const_table.insert(value.key(self.proc).unwrap(), float_size);
                     float_size += 1;
                 }
 
@@ -333,33 +341,37 @@ impl<'a> MoveConstants<'a> {
         let get_offset = |opcode, index_in_kind| -> usize {
             match opcode {
                 Opcode::ConstDouble => index_in_kind * size_of::<f64>(),
-                Opcode::ConstFloat => size_of::<f64>() * double_size + index_in_kind * size_of::<f32>(),
+                Opcode::ConstFloat => {
+                    size_of::<f64>() * double_size + index_in_kind * size_of::<f32>()
+                }
 
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         };
 
-        let (_, data_section) = self.proc.add_data_section(double_size * size_of::<f64>() + float_size * size_of::<f32>());
+        let (_, data_section) = self
+            .proc
+            .add_data_section(double_size * size_of::<f64>() + float_size * size_of::<f32>());
 
         for (key, value) in const_table.iter() {
-            let pointer = data_section as usize + get_offset(self.proc.value(*key).kind.opcode(), *value);
+            let pointer = data_section as usize + get_offset(key.opcode(), *value);
 
-            match self.proc.value(*key).kind.opcode() {
+            match key.opcode() {
                 Opcode::ConstDouble => {
-                    let val = self.proc.value(*key).as_double().unwrap();
+                    let val = key.double_value();
                     unsafe {
                         *(pointer as *mut f64) = val;
                     }
                 }
 
                 Opcode::ConstFloat => {
-                    let val = self.proc.value(*key).as_float().unwrap();
+                    let val = key.float_value();
                     unsafe {
                         *(pointer as *mut f32) = val;
                     }
                 }
 
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -382,7 +394,8 @@ impl<'a> MoveConstants<'a> {
                             continue;
                         }
 
-                        let new_child = child.materialize(self.proc);
+                        let key = child.key(self.proc).unwrap();
+                        let new_child = key.materialize(self.proc);
                         let val = self.insertion_set.insert_value(value_index, new_child);
                         self.proc.value_mut(value).children[child_index] = val;
                         off_limits.insert(val);
@@ -405,7 +418,10 @@ impl<'a> MoveConstants<'a> {
                     continue;
                 }
 
-                let offset = get_offset(self.proc.value(value).kind.opcode(), *const_table.get(&value).unwrap());
+                let offset = get_offset(
+                    self.proc.value(value).kind.opcode(),
+                    *const_table.get(&value.key(self.proc).unwrap()).unwrap(),
+                );
 
                 if offset as i32 as usize != offset {
                     continue;
@@ -413,7 +429,14 @@ impl<'a> MoveConstants<'a> {
 
                 let table_base = self.proc.add_int_constant(Type::Int64, data_section as i64);
                 let typ = self.proc.value(value).typ();
-                let result = self.proc.add_load(Opcode::Load.into(), typ, table_base, offset as i32, 0..0, 0..0);
+                let result = self.proc.add_load(
+                    Opcode::Load.into(),
+                    typ,
+                    table_base,
+                    offset as i32,
+                    0..0,
+                    0..0,
+                );
                 self.insertion_set.insert_value(value_index, result);
                 self.proc.value_mut(value).replace_with_identity(result);
             }

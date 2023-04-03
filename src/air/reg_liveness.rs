@@ -1,4 +1,3 @@
-use bitvec::vec::BitVec;
 
 use crate::{
     jit::{
@@ -6,7 +5,7 @@ use crate::{
         register_set::{RegisterSet, },
     },
     liveness::Liveness,
-    utils::index_set::IndexMap,
+    utils::{index_set::IndexMap, bitvector::BitVector},
 };
 
 use super::{
@@ -87,9 +86,11 @@ impl RegLiveness {
             );
         }
 
-        let mut dirty_blocks: BitVec<usize> = bitvec::vec::BitVec::new();
+        let mut dirty_blocks = BitVector::new();
 
-        dirty_blocks.resize(code.blocks.len(), true);
+        for i in (0..code.blocks.len()).rev() {
+            dirty_blocks.set(i, true);
+        }
 
         let mut changed;
 
@@ -103,7 +104,7 @@ impl RegLiveness {
             changed = false;
 
             for block_index in (0..code.blocks.len()).rev() {
-                if !dirty_blocks[block_index] {
+                if !dirty_blocks.get(block_index) {
                     continue;
                 }
 

@@ -60,7 +60,7 @@ impl<G: Graph> BlockData<G> {
 /// (TOPLAS 1979). It uses the "simple" implementation of LINK and EVAL, which yields an O(n log n)
 /// solution. The full paper is linked below; this code attempts to closely follow the algorithm as
 /// it is presented in the paper; in particular sections 3 and 4 as well as appendix B.
-/// https://www.cs.princeton.edu/courses/archive/fall03/cs528/handouts/a%20fast%20algorithm%20for%20finding.pdf
+/// <https://www.cs.princeton.edu/courses/archive/fall03/cs528/handouts/a%20fast%20algorithm%20for%20finding.pdf>
 ///
 /// This code is very subtle. The Lengauer-Tarjan algorithm is incredibly deep to begin with. The
 /// goal of this code is to follow the code in the paper, however our implementation must deviate
@@ -69,7 +69,7 @@ impl<G: Graph> BlockData<G> {
 /// Finally, once the algorithm gives us immediate dominators, we implement dominance tests by
 /// walking the dominator tree and computing pre and post numbers. We then use the range inclusion
 /// check trick that was first discovered by Paul F. Dietz in 1982 in "Maintaining order in a linked
-/// list" (see http://dl.acm.org/citation.cfm?id=802184).
+/// list" (see <http://dl.acm.org/citation.cfm?id=802184>).
 pub struct LengauerTarjan<'a, G: Graph> {
     graph: &'a G,
     data: IndexMap<BlockData<G>, G::Node>,
@@ -584,7 +584,7 @@ impl<G: Graph> Dominators<G> {
         }
     }
 
-    /// Same as [`for_all_strict_dominators_of`], but also includes `to` itself.
+    /// Same as [`for_all_strict_dominators_of`](Self::for_all_strict_dominators_of), but also includes `to` itself.
     pub fn for_all_dominators_of<F>(&self, to: G::Node, mut f: F)
     where
         F: FnMut(G::Node),

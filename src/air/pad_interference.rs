@@ -9,7 +9,7 @@ use super::{code::Code, insertion_set::InsertionSet, inst::Inst, opcode::Opcode,
 /// Air thinks that it does. It can also go wrong by having liveness incorrectly report that something is
 /// dead when it isn't.
 ///
-/// See https://bugs.webkit.org/show_bug.cgi?id=163548#c2 for more info.
+/// See <https://bugs.webkit.org/show_bug.cgi?id=163548#c2> for more info.
 pub fn pad_interference(code: &mut Code<'_>) {
     let mut insertion_set = InsertionSet::new();
 

@@ -12,7 +12,7 @@ use super::{
     arg::{Arg, ArgRole},
     code::Code,
     custom::{CCallCustom, ColdCCallCustom, EntrySwitchCustom, PatchCustom, ShuffleCustom},
-    form_table::{decode_form_bank, decode_form_role, decode_form_width},
+    form_table::{decode_form_bank, decode_form_role, decode_form_width, is_x86},
     kind::Kind,
     opcode::Opcode,
     opcode_generated::G_FORM_TABLE,
@@ -26,6 +26,12 @@ pub struct Inst {
     pub origin: ValueId,
     pub kind: Kind,
     pub index: usize,
+}
+
+impl std::fmt::Debug for Inst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl Default for Inst {
@@ -58,7 +64,7 @@ impl Inst {
         }
         let mut result = false;
 
-        self.for_each_arg(code, |_arg, role, _, _| {
+        self.for_each_arg(code, |_, _arg, role, _, _| {
             result |= role.is_late_use() || role.is_late_def();
         });
 
@@ -71,7 +77,7 @@ impl Inst {
         }
         let mut result = false;
 
-        self.for_each_arg(code, |_arg, role, _, _| {
+        self.for_each_arg(code, |_, _arg, role, _, _| {
             result |= role.is_early_def();
         });
 
@@ -104,7 +110,7 @@ impl Inst {
 
     pub fn for_each_arg_simple_mut<F>(&mut self, mut f: F)
     where
-        F: FnMut(&mut Arg, ArgRole, Bank, Width),
+        F: FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     {
         let num_operands = self.args.len();
 
@@ -114,6 +120,7 @@ impl Inst {
         for i in 0..num_operands {
             let form = form_base[i];
             f(
+                i,
                 &mut self.args[i],
                 decode_form_role(form),
                 decode_form_bank(form),
@@ -133,7 +140,7 @@ impl Inst {
 
     pub fn for_each_arg<F>(&self, code: &Code<'_>, f: F)
     where
-        F: FnMut(&Arg, ArgRole, Bank, Width),
+        F: FnMut(usize, &Arg, ArgRole, Bank, Width),
     {
         match self.kind.opcode {
             Opcode::EntrySwitch => EntrySwitchCustom::for_each_arg(code, self, f),
@@ -153,7 +160,7 @@ impl Inst {
     pub fn for_each_arg_mut(
         &mut self,
         code: &mut Code<'_>,
-        f: impl FnMut(&mut Arg, ArgRole, Bank, Width),
+        f: impl FnMut(usize, &mut Arg, ArgRole, Bank, Width),
     ) {
         match self.kind.opcode {
             Opcode::EntrySwitch => EntrySwitchCustom::for_each_arg_mut(code, self, f),
@@ -171,7 +178,7 @@ impl Inst {
     }
 
     pub fn for_each_tmp(&self, code: &Code<'_>, mut f: impl FnMut(Tmp, ArgRole, Bank, Width)) {
-        self.for_each_arg(code, |arg, role, bank, width| {
+        self.for_each_arg(code, |_, arg, role, bank, width| {
             arg.for_each_tmp(role, bank, width, |tmp, role, bank, width| {
                 f(tmp, role, bank, width)
             })
@@ -183,7 +190,7 @@ impl Inst {
         code: &mut Code<'_>,
         mut f: impl FnMut(&mut Tmp, ArgRole, Bank, Width),
     ) {
-        self.for_each_arg_mut(code, |arg, role, bank, width| {
+        self.for_each_arg_mut(code, |_, arg, role, bank, width| {
             arg.for_each_tmp_mut(role, bank, width, |tmp, role, bank, width| {
                 f(tmp, role, bank, width)
             })
@@ -191,15 +198,15 @@ impl Inst {
     }
 
     pub fn for_each_tmp_fast(&self, code: &Code<'_>, mut f: impl FnMut(Tmp)) {
-        self.for_each_arg(code, |arg, _, _, _| arg.for_each_tmp_fast(|tmp| f(tmp)))
+        self.for_each_arg(code, |_, arg, _, _, _| arg.for_each_tmp_fast(|tmp| f(tmp)))
     }
 
     pub fn for_each_tmp_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp)) {
-        self.for_each_arg_mut(code, |arg, _, _, _| arg.for_each_tmp_fast_mut(|tmp| f(tmp)))
+        self.for_each_arg_mut(code, |_, arg, _, _, _| arg.for_each_tmp_fast_mut(|tmp| f(tmp)))
     }
 
     pub fn for_each_reg(&self, code: &Code<'_>, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
-        self.for_each_arg(code, |arg, role, bank, width| {
+        self.for_each_arg(code, |_, arg, role, bank, width| {
             arg.for_each_reg(role, bank, width, |reg, role, bank, width| {
                 f(reg, role, bank, width)
             })
@@ -211,7 +218,7 @@ impl Inst {
         code: &mut Code<'_>,
         mut f: impl FnMut(&mut Reg, ArgRole, Bank, Width),
     ) {
-        self.for_each_arg_mut(code, |arg, role, bank, width| {
+        self.for_each_arg_mut(code, |_, arg, role, bank, width| {
             arg.for_each_reg_mut(role, bank, width, |reg, role, bank, width| {
                 f(reg, role, bank, width)
             })
@@ -219,11 +226,11 @@ impl Inst {
     }
 
     pub fn for_each_reg_fast(&self, code: &Code<'_>, mut f: impl FnMut(Reg)) {
-        self.for_each_arg(code, |arg, _, _, _| arg.for_each_reg_fast(|reg| f(reg)))
+        self.for_each_arg(code, |_, arg, _, _, _| arg.for_each_reg_fast(|reg| f(reg)))
     }
 
     pub fn for_each_reg_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg)) {
-        self.for_each_arg_mut(code, |arg, _, _, _| arg.for_each_reg_fast_mut(|reg| f(reg)))
+        self.for_each_arg_mut(code, |_, arg, _, _, _| arg.for_each_reg_fast_mut(|reg| f(reg)))
     }
 
     pub fn for_each_stack_slot(
@@ -231,7 +238,7 @@ impl Inst {
         code: &Code<'_>,
         mut f: impl FnMut(StackSlotId, ArgRole, Bank, Width),
     ) {
-        self.for_each_arg(code, |arg, role, bank, width| {
+        self.for_each_arg(code, |_, arg, role, bank, width| {
             arg.for_each_stack_slot(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
             })
@@ -243,7 +250,7 @@ impl Inst {
         code: &mut Code<'_>,
         mut f: impl FnMut(&mut StackSlotId, ArgRole, Bank, Width),
     ) {
-        self.for_each_arg_mut(code, |arg, role, bank, width| {
+        self.for_each_arg_mut(code, |_, arg, role, bank, width| {
             arg.for_each_stack_slot_mut(role, bank, width, |stack_slot, role, bank, width| {
                 f(stack_slot, role, bank, width)
             })
@@ -251,7 +258,7 @@ impl Inst {
     }
 
     pub fn for_each_stack_slot_fast(&self, code: &Code<'_>, mut f: impl FnMut(StackSlotId)) {
-        self.for_each_arg(code, |arg, _, _, _| {
+        self.for_each_arg(code, |_, arg, _, _, _| {
             arg.for_each_stack_slot_fast(|stack_slot| f(stack_slot))
         })
     }
@@ -261,9 +268,55 @@ impl Inst {
         code: &mut Code<'_>,
         mut f: impl FnMut(&mut StackSlotId),
     ) {
-        self.for_each_arg_mut(code, |arg, _, _, _| {
+        self.for_each_arg_mut(code, |_, arg, _, _, _| {
             arg.for_each_stack_slot_fast_mut(|stack_slot| f(stack_slot))
         })
+    }
+
+    pub fn for_each_def_stack(
+        prev_inst: Option<&Self>,
+        next_inst: Option<&Self>,
+        code: &Code,
+        mut functor: impl FnMut(StackSlotId, ArgRole, Bank, Width),
+    ) {
+        if let Some(prev_inst) = prev_inst {
+            prev_inst.for_each_stack_slot(code, |tmp, role, bank, width| {
+                if role.is_late_def() {
+                    functor(tmp, role, bank, width)
+                }
+            });
+        }
+
+        if let Some(next_inst) = next_inst {
+            next_inst.for_each_stack_slot(code, |tmp, role, bank, width| {
+                if role.is_early_def() {
+                    functor(tmp, role, bank, width)
+                }
+            });
+        }
+    }
+
+    pub fn for_each_def_arg(
+        prev_inst: Option<&Self>,
+        next_inst: Option<&Self>,
+        code: &Code,
+        mut functor: impl FnMut(&Arg, ArgRole, Bank, Width),
+    ) {
+        if let Some(prev_inst) = prev_inst {
+            prev_inst.for_each_arg(code, |_, arg, role, bank, width| {
+                if role.is_late_def() {
+                    functor(arg, role, bank, width)
+                }
+            });
+        }
+
+        if let Some(next_inst) = next_inst {
+            next_inst.for_each_arg(code, |_, arg, role, bank, width| {
+                if role.is_early_def() {
+                    functor(arg, role, bank, width)
+                }
+            });
+        }
     }
 
     pub fn for_each_def(
@@ -319,6 +372,69 @@ impl Inst {
             next_inst.extra_early_clobbered_regs(code).to_register_set().for_each_with_width_and_preserved(report_reg);
         }
     }
+
+    pub fn should_try_aliasing_def(&self, code: &Code) -> Option<usize> {
+        if !is_x86() {
+            return None;
+        }
+
+        match self.kind.opcode {
+            Opcode::Add32
+            | Opcode::Add64
+            | Opcode::And32
+            | Opcode::And64
+            | Opcode::Mul32 
+            | Opcode::Mul64
+            | Opcode::Or32
+            | Opcode::Or64
+            | Opcode::Xor32 
+            | Opcode::Xor64
+            | Opcode::AndFloat
+            | Opcode::AndDouble
+            | Opcode::OrFloat
+            | Opcode::OrDouble
+            | Opcode::XorFloat
+            | Opcode::XorDouble => {
+                if self.args.len() == 3 {
+                    return Some(2);
+                }
+
+                return None; 
+            }
+
+            Opcode::BranchAdd32
+            | Opcode::BranchAdd64 => {
+                if self.args.len() == 4 {
+                    return Some(3);
+                }
+            }
+
+            Opcode::MoveConditionally32
+            | Opcode::MoveConditionally64
+            | Opcode::MoveConditionallyTest32
+            | Opcode::MoveConditionallyTest64
+            | Opcode::MoveConditionallyFloat
+            | Opcode::MoveConditionallyDouble
+            | Opcode::MoveDoubleConditionally32
+            | Opcode::MoveDoubleConditionally64
+            | Opcode::MoveDoubleConditionallyTest32
+            | Opcode::MoveDoubleConditionallyTest64
+            | Opcode::MoveDoubleConditionallyFloat
+             => {
+                if self.args.len() == 6 {
+                    return Some(5);
+                }
+            }
+
+            Opcode::Patch => {
+                return None;
+            }
+
+            _ => ()
+        }
+
+        None
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -362,9 +478,3 @@ impl std::fmt::Display for Inst {
     }
 }
 
-impl std::fmt::Debug for Inst {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)?;
-        Ok(())
-    }
-}

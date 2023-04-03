@@ -24,9 +24,9 @@ pub fn report_used_registers(code: &mut Code) {
             // it has only late defs and those late defs are to registers that are dead right now.
             if !inst.has_non_arg_effects(code) {
                 let mut can_delete = true;
-                println!("{}: {}", inst_index, inst);
-                inst.for_each_arg(code, |arg, role, _, _| {
-                    println!("  {} {:?}", arg, role);
+                
+                inst.for_each_arg(code, |_, arg, role, _, _| {
+                    
                     if role.is_early_def() {
                         can_delete = false;
                         return;

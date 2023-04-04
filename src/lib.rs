@@ -45,6 +45,9 @@ pub mod variable;
 pub mod variable_liveness;
 pub mod width;
 
+#[cfg(test)]
+pub mod tests;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TriState {
     False,
@@ -214,7 +217,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             estimate_static_execution_counts: true,
-            opt_level: OptLevel::O1,
+            opt_level: OptLevel::O2,
             maximum_tmps_for_graph_coloring: 60000,
             linear_scan_spill_everything: false,
             air_force_briggs_allocator: false,
@@ -239,3 +242,5 @@ pub use opcode::*;
 pub use procedure::*;
 pub use value::*;
 pub use typ::*;
+pub use width::*;
+pub use bank::*;

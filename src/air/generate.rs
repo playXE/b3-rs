@@ -68,7 +68,6 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // If we coalesced moves then we can unbreak critical edges. This is the main reason for this
         // phase.
         simplify_cfg(code);
-        println!("{}", code);
         code.reset_reachability();
 
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce

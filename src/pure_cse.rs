@@ -7,13 +7,13 @@ use crate::{
     dominators::Dominators,
     opcode::Opcode,
     procedure::Procedure,
-    value::{Value, ValueId},
+    value::{Value, ValueId}, ValueKey,
 };
 
 //' This is a reusable utility for doing pure CSE. You can use it to do pure CSE on a program by just
 /// proceeding in order and calling process().
 pub struct PureCSE {
-    map: HashMap<ValueId, TinyVec<[ValueId; 1]>>,
+    map: HashMap<ValueKey, TinyVec<[ValueId; 1]>>,
 }
 
 impl PureCSE {
@@ -29,7 +29,7 @@ impl PureCSE {
 
     pub fn find_match(
         &self,
-        key: Option<ValueId>,
+        key: Option<ValueKey>,
         proc: &Procedure,
         block: BlockId,
         dominators: &Dominators<Procedure>,
@@ -69,9 +69,13 @@ impl PureCSE {
             return false;
         }
 
-        self.map.insert(value, TinyVec::new());
+        let key = if let Some(key) = value.key(proc) {
+            key 
+        } else {
+            return false;
+        };
 
-        let matches = match self.map.entry(value) {
+        let matches = match self.map.entry(key) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(TinyVec::new()),
         };

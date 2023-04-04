@@ -65,8 +65,8 @@ impl UseCounts {
                     }
                 });
 
-                if inst.kind.opcode == Opcode::Move
-                    || inst.kind.opcode == Opcode::Move32
+                if (inst.kind.opcode == Opcode::Move
+                    || inst.kind.opcode == Opcode::Move32)
                         && inst.args[0].is_some_imm()
                         && inst.args[1].is_tmp()
                 {

@@ -2477,8 +2477,6 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     });
             }
         }
-
-        println!("{}", allocator.allocator.code);
     }
 }
 

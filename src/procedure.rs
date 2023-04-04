@@ -2,7 +2,7 @@ use std::{ops::Range, rc::Rc};
 
 use macroassembler::assembler::TargetMacroAssembler;
 
-use crate::Options;
+use crate::{Options, Frequency};
 use crate::{
     air::{
         special::{Special, SpecialId},
@@ -85,6 +85,11 @@ impl Procedure {
             options,
             data_sections: vec![],
         }
+    }
+
+    /// Add a new successor to a block.
+    pub fn add_successor(&mut self, block: BlockId, successor: BlockId) {
+        self.blocks[block.0].successor_list.push((successor, Frequency::Normal));
     }
 
     pub fn num_entrypoints(&self) -> usize {
@@ -575,10 +580,12 @@ impl Procedure {
         (index, ptr)
     }
 
+    /// Append constrained value to stackmap
     pub fn stackmap_append_constrained(&mut self, stackmap: ValueId, value: ConstrainedValue) {
         self.stackmap_append(stackmap, value.value, value.rep);
     }
 
+    /// Append value with specified representation to stackmap
     pub fn stackmap_append(&mut self, stackmap: ValueId, value: ValueId, rep: ValueRep) {
         if rep.kind() == ValueRepKind::ColdAny {
             self.value_mut(stackmap).children.push(value);
@@ -597,10 +604,12 @@ impl Procedure {
         self.value_mut(stackmap_id).children.push(value);
     }
 
+    /// Append value with some register representation to stackmap
     pub fn stackmap_append_some_register(&mut self, stackmap: ValueId, value: ValueId) {
         self.stackmap_append(stackmap, value, ValueRep::new(ValueRepKind::SomeRegister));
-    }
+    }   
 
+    /// Append value with some register with clobber representation to stackmap
     pub fn stackmap_append_some_register_with_clobber(
         &mut self,
         stackmap: ValueId,
@@ -613,6 +622,7 @@ impl Procedure {
         );
     }
 
+    /// Set constrained child of stackmap
     pub fn stackmap_set_constrained_child(
         &mut self,
         stackmap: ValueId,
@@ -623,6 +633,7 @@ impl Procedure {
         self.value_mut(stackmap).set_constraint(index, value.rep);
     }
 
+    /// Add registers to early clobber set of stackmap
     pub fn stackmap_clobber_early(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
         self.value_mut(stackmap)
             .stackmap_mut()
@@ -630,6 +641,7 @@ impl Procedure {
             .clobber_early(set);
     }
 
+    /// Add registers to late clobber set of stackmap
     pub fn stackmap_clobber_late(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
         self.value_mut(stackmap)
             .stackmap_mut()
@@ -637,10 +649,13 @@ impl Procedure {
             .clobber_late(set);
     }
 
+    /// Clobber registers in both early and late clobber sets of stackmap
     pub fn stackmap_clobber(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
         self.stackmap_clobber_early(stackmap, set);
         self.stackmap_clobber_late(stackmap, set);
-    }
+    }   
+
+    /// Set result constraints of patchpoint
     pub fn patchpoint_set_result_constraints(&mut self, stackmap: ValueId, constraints: ValueRep) {
         self.value_mut(stackmap)
             .patchpoint_mut()
@@ -648,6 +663,7 @@ impl Procedure {
             .result_constraints[0] = constraints;
     }
 
+    /// Get result constraints of patchpoint
     pub fn patchpoint_result_constraints(&self, stackmap: ValueId) -> ValueRep {
         self.value(stackmap)
             .patchpoint()
@@ -655,6 +671,7 @@ impl Procedure {
             .result_constraints[0]
     }
 
+    /// Set generator for stackmap
     pub fn stackmap_set_generator(
         &mut self,
         stackmap: ValueId,
@@ -663,10 +680,12 @@ impl Procedure {
         self.value_mut(stackmap).stackmap_mut().unwrap().generator = Some(generator);
     }
 
+    /// Get effects of patchpoint
     pub fn patchpoint_effects_mut(&mut self, patchpoint: ValueId) -> &mut Effects {
         &mut self.value_mut(patchpoint).patchpoint_mut().unwrap().effects
     }
 
+    /// Get effects of patchpoint
     pub fn patchpoint_effects(&self, patchpoint: ValueId) -> &Effects {
         &self.value(patchpoint).patchpoint().unwrap().effects
     }

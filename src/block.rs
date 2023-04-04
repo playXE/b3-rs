@@ -421,6 +421,7 @@ pub fn is_block_dead(block: &BasicBlock) -> bool {
     block.predecessor_list.is_empty()
 }
 
+/// A builder for basic blocks. 
 pub struct BasicBlockBuilder<'a> {
     pub block: BlockId,
     pub procedure: &'a mut Procedure,
@@ -435,6 +436,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.procedure.add_to_block(self.block, value);
     }
 
+    /// Get stack slot base pointer. 
     pub fn slot_base(&mut self, slot: StackSlotId) -> ValueId {
         let x = self.procedure.add(Value::new(
             Opcode::SlotBase,
@@ -447,18 +449,21 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Add a new 32-bit integer constant.
     pub fn const32(&mut self, val: i32) -> ValueId {
         let x = self.procedure.add_int_constant(Type::Int32, val);
         self.add_value(x);
         x
     }
 
+    /// Add a new 64-bit integer constant.
     pub fn const64(&mut self, val: i64) -> ValueId {
         let x = self.procedure.add_int_constant(Type::Int64, val);
         self.add_value(x);
         x
-    }
+    }   
 
+    /// Add a new f32 constant.
     pub fn const_float(&mut self, val: f32) -> ValueId {
         let x = self
             .procedure
@@ -467,6 +472,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Add a new f64 constant.
     pub fn const_double(&mut self, val: f64) -> ValueId {
         let x = self
             .procedure
@@ -475,17 +481,23 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Access to a variable. It emits `Get` opcode but later it is lowered
+    /// to SSA form. 
     pub fn var_get(&mut self, var: VariableId) -> ValueId {
         let x = self.procedure.add_variable_get(var);
         self.add_value(x);
         x
     }
 
+    //// Set a variable. It emits `Set` opcode but later it is lowered
+    /// to SSA form.
     pub fn var_set(&mut self, var: VariableId, value: ValueId) {
         let x = self.procedure.add_variable_set(var, value);
         self.add_value(x);
     }
 
+
+    /// Same as [slot_base](BasicBlockBuilder::slot_base). It is here only for convenience.
     pub fn stack_addr(&mut self, stack_slot: StackSlotId) -> ValueId {
         let value = Value::new(
             Opcode::SlotBase,
@@ -500,6 +512,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Load 8-bit value from memory and zero-extend it to 32-bit.
     pub fn load8z(
         &mut self,
         ptr: ValueId,
@@ -524,6 +537,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Load 8-bit value from memory and sign-extend it to 32-bit.
     pub fn load8s(
         &mut self,
         ptr: ValueId,
@@ -548,6 +562,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Load 16-bit value from memory and zero-extend it to 32-bit.
     pub fn load16z(
         &mut self,
         ptr: ValueId,
@@ -571,7 +586,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
         x
     }
-
+    /// Load 16-bit value from memory and sign-extend it to 32-bit.
     pub fn load16s(
         &mut self,
         ptr: ValueId,
@@ -596,6 +611,14 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Load value from memory.
+    /// 
+    /// # Parameters
+    /// - `ty` - type of the value to load
+    /// - `ptr` - pointer to the memory location
+    /// - `offset` - offset from the pointer
+    /// - `range` - range of the memory location that is accessed by this load
+    /// - `fence_range` - range for atomic fence (TODO: document)
     pub fn load(
         &mut self,
         ty: Type,
@@ -621,6 +644,15 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Store value to memory.
+    /// 
+    /// # Parameters
+    /// 
+    /// - `value` - value to store
+    /// - `ptr` - pointer to the memory location
+    /// - `offset` - offset from the pointer
+    /// - `range` - range of the memory location that is accessed by this store
+    /// - `fence_range` - range for atomic fence (TODO: document)
     pub fn store(
         &mut self,
         value: ValueId,
@@ -645,6 +677,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
     }
 
+    /// Store 8-bit value to memory.
     pub fn store8(
         &mut self,
         value: ValueId,
@@ -670,6 +703,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
     }
 
+    /// Store 16-bit value to memory.
     pub fn store16(
         &mut self,
         value: ValueId,
@@ -695,6 +729,8 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
     }
 
+    /// Create binary operation. This asserts that the types of the operands are the same and 
+    /// `op` is a binary operation.
     pub fn binary(&mut self, op: Opcode, lhs: ValueId, rhs: ValueId) -> ValueId {
         assert!(op.is_binary());
         assert!(self.procedure.value(lhs).typ() == self.procedure.value(rhs).typ());
@@ -706,6 +742,8 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Return absolute value of a floating point value. The type of `value` 
+    /// must be `Type::Float` or `Type::Double`.
     pub fn abs(&mut self, value: ValueId) -> ValueId {
         assert!(self.procedure.value(value).typ().is_float());
         let value = Value::new(
@@ -719,8 +757,10 @@ impl<'a> BasicBlockBuilder<'a> {
         let x = self.procedure.add(value);
         self.add_value(x);
         x
-    }
+    }   
 
+    /// Return ceiling of a floating point value. The type of `value`
+    /// must be `Type::Float` or `Type::Double`.
     pub fn ceil(&mut self, value: ValueId) -> ValueId {
         assert!(self.procedure.value(value).typ().is_float());
         let value = Value::new(
@@ -736,6 +776,8 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Return floor of a floating point value. The type of `value`
+    /// must be `Type::Float` or `Type::Double`.
     pub fn floor(&mut self, value: ValueId) -> ValueId {
         assert!(self.procedure.value(value).typ().is_float());
         let value = Value::new(
@@ -751,6 +793,8 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Return square root of a floating point value. The type of `value`
+    /// must be `Type::Float` or `Type::Double`.
     pub fn sqrt(&mut self, value: ValueId) -> ValueId {
         assert!(self.procedure.value(value).typ().is_float());
         let value = Value::new(
@@ -766,6 +810,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Bitwise cast `src` to `typ`. 
     pub fn bitwise_cast(&mut self, typ: Type, src: ValueId) -> ValueId {
         assert!(typ.is_int() || typ.is_float());
         assert!(
@@ -784,7 +829,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
-    /// Takes and returns Int32
+    /// Sign extends 8-bit value to 32-bit value.
+    /// 
+    /// Takes and returns Int32 value.
     pub fn sext8(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -800,7 +847,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
-    /// Takes and returns Int32
+    /// Sign extends 16-bit value to 32-bit value.
+    /// 
+    /// Takes and returns Int32 value.
     pub fn sext16(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -814,8 +863,11 @@ impl<'a> BasicBlockBuilder<'a> {
         let x = self.procedure.add(value);
         self.add_value(x);
         x
-    }
+    }   
 
+    /// Sign extends 8-bit value to 64-bit value.
+    /// 
+    /// Takes Int32 value and returns Int64 value.
     pub fn sext8to64(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -831,6 +883,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Sign extends 16-bit value to 64-bit value.
+    /// 
+    /// Takes Int32 value and returns Int64 value.
     pub fn sext16to64(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -846,6 +901,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Sign extends 32-bit value to 64-bit value.
+    /// 
+    /// Takes Int32 value and returns Int64 value.
     pub fn sext32(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -861,6 +919,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Zero extends 32-bit value to 32-bit value.
+    /// 
+    /// Takes Int32 value and returns Int64 value.
     pub fn zext32(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Int32);
         let value = Value::new(
@@ -876,6 +937,9 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Truncates floating point value to integer value.
+    /// 
+    /// Takes Double or Float value and returns Int32 or Int64 value.
     pub fn trunc(&mut self, src: ValueId) -> ValueId {
         let dest_ty = match self.procedure.value(src).typ() {
             Type::Int64 => Type::Int32,
@@ -896,6 +960,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts integer value to floating point value.
     pub fn i2d(&mut self, src: ValueId) -> ValueId {
         assert!(
             self.procedure.value(src).typ() == Type::Int32
@@ -914,6 +979,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts integer value to floating point value.
     pub fn i2f(&mut self, src: ValueId) -> ValueId {
         assert!(
             self.procedure.value(src).typ() == Type::Int32
@@ -932,6 +998,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts floating point value to integer value.
     pub fn f2i(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Float);
         let value = Value::new(
@@ -947,6 +1014,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts double precision floating point value to integer value.
     pub fn d2i(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Double);
         let value = Value::new(
@@ -962,6 +1030,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts float to double.
     pub fn float_to_double(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Float);
         let value = Value::new(
@@ -977,6 +1046,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Converts double to float.
     pub fn double_to_float(&mut self, src: ValueId) -> ValueId {
         assert!(self.procedure.value(src).typ() == Type::Double);
         let value = Value::new(
@@ -1016,6 +1086,10 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
+    /// Jump to a block.
+    /// 
+    /// `target` is the block to jump to. It is allowed to be `None`, 
+    /// you can patch the jump later with invoking [`Procedure::add_successor`](super::Procedure::add_successor).
     pub fn jump(&mut self, target: Option<BlockId>) {
         let value = Value::new(
             Opcode::Jump,
@@ -1042,6 +1116,13 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(id);
     }
 
+
+    /// Conditional branch on `on` value.
+    /// 
+    /// If `on` is non-zero, jump to `taken` block, otherwise jump to `not_taken` block.
+    /// 
+    /// `not_taken` is a tuple of block id and frequency. The frequency is used for branch prediction and block 
+    /// order optimization.
     pub fn branch(&mut self, on: ValueId, taken: BlockId, not_taken: (BlockId, Frequency)) {
         let value = Value::new(
             Opcode::Branch,
@@ -1074,6 +1155,9 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(value);
     }
 
+    /// Return from the current function.
+    /// 
+    /// If `None` is passed this is a void return, otherwise the value is returned.
     pub fn return_(&mut self, value: Option<ValueId>) {
         let args = if value.is_none() {
             vec![]
@@ -1093,6 +1177,9 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(value);
     }
 
+    /// Create patchpoint that returns `typ`.
+    /// 
+    /// Fill in the patchpoint using `stackmap_*` and `patchpoint_*` methods on [`Procedure`](super::Procedure).
     pub fn patchpoint(&mut self, typ: Type) -> ValueId {
         let value = Value::new(
             Opcode::Patchpoint,
@@ -1125,6 +1212,10 @@ impl<'a> BasicBlockBuilder<'a> {
         value
     }
 
+
+    /// Exit check. Works for T = Int32 and Int64.
+    /// 
+    /// Fill in the stackmap using `stackmap_*` methods on [`Procedure`](super::Procedure).
     pub fn check(&mut self, predicate: ValueId) -> ValueId {
         let value = Value::new(
             Opcode::Check,
@@ -1149,6 +1240,7 @@ impl<'a> BasicBlockBuilder<'a> {
         value
     }
 
+    /// Argument access. `Reg` is register where the argument is passed, `Type` is the type of the argument.
     pub fn argument(&mut self, reg: Reg, typ: Type) -> ValueId {
         if reg.is_gpr() {
             assert!(typ.is_int());
@@ -1169,8 +1261,9 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(value);
 
         value
-    }
+    }   
 
+    /// Identity value.
     pub fn identity(&mut self, value: ValueId) -> ValueId {
         let value = Value::new(
             Opcode::Identity,

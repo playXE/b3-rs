@@ -23,18 +23,20 @@ use super::{
     fix_obvious_spills::fix_obvious_spills, form_table::is_return,
     generation_context::GenerationContext, lower_after_regalloc::lower_after_regalloc,
     lower_entry_switch::lower_entry_switch, lower_macros::lower_macros,
-    lower_stack_args::lower_stack_args, opcode::Opcode, simplify_cfg::simplify_cfg, 
+    lower_stack_args::lower_stack_args, opcode::Opcode, simplify_cfg::simplify_cfg,
 };
 
 pub fn prepare_for_generation(code: &mut Code<'_>) {
     phase_scope("air::prepare_for_generation", || {
         code.reset_reachability();
         simplify_cfg(code);
+        // Lower macros before register allocation. Some examples are `CCall`s.
         lower_macros(code);
         eliminate_dead_code(code);
-        
+
         let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
-        if code.proc.options.air_force_linear_scan_allocator || code.proc.options.opt_level <= OptLevel::O1
+        if code.proc.options.air_force_linear_scan_allocator
+            || code.proc.options.opt_level <= OptLevel::O1
             || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring
         {
             // When we're compiling quickly, we do register and stack allocation in one linear scan
@@ -54,23 +56,23 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
             fix_obvious_spills(code);
 
             lower_after_regalloc(code);
-
             // This does first-fit allocation of stack slots using an interference graph plus a
             // bunch of other optimizations.
             allocate_stack_by_graph_coloring(code);
-            
         }
 
         // This turns all Stack and CallArg Args into Addr args that use the frame pointer.
         lower_stack_args(code);
         lower_entry_switch(code);
-        eliminate_dead_code(code);
-        //report_used_registers(code);
+        //eliminate_dead_code(code);
         // If we coalesced moves then we can unbreak critical edges. This is the main reason for this
         // phase.
         simplify_cfg(code);
+        println!("{}", code);
         code.reset_reachability();
 
+        // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
+        // best order for blocks but aids in optimizations.
         optimize_block_order(code);
     });
 }
@@ -79,8 +81,7 @@ fn generate_with_already_allocated_registers<'a>(
     code: &'a mut Code<'a>,
     jit: &mut TargetMacroAssembler,
 ) {
-    // println!("{}", code);
-    //phase_scope("air::generate", || {
+    
     let mut context = GenerationContext {
         late_paths: vec![],
         block_labels: IndexMap::with_capacity(code.blocks.len()),

@@ -145,6 +145,9 @@ impl<'a> LowerToAir<'a> {
         }
 
         for value in (0..self.code.proc.values.size()).map(ValueId) {
+            if self.code.proc.values.at(value).is_none() {
+                continue;
+            }
             match self.code.proc.value(value).kind.opcode() {
                 Opcode::Phi => {
                     let temp = self.code.new_tmp(self.code.proc.value(value).result_bank());

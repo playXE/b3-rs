@@ -14,18 +14,35 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     proc.dominators_or_compute();
     
     if proc.options.opt_level >= OptLevel::O2 {
+        // TODO: Should we run `fix_ssa` after or before `reduce_strength`? 
+        // Seems like running it before is better since `reduce_strength` can 
+        // work out better because it knows how to work with Phi's
+
+        // Converts code to SSA form.
         fix_ssa(proc);
+        // Reduces strength until fixpoint. 
         reduce_strength(proc);
-   //     eliminate_dead_code(proc);
     } else if proc.options.opt_level >= OptLevel::O1 {
-        //reduce_strength(proc);
+        // Reduces strength in one pass. 
+        reduce_strength(proc);
     }
 
     legalize_memory_offsets(proc);
+    // Move constants to places where program might benefit from them
+    // Plus eliminates `ConstFloat` and `ConstDouble` opcodes
+    // replacing them with loads from data section.
     move_constants(proc);
     legalize_memory_offsets(proc);
-    eliminate_dead_code(proc);
-    estimate_static_execution_counts(proc);
+    //eliminate_dead_code(proc);
+
+    if proc.options.estimate_static_execution_counts {
+        // Estimate frequency of each basic block based on loop analysis.
+        // 
+        // Without this pass the code generator won't generate optimal block ordering.
+        // But sometimes user provides their own frequency estimates, so we don't want to
+        // overwrite them.
+        estimate_static_execution_counts(proc);
+    }
     
     let code = lower_to_air(proc);
     code

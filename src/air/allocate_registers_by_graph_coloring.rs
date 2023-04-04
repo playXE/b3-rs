@@ -82,12 +82,13 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         let mut out = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
+            .append(true)
             .open("interference_graph.dot")
             .unwrap();
 
         let mut tmps_with_interferences = HashSet::new();
 
-        out.write_all("graph InterferenceGraph { \n".as_bytes())
+        out.write_all(format!("graph InterferenceGraph{} {{ \n", BANK).as_bytes())
             .unwrap();
 
         self.interference_edges.for_each(|u, v| {
@@ -1244,6 +1245,8 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             self.active_moves.len() >= self.coalescing_candidates.len(),
             "The activeMove set should be big enough for the quick operations of BitVector."
         );
+
+        self.dump_interference_graph_in_dot();
         self.make_worklist();
 
         loop {
@@ -1529,6 +1532,9 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 }
 
 struct ColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+    #[cfg(feature = "graph-coloring-irc")]
+    allocator: IRC<'a, 'b, InterferenceSet, BANK>,
+    #[cfg(feature = "graph-coloring-briggs")]
     allocator: Briggs<'a, 'b, InterferenceSet, BANK>,
 }
 
@@ -1555,6 +1561,18 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         };
 
         let mut this = Self {
+            #[cfg(feature = "graph-coloring-irc")]
+            allocator: IRC::new(
+                code,
+                &regs_in_priority_order,
+                last_precolored_register_index as _,
+                tmp_array_size,
+                unspillable_tmps,
+                use_counts,
+                graph,
+            ),
+
+            #[cfg(feature = "graph-coloring-briggs")]
             allocator: Briggs::new(
                 code,
                 &regs_in_priority_order,
@@ -2016,7 +2034,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
         while !done {
             num_iterations += 1;
-            println!("num_iterations: {}", num_iterations);
+
             if code.num_tmps(BANK) < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
                 let graph = SmallInterferenceGraph::new(InterferenceBitVector::new());
                 let cloned = unspillable_tmps.clone();
@@ -2227,10 +2245,11 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         let code_ptr = allocator.allocator.base.code as *mut Code;
         for &tmp in allocator.allocator.spilled_tmps.iter() {
             let tmp = if BANK == Bank::GP {
-                Tmp::gp_tmp_for_index(tmp as _)
+                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(tmp as usize)
             } else {
-                Tmp::fp_tmp_for_index(tmp as _)
+                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp as usize)
             };
+            println!("spilling {}", tmp);
 
             let index = if BANK == Bank::GP {
                 AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
@@ -2265,7 +2284,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
                 inst.for_each_arg_mut(
                     unsafe { &mut *code_ptr },
-                    |arg_index, arg, role, arg_bank, width| {
+                    |arg_index, arg, role, arg_bank, _width| {
                         if !arg.is_tmp() {
                             return;
                         }
@@ -2310,8 +2329,9 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                                                 .is_spill()
                                         {
                                             needs_scratch_if_spilled_in_place = true;
+                                        } else {
+                                            return;
                                         }
-                                        return;
                                     }
 
                                     _ => return,
@@ -2393,7 +2413,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     }
 
                     if let Some(stack_slot) = stackslots.get(tmp).copied() {
-                        let spill_width = Width::W64;
+                        let _spill_width = Width::W64;
 
                         let mov = if BANK == Bank::GP {
                             Opcode::Move
@@ -2457,6 +2477,8 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     });
             }
         }
+
+        println!("{}", allocator.allocator.code);
     }
 }
 

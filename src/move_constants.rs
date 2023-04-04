@@ -63,6 +63,9 @@ impl<'a> MoveConstants<'a> {
         }
     }
 
+    /// FIXME: This thing seems to be broken? It makes produced code segfault. I can't figure out why
+    /// as it segfaults only in large IR inputs and debugging those is painful.
+    #[allow(dead_code)]
     fn hoist_constants(&mut self, filter: impl Fn(&Value) -> bool) {
         let dominators = self.proc.dominators().clone();
         let mut value_for_constant = HashMap::new();
@@ -317,6 +320,9 @@ impl<'a> MoveConstants<'a> {
         let mut const_table = HashMap::new();
 
         for value in (0..self.proc.values.size()).map(ValueId) {
+            if self.proc.values.at(value).is_none() {
+                continue;
+            }
             if !Self::goes_in_table(value, self.proc) {
                 continue;
             }
@@ -428,6 +434,7 @@ impl<'a> MoveConstants<'a> {
                 }
 
                 let table_base = self.proc.add_int_constant(Type::Int64, data_section as i64);
+                self.insertion_set.insert_value(value_index, table_base);
                 let typ = self.proc.value(value).typ();
                 let result = self.proc.add_load(
                     Opcode::Load.into(),

@@ -23,6 +23,9 @@ impl UseCounts {
         ];
 
         for value in (0..proc.values.size()).map(ValueId) {
+            if proc.values.at(value).is_none() {
+                continue;
+            }
             children.truncate(0);
             
             for child in proc.value(value).children.iter() {

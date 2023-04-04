@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_comparisons)]
+#![allow(unused_comparisons, unused_imports, dead_code)]
 use num::{
     traits::{WrappingAdd, WrappingShl, WrappingShr, WrappingSub},
     Integer,
@@ -127,7 +127,7 @@ impl<'a> ReduceStrength<'a> {
             // "hoist" @thing. On the other hand, if we run DCE before CSE, we will kill @dead and
             // keep @thing. That's better, since we usually want things to stay wherever the client
             // put them. We're not actually smart enough to move things around at random.
-            self.changed |= eliminate_dead_code(self.proc);
+            //self.changed |= eliminate_dead_code(self.proc);
 
             self.simplify_ssa();
 

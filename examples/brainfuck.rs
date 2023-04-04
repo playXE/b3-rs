@@ -255,7 +255,7 @@ impl BfJIT {
         let zero = builder.const64(0);
         builder.return_(Some(zero));
         let start = std::time::Instant::now();
-        let r = b3::compile(proc);
+        let r = b3::compile(proc);  
         println!("compile time: {:?}", start.elapsed());
         r 
 

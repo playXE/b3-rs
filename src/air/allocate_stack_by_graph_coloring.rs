@@ -32,7 +32,7 @@ pub fn allocate_stack_by_graph_coloring(code: &mut Code) {
     handle_callee_saves(code);
     let assigned_escaped_stack_slots =
         allocate_and_get_escaped_slots_without_changing_frame_size(code);
-    if false && code.proc.stack_slots.len() < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
+    if code.proc.stack_slots.len() < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
         let interference = SmallInterferenceGraph::new(InterferenceBitVector::new());
         let mut allocator = GraphColoringStackAllocator::new(code, interference);
         allocator.run(&assigned_escaped_stack_slots);

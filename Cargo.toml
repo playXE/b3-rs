@@ -12,3 +12,9 @@ paste = "1.0"
 indexmap = "1.9"
 libc = "0.2"
 pico-args = "0.5"
+
+[features]
+default = ["graph-coloring-briggs"]
+
+graph-coloring-briggs = []
+graph-coloring-irc = []

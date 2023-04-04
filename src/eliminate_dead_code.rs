@@ -5,8 +5,9 @@ use crate::{
     Procedure, ValueId, variable::VariableId,
 };
 
+#[allow(dead_code)]
 pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
-    return false;
+   
     let mut changed = false;
     let mut worklist = GraphNodeWorklist::new();
     let mut upsilons = TinyVec::<[ValueId; 64]>::new();
@@ -25,7 +26,7 @@ pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
 
             if effects.must_execute() {
                 worklist.push(value);
-            }
+            } 
 
             if let Some(_) = proc.value(value).phi() {
                 upsilons.push(value);
@@ -80,6 +81,12 @@ pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
                 proc.block_mut(block).values[target_index] = value;
                 target_index += 1;
             } else {
+                {
+                    let mut out = String::new();
+                    proc.value(value).fmt(&mut out, proc).unwrap();
+                   
+                }
+                proc.values.remove(value);
                 changed = true;
             }
         }

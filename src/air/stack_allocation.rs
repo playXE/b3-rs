@@ -29,18 +29,19 @@ pub fn attempt_assignment(
             continue;
         }
 
-        let range1 = offset_from_fp..offset_from_fp + code.stack_slot(slot).byte_size as isize;
-        let range2 = code.stack_slot(other_slot).offset_from_fp
-            ..code.stack_slot(other_slot).offset_from_fp
-                + code.stack_slot(other_slot).byte_size as isize;
-
-        let overlap: bool = ranges_overlap(range1, range2);
+        let overlap: bool = ranges_overlap(
+            offset_from_fp,
+            offset_from_fp + code.stack_slot(slot).byte_size as isize,
+            code.stack_slot(other_slot).offset_from_fp,
+            code.stack_slot(other_slot).offset_from_fp
+                + code.stack_slot(other_slot).byte_size as isize,
+        );
 
         if overlap {
             return false;
         }
     }
-   
+
     code.stack_slot_mut(slot).offset_from_fp = offset_from_fp;
 
     true
@@ -57,8 +58,8 @@ pub fn assign(code: &mut Code<'_>, slot: StackSlotId, other_slots: &[StackSlotId
             continue;
         }
 
-        let offset_from_fp = code.stack_slot(other_slot).offset_from_fp
-            - code.stack_slot(slot).byte_size as isize;
+        let offset_from_fp =
+            code.stack_slot(other_slot).offset_from_fp - code.stack_slot(slot).byte_size as isize;
 
         if attempt_assignment(code, slot, offset_from_fp, other_slots) {
             return;
@@ -96,7 +97,6 @@ pub fn allocate_and_get_escaped_slots_without_changing_frame_size(
     assigned_escaped_stack_slots
 }
 
-
 pub fn allocate_escaped_stack_slots(code: &mut Code<'_>) {
     let slots = allocate_and_get_escaped_slots_without_changing_frame_size(code);
     update_frame_size_based_on_stack_slots_impl(code, slots.into_iter())
@@ -107,14 +107,9 @@ pub fn update_frame_size_based_on_stack_slots(code: &mut Code<'_>) {
     update_frame_size_based_on_stack_slots_impl(code, collection);
 }
 
-fn ranges_overlap(range1: std::ops::Range<isize>, range2: std::ops::Range<isize>) -> bool {
-    if range1.start == range1.start {
-        return false;
-    }
+fn ranges_overlap(left_min: isize, left_max: isize, right_min: isize, right_max: isize) -> bool {
+    assert!(left_min < left_max);
+    assert!(right_min < right_max);
 
-    if range2.start == range2.start {
-        return false;
-    }
-
-    range1.end > range2.start && range2.end > range1.start
+    left_max > right_min && right_max > left_min
 }

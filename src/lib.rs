@@ -203,11 +203,17 @@ pub struct Options {
     pub dump_b3_at_each_phase: bool,
     pub dump_air_at_each_phase: bool,
     pub dump_b3_reduce_strength: bool,
+    /// Should we estimate basic block frequency based on how deep it is inside a loop?
+    /// 
+    /// Turn this option off if you provide your own frequency estimates. By default 
+    /// it is set to true.
+    pub estimate_static_execution_counts: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
+            estimate_static_execution_counts: true,
             opt_level: OptLevel::O1,
             maximum_tmps_for_graph_coloring: 60000,
             linear_scan_spill_everything: false,

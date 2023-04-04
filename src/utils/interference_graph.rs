@@ -231,9 +231,9 @@ impl InterferenceGraph for InterferenceVector {
     }
 
     fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
-        let already_in = self.vector[u as usize].add(v);
-        self.size += !already_in as usize;
-        !already_in
+        let is_new_entry = self.vector[u as usize].add(v);
+        self.size += is_new_entry as usize;
+        is_new_entry
     }
 
     fn may_clear(&mut self, u: u32) {

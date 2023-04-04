@@ -1,7 +1,9 @@
+#![allow(dead_code)]
 use indexmap::IndexSet;
 use macroassembler::assembler::TargetAssembler;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io::Write;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use tinyvec::TinyVec;
@@ -76,6 +78,59 @@ const TRACE_DEBUG: bool = false;
 impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>
 {
+    fn dump_interference_graph_in_dot(&self) {
+        let mut out = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open("interference_graph.dot")
+            .unwrap();
+
+        let mut tmps_with_interferences = HashSet::new();
+
+        out.write_all("graph InterferenceGraph { \n".as_bytes())
+            .unwrap();
+
+        self.interference_edges.for_each(|u, v| {
+            tmps_with_interferences.insert(Self::tmp_for_absolute_index(u as _));
+            tmps_with_interferences.insert(Self::tmp_for_absolute_index(v as _));
+        });
+
+        for &tmp in tmps_with_interferences.iter() {
+            let tmp_index = Self::tmp_to_index(tmp);
+            if tmp_index < self.degrees.len() {
+                out.write_all(
+                    format!(
+                        "    {} [label=\"{} ({})\"];\n",
+                        tmp.internal_value(),
+                        tmp,
+                        self.degrees[tmp_index]
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+            } else {
+                out.write_all(
+                    format!("    {} [label=\"{}\"];\n", tmp.internal_value(), tmp).as_bytes(),
+                )
+                .unwrap();
+            }
+        }
+
+        self.interference_edges.for_each(|u, v| {
+            out.write_all(
+                format!(
+                    "   \"{}\" -- \"{}\";\n",
+                    Self::tmp_for_absolute_index(u as _),
+                    Self::tmp_for_absolute_index(v as _)
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+        });
+
+        out.write_all("}".as_bytes()).unwrap();
+    }
+
     fn tmp_for_absolute_index(index: usize) -> Tmp {
         if BANK == Bank::GP {
             AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
@@ -84,6 +139,13 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         }
     }
 
+    fn tmp_to_index(tmp: Tmp) -> usize {
+        if BANK == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+        } else {
+            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+        }
+    }
 
     fn new(
         code: &'a mut Code<'b>,
@@ -193,16 +255,25 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
     fn add_edge_distinct(&mut self, a: u32, b: u32) {
         let is_new_edge = self.interference_edges.add_and_return_is_new_entry(a, b);
-       
+
         if is_new_edge {
             if !self.is_precolored(a) {
-                //debug_assert!(!self.adjacency_list[a as usize].contains(&b));
+                assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
                 self.degrees[a as usize] += 1;
             }
 
             if !self.is_precolored(b) {
-                //debug_assert!(!self.adjacency_list[b as usize].contains(&a), "edge {} {} already exists in adjlist: {:?}", Self::index_to_tmp(a), Self::index_to_tmp(b), self.adjacency_list[b as usize]);
+                assert!(
+                    !self.adjacency_list[b as usize].contains(&a),
+                    "edge {} {} already exists in adjlist: {:?}",
+                    Self::index_to_tmp(a),
+                    Self::index_to_tmp(b),
+                    {
+                        self.dump_interference_graph_in_dot();
+                        &self.adjacency_list[b as usize]
+                    }
+                );
                 self.adjacency_list[b as usize].push(a);
                 self.degrees[b as usize] += 1;
             }
@@ -211,18 +282,15 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
     fn add_edge_distinct_without_degree_change(&mut self, a: u32, b: u32) -> bool {
         let is_new_edge = self.interference_edges.add_and_return_is_new_entry(a, b);
-        println!(
-            "add_edge_distinct_without_degree_change: {:?} {:?} {:?}",
-            a, b, is_new_edge
-        );
+
         if is_new_edge {
             if !self.is_precolored(a) {
-                //debug_assert!(!self.adjacency_list[a as usize].contains(&b));
+                assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
             }
 
             if !self.is_precolored(b) {
-                //debug_assert!(!self.adjacency_list[b as usize].contains(&a));
+                assert!(!self.adjacency_list[b as usize].contains(&a));
                 self.adjacency_list[b as usize].push(a);
             }
 
@@ -517,7 +585,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             if let Some(set) = item {
                 for &desired_bias in set.iter() {
                     let desired_color = self.colored_tmp[self.get_alias(desired_bias) as usize];
-                    
+
                     if desired_color != Reg::default()
                         && !colored_registers.contains(desired_color, Width::W64)
                     {
@@ -582,7 +650,6 @@ impl MoveSet {
         next_index
     }
 
-
     fn clear(&mut self) {
         self.position_in_move_list = 0;
         self.move_list.clear();
@@ -632,7 +699,6 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             }
         }
     }
-
 
     fn allocate(&mut self) {
         let mut changed;
@@ -689,28 +755,36 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         // Once on the select stack, logically, it's no longer in the interference graph.
 
         let assert_invariants = |this: &Self| {
-            let first_non_reg_index = this.last_precolored_register_index + 1;
-            let register_count = this.register_count() as u32;
+            if false {
+                let first_non_reg_index = this.last_precolored_register_index + 1;
+                let register_count = this.register_count() as u32;
 
-            for i in first_non_reg_index..this.degrees.len() as u32 {
-                if this.get_alias(i) != i {
-                    continue;
+                for i in first_non_reg_index..this.degrees.len() as u32 {
+                    if this.get_alias(i) != i {
+                        continue;
+                    }
+
+                    if this.is_on_select_stack.contains(i as _) {
+                        debug_assert!(
+                            !this.simplify_worklist.contains(&i)
+                                && !this.spill_worklist.contains(i as _)
+                        );
+                        continue;
+                    }
+
+                    let degree = this.degrees[i as usize];
+
+                    if degree >= register_count {
+                        debug_assert!(
+                            this.unspillable_tmps.get(i as _)
+                                || this.spill_worklist.contains(i as _)
+                        );
+                        debug_assert!(!this.simplify_worklist.contains(&i));
+                        continue;
+                    }
+
+                    debug_assert!(this.simplify_worklist.contains(&i));
                 }
-
-                if this.is_on_select_stack.contains(i as _) {
-                    debug_assert!(!this.simplify_worklist.contains(&i) && !this.spill_worklist.contains(i as _));
-                    continue;
-                }
-
-                let degree = this.degrees[i as usize];
-
-                if degree >= register_count {
-                    debug_assert!(this.unspillable_tmps.get(i as _) || this.spill_worklist.contains(i as _));
-                    debug_assert!(!this.simplify_worklist.contains(&i));
-                    continue;
-                }
-
-                debug_assert!(this.simplify_worklist.contains(&i));
             }
         };
 
@@ -1651,10 +1725,11 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             prev_inst,
             next_inst,
             self.allocator.code,
-            |arg, _, arg_bank, _, preserve64| {
+            |arg, role, arg_bank, _, preserve64| {
                 if arg_bank != BANK {
                     return;
                 }
+                assert!(role.is_any_def());
 
                 // All the Def()s interfere with each other and with all the extra clobbered Tmps.
                 // We should not use forEachDefWithExtraClobberedRegs() here since colored Tmps
@@ -1663,10 +1738,11 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
                     prev_inst,
                     next_inst,
                     self.allocator.code,
-                    |other_arg, _, arg_bank, def_width| {
+                    |other_arg, other_role, arg_bank, def_width| {
                         if arg_bank != BANK {
                             return;
                         }
+                        assert!(other_role.is_any_def());
 
                         if def_width <= Width::W64 && preserve64 {
                             if TRACE_DEBUG {
@@ -1676,7 +1752,10 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
                         }
 
                         if TRACE_DEBUG {
-                            println!("    Adding def-def edge: {}, {} (prev={:?}, next={:?})", arg, other_arg, prev_inst, next_inst);
+                            println!(
+                                "    Adding def-def edge: {}, {} (prev={:?}, next={:?})",
+                                arg, other_arg, prev_inst, next_inst
+                            );
                         }
                         edges.push((arg, other_arg));
                     },
@@ -1845,16 +1924,21 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             prev_inst,
             next_inst,
             self.allocator.code,
-            |tmp, _, arg_bank, _, _preserve64| {
+            |tmp, role, arg_bank, _, _preserve64| {
                 if arg_bank != BANK {
                     return;
                 }
-
+                assert!(role.is_any_def());
                 for live_tmp in live_tmps.iter() {
                     let live_tmp = Self::tmp_for_absolute_index(live_tmp.key());
 
                     debug_assert!(live_tmp.is_gp() == (BANK == Bank::GP));
-                    println!("      Adding def-live edge {}, {}", tmp, live_tmp);
+                    if TRACE_DEBUG {
+                        println!(
+                            "      Adding def-live edge {}, {} in {:?} {:?}",
+                            tmp, live_tmp, prev_inst, next_inst
+                        );
+                    }
                     edges.push((tmp, live_tmp));
                 }
 
@@ -1917,7 +2001,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
     fn run(&mut self, code: &mut Code) {
         pad_interference(code);
-        println!("{}", code);
+
         self.allocate_on_bank::<{ Bank::GP }>(code);
         self.allocate_on_bank::<{ Bank::FP }>(code);
 

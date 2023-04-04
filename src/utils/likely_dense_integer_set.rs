@@ -86,10 +86,16 @@ impl LikelyDenseIntegerSet {
 
     pub fn clear(&mut self) {
         if self.is_bitvector() {
-            self.bitvector_mut().clear_all();
+            unsafe {
+                ManuallyDrop::drop(&mut self.u.bitvector);
+            }
         } else {
-            self.hashset_mut().clear();
+            unsafe {
+                ManuallyDrop::drop(&mut self.u.hashset);
+            }
         }
+
+        self.u.bitvector = ManuallyDrop::new(BitVector::new());
         self.size = 0;
         self.max = 0;
         self.min = 0;

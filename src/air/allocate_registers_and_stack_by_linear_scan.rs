@@ -111,7 +111,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     pub fn run(&mut self) {
         phase_scope("air::lsra", || {
             pad_interference(self.code);
-            println!("{}", self.code);
+           
             self.build_register_set_builder();
             self.build_indices();
             self.build_intervals();
@@ -133,12 +133,13 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             self.insert_spill_code();
             self.assign_registers();
             fix_spills_after_terminals(self.code);
-            handle_callee_saves(self.code);
+            
             if self.code.proc.options.opt_level >= OptLevel::O2 {
                 lower_after_regalloc(self.code);
                 fix_obvious_spills(self.code);
                 allocate_stack_by_graph_coloring(self.code);
             } else {
+                handle_callee_saves(self.code);
                 allocate_escaped_stack_slots(self.code);
             }
             self.prepare_intervals_for_scan_for_stack();

@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::utils::index_set::*;
+use crate::utils::{index_set::*, bitvector::BitVector};
 
 use crate::dominators::Graph;
 
@@ -115,10 +115,10 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
             }
         }
 
-        let mut dirty_blocks = IndexSet::new();
+        let mut dirty_blocks = BitVector::new();
 
         for block_index in (0..self.adapter.cfg().num_nodes()).rev() {
-            dirty_blocks.insert(block_index);
+            dirty_blocks.set(block_index, true);
         }
 
         let mut merge_buffer = Vec::new();
@@ -130,7 +130,7 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
                 let block = self.adapter.cfg().node(block_index);
 
                 if let Some(block) = block {
-                    if !dirty_blocks.remove(&block_index) {
+                    if !dirty_blocks.quick_clear(block_index) {
                         continue;
                     }
 
@@ -192,7 +192,7 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
                             *live_at_tail = merge_buffer.clone();
                         }
 
-                        dirty_blocks.insert(self.adapter.cfg().node_index(*predecessor));
+                        dirty_blocks.set(self.adapter.cfg().node_index(*predecessor), true);
                         changed = true;
                     }
                 }

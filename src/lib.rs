@@ -6,7 +6,6 @@ pub mod bank;
 pub mod block;
 pub mod block_insertion_set;
 pub mod break_critical_edges;
-pub mod cfg;
 pub mod check_special;
 pub mod compile;
 pub mod data_section;

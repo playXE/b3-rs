@@ -194,14 +194,15 @@ impl<'a> ReduceStrength<'a> {
             }
 
             Opcode::Add => {
-                self.handle_commutativity();
                 
+                self.handle_commutativity();
+
                 if self.value.child(self.proc, 0).opcode(self.proc) == Opcode::Add
                     && self.proc.value(self.value).is_integer()
                 {
                     // Turn this: Add(Add(value, constant1), constant2)
                     // Into this: Add(value, constant1 + constant2)
-
+                    /*
                     let new_sum = self
                         .proc
                         .value(self.value.child(self.proc, 1))
@@ -211,6 +212,7 @@ impl<'a> ReduceStrength<'a> {
                         );
 
                     if let Some(new_sum) = new_sum {
+                        //println!("Reducing strength of Add(Add(value, constant1), constant2) to Add(value, constant1 + constant2): {:?} = {:?} + {:?} => {:?}", self.value, self.value.child(self.proc, 1),self.value.child(self.proc, 0).child(self.proc, 1), new_sum.as_int());
                         
                         let new_sum = self.proc.add(new_sum);
                         self.insertion_set.insert_value(self.index, new_sum);
@@ -219,7 +221,7 @@ impl<'a> ReduceStrength<'a> {
                         self.proc.value_mut(self.value).children[1] = new_sum;
                         self.changed = true;
                         return;
-                    }
+                    }*/
                     {
                         // Turn this: Add(Add(value, constant), otherValue)
                         // Into this: Add(Add(value, otherValue), constant)
@@ -410,6 +412,7 @@ impl<'a> ReduceStrength<'a> {
                 }
             }
             Opcode::Sub => {
+                
                 // Turn this: Sub(BitXor(BitAnd(value, mask1), mask2), mask2)
                 // Into this: SShr(Shl(value, amount), amount)
                 // Conditions:
@@ -440,6 +443,7 @@ impl<'a> ReduceStrength<'a> {
                         .has_int()
                     && self.proc.value(self.value.child(self.proc, 1)).has_int()
                 {
+                   
                     let mask1 = self
                         .proc
                         .value(
@@ -507,13 +511,13 @@ impl<'a> ReduceStrength<'a> {
                     .value(self.value.child(self.proc, 0))
                     .sub_constant(self.proc.value(self.value.child(self.proc, 1)))
                 {
-                    
                     let constant_sub = self.proc.add(constant_sub);
                     self.replace_with_new_value(Some(constant_sub));
                     return;
                 }
 
                 if self.proc.value(self.value).is_integer() {
+                   
                     // Turn this: Sub(Neg(value), 1)
                     // Into this: BitXor(value, -1)
                     if self.value.child(self.proc, 0).opcode(self.proc) == Opcode::Neg
@@ -819,9 +823,8 @@ impl<'a> ReduceStrength<'a> {
             }
 
             Opcode::Mul => {
-                
                 self.handle_commutativity();
-                
+
                 // Turn this: Mul(constant1, constant2)
                 // Into this: constant1 * constant2
                 if let Some(mul_constant) = self
@@ -2541,7 +2544,6 @@ impl<'a> ReduceStrength<'a> {
             | Opcode::Above
             | Opcode::BelowEqual
             | Opcode::AboveEqual => {
-
                 let comparison = canonicalize_comparison(self.proc, self.value);
 
                 let result;

@@ -282,7 +282,7 @@ impl ArgTiming {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Arg {
     offset: i64,
     kind: ArgKind,
@@ -290,6 +290,12 @@ pub struct Arg {
     scale: i32,
     base: Tmp,
     index: Tmp,
+}
+
+impl std::fmt::Debug for Arg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl Default for Arg {

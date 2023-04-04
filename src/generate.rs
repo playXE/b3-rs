@@ -14,9 +14,8 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     proc.dominators_or_compute();
     
     if proc.options.opt_level >= OptLevel::O2 {
-        
-        reduce_strength(proc);
         fix_ssa(proc);
+        reduce_strength(proc);
    //     eliminate_dead_code(proc);
     } else if proc.options.opt_level >= OptLevel::O1 {
         //reduce_strength(proc);
@@ -27,7 +26,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     legalize_memory_offsets(proc);
     eliminate_dead_code(proc);
     estimate_static_execution_counts(proc);
-    println!("{}", proc.display_());
+    
     let code = lower_to_air(proc);
     code
 }

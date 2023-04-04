@@ -1074,7 +1074,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(value);
     }
 
-    pub fn return_(mut self, value: Option<ValueId>) {
+    pub fn return_(&mut self, value: Option<ValueId>) {
         let args = if value.is_none() {
             vec![]
         } else {

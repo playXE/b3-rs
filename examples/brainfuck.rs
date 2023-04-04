@@ -1,13 +1,14 @@
-use b3::{self, OptLevel, BasicBlockBuilder, Frequency};
 use b3::jit::compilation::Compilation;
 use b3::jit::reg::Reg;
+use b3::{self, BasicBlockBuilder, Frequency, OptLevel};
 use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
 pub struct BfJIT {
     ctx: CGContext,
 }
 pub struct CGContext {
-    pub opt_level: u8,
+    pub opt_level: OptLevel,
+    pub use_lsra: bool,
 }
 #[derive(Copy, Clone, Debug)]
 enum Token {
@@ -47,7 +48,7 @@ impl BfJIT {
                 }
                 '<' => {
                     let mut n: u32 = 1;
-                    if self.ctx.opt_level > 0 {
+                    if self.ctx.opt_level > 1 {
                         while chars.peek() == Some(&'<') {
                             n += 1;
                             chars.next().unwrap();
@@ -117,8 +118,8 @@ impl BfJIT {
 
     fn do_translate(&self, _disasm: bool, input: &[Token]) -> Compilation {
         let mut options = b3::Options::default();
-        options.opt_level = OptLevel::O3;
-        // options.dump_b3_reduce_strength = true;
+        options.opt_level = self.ctx.opt_level;
+        options.air_force_linear_scan_allocator = self.ctx.use_lsra;
         let mut proc = b3::Procedure::new(options);
 
         let entry = proc.add_block(1.0);
@@ -251,9 +252,12 @@ impl BfJIT {
             }
         }
 
-        builder.return_(None);
-
-        b3::compile(proc)
+        let zero = builder.const64(0);
+        builder.return_(Some(zero));
+        let start = std::time::Instant::now();
+        let r = b3::compile(proc);
+        println!("compile time: {:?}", start.elapsed());
+        r 
 
         /*let mut jmps_to_end: Vec<(Label, Jump)> = vec![];
 
@@ -353,34 +357,46 @@ extern "C" fn getchr() -> u8 {
     buf[0]
 }
 
-use std::ffi::OsStr;
 use std::io::{Read, Write};
-use std::path::PathBuf;
-use std::rc::Rc;
-fn parse_path(s: &OsStr) -> Result<PathBuf, &'static str> {
-    Ok(s.into())
-}
 
 fn main() {
     let input = "file.bf";
-    let jit = BfJIT::new(CGContext { opt_level: 0 });
-    let compile_start = std::time::Instant::now();
+    let mut args = pico_args::Arguments::from_env();
+    let force_lsra = args.contains("--force-linear-scan");
+    let opt_level = args
+        .opt_value_from_str::<_, u8>("--optLevel")
+        .unwrap();
+
+    let opt_level = match opt_level {
+        None => OptLevel::O1,
+        Some(n) => match n {
+            0 | 1 => OptLevel::O1,
+            2 => OptLevel::O2,
+            _ => OptLevel::O3,
+        },
+    };
+
+    println!("Opt level: {:?}, use LSRA: {:?}", opt_level, force_lsra);
+
+    let jit = BfJIT::new(CGContext {
+        opt_level,
+        use_lsra: force_lsra,
+    });
 
     let code = jit.translate(false, &std::fs::read_to_string(input).unwrap());
 
-    println!(
-        "Compiled in {:.2}ms",
-        compile_start.elapsed().as_micros() as f64 / 1000.0
-    );
-
-    println!("{}", code.disassembly());
-
-    let fun = unsafe { std::mem::transmute::<_, extern "C" fn(*mut u8)>(code.code_ref().start()) };
+   
+    let fun =
+        unsafe { std::mem::transmute::<_, extern "C" fn(*mut u8) -> i64>(code.code_ref().start()) };
     let mut mem = vec![0u8; 100 * 1024];
-    {
-        fun(mem.as_mut_ptr());
+    let start = std::time::Instant::now();
+    unsafe {
+        fun(mem.as_mut_ptr().add(50 * 1024));
     }
-
     drop(code);
     drop(mem);
+    println!(
+        "Executed in {:.2}ms",
+        start.elapsed().as_micros() as f64 / 1000.0
+    );
 }

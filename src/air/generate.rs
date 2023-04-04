@@ -23,7 +23,7 @@ use super::{
     fix_obvious_spills::fix_obvious_spills, form_table::is_return,
     generation_context::GenerationContext, lower_after_regalloc::lower_after_regalloc,
     lower_entry_switch::lower_entry_switch, lower_macros::lower_macros,
-    lower_stack_args::lower_stack_args, opcode::Opcode, simplify_cfg::simplify_cfg,
+    lower_stack_args::lower_stack_args, opcode::Opcode, simplify_cfg::simplify_cfg, 
 };
 
 pub fn prepare_for_generation(code: &mut Code<'_>) {
@@ -32,8 +32,9 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         simplify_cfg(code);
         lower_macros(code);
         eliminate_dead_code(code);
+        
         let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
-        if true || code.proc.options.opt_level <= OptLevel::O1
+        if code.proc.options.air_force_linear_scan_allocator || code.proc.options.opt_level <= OptLevel::O1
             || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring
         {
             // When we're compiling quickly, we do register and stack allocation in one linear scan
@@ -57,6 +58,7 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
             // This does first-fit allocation of stack slots using an interference graph plus a
             // bunch of other optimizations.
             allocate_stack_by_graph_coloring(code);
+            
         }
 
         // This turns all Stack and CallArg Args into Addr args that use the frame pointer.

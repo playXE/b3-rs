@@ -1,5 +1,4 @@
 use crate::utils::interference_graph::Iterable;
-use std::mem::size_of;
 
 use crate::{
     liveness::{IndexSparseSetEntry, LocalCalc},
@@ -10,6 +9,7 @@ use crate::{
     width::{bytes_for_width, Width},
 };
 
+use super::handle_callee_saves::handle_callee_saves;
 use super::stack_allocation::update_frame_size_based_on_stack_slots;
 use super::{
     arg::Arg,
@@ -29,6 +29,7 @@ use super::{
 /// This is meant to be an optimal stack allocator, focused on generating great code. It's not
 /// particularly fast, though.
 pub fn allocate_stack_by_graph_coloring(code: &mut Code) {
+    handle_callee_saves(code);
     let assigned_escaped_stack_slots =
         allocate_and_get_escaped_slots_without_changing_frame_size(code);
     if false && code.proc.stack_slots.len() < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {

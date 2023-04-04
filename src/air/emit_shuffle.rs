@@ -33,6 +33,12 @@ pub struct ShufflePair {
     pub width: Width,
 }
 
+impl std::fmt::Display for ShufflePair {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} => {}", self.src, self.dst)
+    }
+}
+
 fn find_possible_scratch(code: &Code, bank: Bank, mut f: impl FnMut(Tmp) -> bool) -> Option<Tmp> {
     for reg in code.regs_in_priority_order(bank) {
         let tmp = Tmp::from_reg(*reg);

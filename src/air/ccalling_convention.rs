@@ -34,11 +34,13 @@ fn marshall_ccall_argument_impl<const BANK: Bank>(
     let register_count = ccall_argument_register_count(code, child);
 
     if *argument_count < BANK.num_of_argument_registers() {
-        for i in 0..register_count {
+        for _ in 0..register_count {
+            let ix = *argument_count;
             result.push(Arg::new_tmp(Tmp::from_reg(match BANK {
-                Bank::GP => Reg::new_gpr(BANK.to_argument_register(i)),
-                Bank::FP => Reg::new_fpr(BANK.to_argument_register(i)),
+                Bank::GP => Reg::new_gpr(BANK.to_argument_register(ix)),
+                Bank::FP => Reg::new_fpr(BANK.to_argument_register(ix)),
             })));
+            *argument_count += 1;
         }
 
         return;
@@ -99,7 +101,7 @@ pub fn compute_ccalling_convention(code: &mut Code, value: ValueId) -> Vec<Arg> 
     let mut fp_argument_count = 0;
     let mut stack_offset = 0;
 
-    for i in 0..code.proc.value(value).children.len() {
+    for i in 1..code.proc.value(value).children.len() {
         let child = code.proc.value(value).children[i];
         marshall_ccall_argument(
             code,
@@ -141,7 +143,6 @@ pub fn build_ccall(code: &mut Code, origin: ValueId, arguments: &[Arg]) -> Inst 
     inst.args.push(Arg::new_tmp(Tmp::from_reg(Reg::new_fpr(
         RETURN_VALUE_FPR
     ))));
-
     for i in 1..arguments.len() {
         if arguments[i].is_tmp() {
             inst.args.push(arguments[i]);

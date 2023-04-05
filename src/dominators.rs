@@ -141,11 +141,12 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
                 let next_successor_index = successor_index + 1;
 
                 if next_successor_index < self.graph.successors(block).len() {
+                  
                     worklist.force_push(block, next_successor_index);
                 }
 
                 let successor_block = self.graph.successors(block)[successor_index];
-
+              
                 if worklist.push(successor_block, 0) {
                     self.data.get_mut(&successor_block).unwrap().parent = Some(block);
                 }
@@ -197,7 +198,12 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
                 let possible_dominator = self.eval(semi_dominee);
                 assert!(
                     self.block_by_pre_number[self.data(semi_dominee).semi_number]
-                        == self.data(block).parent.unwrap()
+                        == self.data(block).parent.unwrap(),
+                    "The semi-dominee {:?} should be a child of the parent {:?} ({:?}).\n{:?}",
+                    semi_dominee,
+                    self.data(block).parent.unwrap(),
+                    self.block_by_pre_number[self.data(semi_dominee).semi_number],
+                    self.block_by_pre_number,
                 );
                 if self.data(possible_dominator).semi_number < self.data(semi_dominee).semi_number {
                     self.data_mut(semi_dominee).dom = Some(possible_dominator);
@@ -476,12 +482,12 @@ impl<G: Graph> DomBlockData<G> {
     }
 }
 
-pub struct Dominators<G: Graph + 'static> {
+pub struct Dominators<G: Graph> {
     data: Rc<IndexMap<DomBlockData<G>, G::Node>>,
-    marker: PhantomData<&'static G>,
+    marker: PhantomData<*const G>,
 }
 
-impl<G: Graph + 'static> Clone for Dominators<G> {
+impl<G: Graph> Clone for Dominators<G> {
     fn clone(&self) -> Self {
         Self {
             data: self.data.clone(),
@@ -969,7 +975,6 @@ impl<'a, G: Graph> BackwardsGraph<'a, G> {
                 add_root_successor(&mut this, &mut worklist, node);
             }
         }
-
         this
     }
 }
@@ -994,7 +999,13 @@ impl<'a, G: Graph> Graph for BackwardsGraph<'a, G> {
                     .predecessors(block.node())
                     .iter()
                     .copied()
-                    .map(SingleGraphNode::new)
+                    .map(|node| {
+                        if node.index() == 0 {
+                            SingleGraphNode::root()
+                        } else {
+                            SingleGraphNode::new(node)
+                        }
+                    })
                     .collect(),
             )
         }

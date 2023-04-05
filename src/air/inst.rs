@@ -373,7 +373,7 @@ impl Inst {
         }
     }
 
-    pub fn should_try_aliasing_def(&self, code: &Code) -> Option<usize> {
+    pub fn should_try_aliasing_def(&self, _code: &Code) -> Option<usize> {
         if !is_x86() {
             return None;
         }

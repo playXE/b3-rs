@@ -1096,6 +1096,7 @@ impl<'a> ReduceStrength<'a> {
                             if magic.shift > 0 {
                                 let const32 =
                                     self.proc.add_int_constant(Type::Int32, magic.shift as i32);
+                                self.insertion_set.insert_value(self.index, const32);
                                 let sshr = Value::new(
                                     Opcode::SShr,
                                     Type::Int32,
@@ -1110,6 +1111,7 @@ impl<'a> ReduceStrength<'a> {
                             }
 
                             let const31 = self.proc.add_int_constant(Type::Int32, 31);
+                            self.insertion_set.insert_value(self.index, const31);
                             let zshr = Value::new(
                                 Opcode::ZShr,
                                 Type::Int32,

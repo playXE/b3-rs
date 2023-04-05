@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use macroassembler::{
     assembler::{abstract_macro_assembler::Label, TargetMacroAssembler},
-    jit::gpr_info::{RETURN_VALUE_GPR, T0, T1},
 };
 use tinyvec::TinyVec;
 

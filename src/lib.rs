@@ -1,5 +1,5 @@
 #![allow(incomplete_features)]
-#![feature(adt_const_params, fmt_internals)]
+#![feature(adt_const_params)]
 
 pub mod air;
 pub mod bank;
@@ -8,19 +8,22 @@ pub mod block_insertion_set;
 pub mod break_critical_edges;
 pub mod check_special;
 pub mod compile;
+pub mod compute_division_magic;
 pub mod data_section;
 pub mod dominators;
 pub mod effects;
+pub mod eliminate_dead_code;
+pub mod ensure_loop_pre_headers;
 pub mod estimate_static_exec_counts;
 pub mod fix_ssa;
-pub mod eliminate_dead_code;
+pub mod alloca_to_reg;
 pub mod generate;
+pub mod hoist_loop_invariant_values;
 pub mod insertion_set;
 pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
 pub mod liveness;
-pub mod compute_division_magic;
 pub mod lower_to_air;
 pub mod move_constants;
 pub mod natural_loops;
@@ -207,8 +210,8 @@ pub struct Options {
     pub dump_air_at_each_phase: bool,
     pub dump_b3_reduce_strength: bool,
     /// Should we estimate basic block frequency based on how deep it is inside a loop?
-    /// 
-    /// Turn this option off if you provide your own frequency estimates. By default 
+    ///
+    /// Turn this option off if you provide your own frequency estimates. By default
     /// it is set to true.
     pub estimate_static_execution_counts: bool,
 }
@@ -220,7 +223,7 @@ impl Default for Options {
             opt_level: OptLevel::O2,
             maximum_tmps_for_graph_coloring: 60000,
             linear_scan_spill_everything: false,
-            air_force_briggs_allocator: false,
+            air_force_briggs_allocator: true,
             air_force_irc_allocator: false,
             air_force_linear_scan_allocator: false,
             coalesce_spill_costs: true,
@@ -235,12 +238,12 @@ impl Default for Options {
     }
 }
 
+pub use bank::*;
 pub use block::*;
 pub use compile::*;
 pub use generate::*;
 pub use opcode::*;
 pub use procedure::*;
-pub use value::*;
 pub use typ::*;
+pub use value::*;
 pub use width::*;
-pub use bank::*;

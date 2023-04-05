@@ -4,6 +4,7 @@ use macroassembler::assembler::TargetAssembler;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::Write;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use tinyvec::TinyVec;
@@ -36,6 +37,13 @@ use super::stack_slot::StackSlotKind;
 use super::tmp::AbsoluteIndexed;
 use super::tmp::Tmp;
 use super::use_counts::UseCounts;
+
+trait MoveSetTrait {
+    fn clear(&mut self);
+    fn add_move(&mut self) -> usize;
+    fn add_low_priority_move(&mut self) -> usize;
+    fn start_adding_low_priority_moves(&mut self);
+}
 
 /// Instead of keeping track of the move instructions, we just keep their operands around and use the index
 /// in the vector as the "identifier" for the move.
@@ -632,18 +640,13 @@ struct MoveSet {
     low_priority_move_list: Vec<usize>,
 }
 
-impl MoveSet {
+impl MoveSetTrait for MoveSet {
     fn add_move(&mut self) -> usize {
         let next_index = self.position_in_move_list;
         self.position_in_move_list += 1;
         self.move_list.push(next_index);
         next_index
     }
-
-    fn start_adding_low_priority_moves(&mut self) {
-        debug_assert!(self.low_priority_move_list.is_empty());
-    }
-
     fn add_low_priority_move(&mut self) -> usize {
         let next_index = self.position_in_move_list;
         self.position_in_move_list += 1;
@@ -656,6 +659,10 @@ impl MoveSet {
         self.move_list.clear();
         self.low_priority_move_list.clear();
     }
+
+    fn start_adding_low_priority_moves(&mut self) {
+        debug_assert!(self.low_priority_move_list.is_empty());
+    }
 }
 
 struct Briggs<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
@@ -664,8 +671,16 @@ struct Briggs<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
 }
 
 impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
-    Briggs<'a, 'b, InterferenceSet, BANK>
+    Allocator<'a, 'b, InterferenceSet, BANK> for Briggs<'a, 'b, InterferenceSet, BANK>
 {
+    type MoveList = MoveSet;
+    fn worklist_moves(&self) -> &Self::MoveList {
+        &self.worklist_moves
+    }
+
+    fn worklist_moves_mut(&mut self) -> &mut Self::MoveList {
+        &mut self.worklist_moves
+    }
     fn new(
         code: &'a mut Code<'b>,
         regs_in_priority_order: &Vec<Reg>,
@@ -693,12 +708,8 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         }
     }
 
-    fn for_each_adjacent(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, u32)) {
-        for i in 0..self.adjacency_list[tmp_index as usize].len() {
-            if !self.has_been_simplified(self.adjacency_list[tmp_index as usize][i]) {
-                function(self, self.adjacency_list[tmp_index as usize][i]);
-            }
-        }
+    fn before_build(&mut self) {
+        self.worklist_moves.clear();
     }
 
     fn allocate(&mut self) {
@@ -820,7 +831,17 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
         self.assign_colors();
     }
-
+}
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    Briggs<'a, 'b, InterferenceSet, BANK>
+{
+    fn for_each_adjacent(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, u32)) {
+        for i in 0..self.adjacency_list[tmp_index as usize].len() {
+            if !self.has_been_simplified(self.adjacency_list[tmp_index as usize][i]) {
+                function(self, self.adjacency_list[tmp_index as usize][i]);
+            }
+        }
+    }
     fn select_spill(&mut self) {
         let victim_index = self.base.select_spill();
         self.spill_worklist.quick_clear(victim_index as _);
@@ -1056,17 +1077,7 @@ struct OrderedMoveSet {
     first_low_priority_move_index: usize,
 }
 
-#[allow(dead_code)]
-impl OrderedMoveSet {
-    fn new() -> Self {
-        Self {
-            position_in_move_list: Vec::new(),
-            move_list: Vec::new(),
-            low_priority_move_list: Vec::new(),
-            first_low_priority_move_index: 0,
-        }
-    }
-
+impl MoveSetTrait for OrderedMoveSet {
     fn add_move(&mut self) -> usize {
         debug_assert!(self.low_priority_move_list.is_empty());
         debug_assert!(self.first_low_priority_move_index == 0);
@@ -1078,11 +1089,11 @@ impl OrderedMoveSet {
         next_index
     }
 
-    fn start_adding_low_priority_moves(&mut self) {
-        debug_assert!(self.low_priority_move_list.is_empty());
-        debug_assert!(self.first_low_priority_move_index == 0);
-
-        self.first_low_priority_move_index = self.move_list.len();
+    fn clear(&mut self) {
+        self.position_in_move_list.clear();
+        self.move_list.clear();
+        self.low_priority_move_list.clear();
+        self.first_low_priority_move_index = 0;
     }
 
     fn add_low_priority_move(&mut self) -> usize {
@@ -1096,6 +1107,25 @@ impl OrderedMoveSet {
         debug_assert!(next_index >= self.first_low_priority_move_index);
 
         next_index
+    }
+
+    fn start_adding_low_priority_moves(&mut self) {
+        debug_assert!(self.low_priority_move_list.is_empty());
+        debug_assert!(self.first_low_priority_move_index == 0);
+
+        self.first_low_priority_move_index = self.move_list.len();
+    }
+}
+
+#[allow(dead_code)]
+impl OrderedMoveSet {
+    fn new() -> Self {
+        Self {
+            position_in_move_list: Vec::new(),
+            move_list: Vec::new(),
+            low_priority_move_list: Vec::new(),
+            first_low_priority_move_index: 0,
+        }
     }
 
     fn is_empty(&self) -> bool {
@@ -1165,13 +1195,6 @@ impl OrderedMoveSet {
         debug_assert!(self.contains(index));
     }
 
-    fn clear(&mut self) {
-        self.position_in_move_list.clear();
-        self.move_list.clear();
-        self.low_priority_move_list.clear();
-        self.first_low_priority_move_index = 0;
-    }
-
     fn total_number_of_moves(&self) -> usize {
         self.move_list.len() + self.low_priority_move_list.len()
     }
@@ -1208,10 +1231,23 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Der
         &mut self.base
     }
 }
-#[allow(dead_code)]
+
 impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
-    IRC<'a, 'b, InterferenceSet, BANK>
+    Allocator<'a, 'b, InterferenceSet, BANK> for IRC<'a, 'b, InterferenceSet, BANK>
 {
+    type MoveList = OrderedMoveSet;
+
+    fn worklist_moves(&self) -> &Self::MoveList {
+        &self.worklist_moves
+    }
+
+    fn worklist_moves_mut(&mut self) -> &mut Self::MoveList {
+        &mut self.worklist_moves
+    }
+
+    fn before_build(&mut self) {
+        self.worklist_moves.clear();
+    }
     fn new(
         code: &'a mut Code<'b>,
         regs_in_priority_order: &Vec<Reg>,
@@ -1246,7 +1282,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             "The activeMove set should be big enough for the quick operations of BitVector."
         );
 
-        self.dump_interference_graph_in_dot();
+        //self.dump_interference_graph_in_dot();
         self.make_worklist();
 
         loop {
@@ -1273,7 +1309,12 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
         self.assign_colors();
     }
+}
 
+#[allow(dead_code)]
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+    IRC<'a, 'b, InterferenceSet, BANK>
+{
     fn make_worklist(&mut self) {
         let first_non_reg_index = self.last_precolored_register_index + 1;
 
@@ -1531,15 +1572,45 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 }
 
-struct ColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
-    #[cfg(feature = "graph-coloring-irc")]
-    allocator: IRC<'a, 'b, InterferenceSet, BANK>,
-    #[cfg(feature = "graph-coloring-briggs")]
-    allocator: Briggs<'a, 'b, InterferenceSet, BANK>,
+trait Allocator<'a, 'b: 'a, InterferenceSet: InterferenceGraph, const BANK: Bank>:
+    Deref<Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>> + DerefMut
+{
+    type MoveList: MoveSetTrait;
+    fn allocate(&mut self);
+    fn new(
+        code: &'a mut Code<'b>,
+        regs_in_priority_order: &Vec<Reg>,
+        last_precolored_register_index: u32,
+        tmp_array_size: usize,
+        unspillable_tmps: &'a BitVector,
+        use_counts: &'a UseCounts,
+        interference_edges: InterferenceSet,
+    ) -> Self;
+
+    fn before_build(&mut self);
+
+    fn worklist_moves(&self) -> &Self::MoveList;
+    fn worklist_moves_mut(&mut self) -> &mut Self::MoveList;
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
-    ColoringAllocator<'a, 'b, InterferenceSet, BANK>
+struct ColoringAllocator<
+    'a,
+    'b: 'a,
+    InterferenceSet: InterferenceGraph,
+    Alloc: Allocator<'a, 'b, InterferenceSet, BANK>,
+    const BANK: Bank,
+> {
+    allocator: Alloc,
+    marker: PhantomData<AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>>,
+}
+
+impl<
+        'a,
+        'b,
+        InterferenceSet: InterferenceGraph,
+        Alloc: Allocator<'a, 'b, InterferenceSet, BANK>,
+        const BANK: Bank,
+    > ColoringAllocator<'a, 'b, InterferenceSet, Alloc, BANK>
 {
     fn new(
         code: &'a mut Code<'b>,
@@ -1561,8 +1632,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         };
 
         let mut this = Self {
-            #[cfg(feature = "graph-coloring-irc")]
-            allocator: IRC::new(
+            allocator: Alloc::new(
                 code,
                 &regs_in_priority_order,
                 last_precolored_register_index as _,
@@ -1571,17 +1641,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
                 use_counts,
                 graph,
             ),
-
-            #[cfg(feature = "graph-coloring-briggs")]
-            allocator: Briggs::new(
-                code,
-                &regs_in_priority_order,
-                last_precolored_register_index as _,
-                tmp_array_size,
-                unspillable_tmps,
-                use_counts,
-                graph,
-            ),
+            marker: Default::default(),
         };
 
         let pinned_set = this.allocator.code.pinned_regs.to_register_set();
@@ -1676,13 +1736,13 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
     fn build(&mut self) {
         self.allocator.coalescing_candidates.clear();
-        self.allocator.worklist_moves.clear();
+        self.allocator.before_build();
 
         // FIXME: It seems like we don't need to recompute liveness. We just need to update its data
         // structures so that it knows that the newly introduced temporaries are not live at any basic
         // block boundary. This should trivially be true for now.
 
-        let code_ptr = self.allocator.base.code as *mut Code<'b>;
+        let code_ptr = (&mut *self.allocator).code as *mut Code<'b>;
 
         let mut adapter = TmpLivenessAdapter::<BANK>::new(unsafe { &mut *code_ptr });
         let mut liveness = Liveness::new(&mut adapter);
@@ -1810,7 +1870,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
                 dst_index: Self::tmp_to_index(def_tmp) as _,
             });
 
-            let new_index_in_worklist = self.allocator.worklist_moves.add_move();
+            let new_index_in_worklist = self.allocator.worklist_moves_mut().add_move();
             debug_assert!(new_index_in_worklist == next_move_index);
 
             for arg in prev_inst.args.iter() {
@@ -1856,7 +1916,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         }
 
         self.allocator
-            .worklist_moves
+            .worklist_moves_mut()
             .start_adding_low_priority_moves();
 
         for i in 0..self.allocator.code.blocks.len() {
@@ -1924,7 +1984,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             dst_index: right_index as _,
         });
 
-        let new_index_in_worklist = self.allocator.worklist_moves.add_low_priority_move();
+        let new_index_in_worklist = self.allocator.worklist_moves_mut().add_low_priority_move();
         debug_assert!(new_index_in_worklist == next_move_index);
         self.allocator.move_list[left_index].insert(next_move_index);
         self.allocator.move_list[right_index].insert(next_move_index);
@@ -2017,7 +2077,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         Self { use_counts }
     }
 
-    fn run(&mut self, code: &mut Code) {
+    fn run<'b>(&mut self, code: &'a mut Code<'b>) {
         pad_interference(code);
 
         self.allocate_on_bank::<{ Bank::GP }>(code);
@@ -2026,9 +2086,9 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         fix_spills_after_terminals(code);
     }
 
-    fn allocate_on_bank<const BANK: Bank>(&mut self, code: &mut Code) {
+    fn allocate_on_bank<'c, const BANK: Bank>(&mut self, code: &'c mut Code) {
         let mut unspillable_tmps = self.compute_unspillable_tmps::<{ BANK }>(code);
-
+        let use_irc = !code.proc.options.air_force_briggs_allocator;
         let mut num_iterations = 0;
         let mut done = false;
 
@@ -2038,31 +2098,76 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             if code.num_tmps(BANK) < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
                 let graph = SmallInterferenceGraph::new(InterferenceBitVector::new());
                 let cloned = unspillable_tmps.clone();
-                let mut allocator =
-                    ColoringAllocator::<_, BANK>::new(code, self.use_counts, &cloned, graph);
-                allocator.allocator.allocate();
 
-                if !allocator.requires_spilling() {
-                    Self::assign_registers_to_tmp(&mut allocator);
-                    done = true;
+                if !use_irc {
+                    let mut allocator = ColoringAllocator::<_, Briggs<_, BANK>, BANK>::new(
+                        code,
+                        self.use_counts,
+                        &cloned,
+                        graph,
+                    );
+                    allocator.allocator.allocate();
+
+                    if !allocator.requires_spilling() {
+                        Self::assign_registers_to_tmp(&mut allocator);
+                        done = true;
+                    } else {
+                        Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                        done = false
+                    }
                 } else {
-                    Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
-                    done = false
+                    let mut allocator = ColoringAllocator::<_, IRC<_, BANK>, BANK>::new(
+                        code,
+                        self.use_counts,
+                        &cloned,
+                        graph,
+                    );
+                    allocator.allocator.allocate();
+
+                    if !allocator.requires_spilling() {
+                        Self::assign_registers_to_tmp(&mut allocator);
+                        done = true;
+                    } else {
+                        Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                        done = false
+                    }
                 }
             } else {
                 let graph = LargeInterferenceGraph::new(InterferenceVector::new());
 
                 let cloned = unspillable_tmps.clone();
-                let mut allocator =
-                    ColoringAllocator::<_, BANK>::new(code, self.use_counts, &cloned, graph);
-                allocator.allocator.allocate();
+                if !use_irc {
+                    let mut allocator = ColoringAllocator::<_, Briggs<_, BANK>, BANK>::new(
+                        code,
+                        self.use_counts,
+                        &cloned,
+                        graph,
+                    );
+                    allocator.allocator.allocate();
 
-                if !allocator.requires_spilling() {
-                    Self::assign_registers_to_tmp(&mut allocator);
-                    done = true;
+                    if !allocator.requires_spilling() {
+                        Self::assign_registers_to_tmp(&mut allocator);
+                        done = true;
+                    } else {
+                        Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                        done = false
+                    }
                 } else {
-                    Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
-                    done = false
+                    let mut allocator = ColoringAllocator::<_, IRC<_, BANK>, BANK>::new(
+                        code,
+                        self.use_counts,
+                        &cloned,
+                        graph,
+                    );
+                    allocator.allocator.allocate();
+
+                    if !allocator.requires_spilling() {
+                        Self::assign_registers_to_tmp(&mut allocator);
+                        done = true;
+                    } else {
+                        Self::add_spill_and_fill(&mut allocator, &mut unspillable_tmps);
+                        done = false
+                    }
                 }
             }
 
@@ -2177,10 +2282,16 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         unspillable_tmps
     }
 
-    fn assign_registers_to_tmp<InterferenceSet: InterferenceGraph, const BANK: Bank>(
-        allocator: &mut ColoringAllocator<InterferenceSet, BANK>,
+    fn assign_registers_to_tmp<
+        'c,
+        'b: 'c,
+        InterferenceSet: InterferenceGraph,
+        Alloc: Allocator<'c, 'b, InterferenceSet, BANK>,
+        const BANK: Bank,
+    >(
+        allocator: &mut ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>,
     ) {
-        let code_ptr = allocator.allocator.base.code as *mut Code;
+        let code_ptr = (&mut *allocator.allocator).code as *mut Code;
         for i in 0..allocator.allocator.code.blocks.len() {
             let block = BasicBlockId(i);
 
@@ -2237,12 +2348,18 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         }
     }
 
-    fn add_spill_and_fill<InterferenceSet: InterferenceGraph, const BANK: Bank>(
-        allocator: &mut ColoringAllocator<InterferenceSet, BANK>,
+    fn add_spill_and_fill<
+        'c,
+        'b: 'c,
+        InterferenceSet: InterferenceGraph,
+        Alloc: Allocator<'c, 'b, InterferenceSet, BANK>,
+        const BANK: Bank,
+    >(
+        allocator: &mut ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>,
         unspillable_tmps: &mut BitVector,
     ) {
         let mut stackslots = HashMap::new();
-        let code_ptr = allocator.allocator.base.code as *mut Code;
+        let code_ptr = (&mut *allocator.allocator).code as *mut Code;
         for &tmp in allocator.allocator.spilled_tmps.iter() {
             let tmp = if BANK == Bank::GP {
                 AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(tmp as usize)
@@ -2270,18 +2387,18 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
         let mut insertion_set = InsertionSet::new();
 
-        let code_ptr = allocator.allocator.base.code as *mut Code;
+        let code_ptr = (&mut *allocator.allocator).code as *mut Code;
 
-        for i in 0..allocator.allocator.base.code.blocks.len() {
+        for i in 0..allocator.allocator.code.blocks.len() {
             let block = BasicBlockId(i);
             let mut has_aliased_tmps = false;
 
-            for inst_index in 0..allocator.allocator.base.code.block(block).len() {
-                let mut inst = allocator.allocator.base.code.block_mut(block)[inst_index].clone();
+            for inst_index in 0..allocator.allocator.code.block(block).len() {
+                let mut inst = allocator.allocator.code.block_mut(block)[inst_index].clone();
 
                 let mut did_spill = false;
                 let mut needs_scratch = false;
-
+                let args = inst.args.as_ptr() as usize;
                 inst.for_each_arg_mut(
                     unsafe { &mut *code_ptr },
                     |arg_index, arg, role, arg_bank, _width| {
@@ -2300,10 +2417,10 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                         if let Some(stack_slot) = stackslots.get(&arg.tmp()).copied() {
                             let mut needs_scratch_if_spilled_in_place = false;
 
-                            if !allocator.allocator.base.code.block(block)[inst_index]
-                                .admits_stack(arg_index, allocator.allocator.base.code)
+                            if !allocator.allocator.code.block(block)[inst_index]
+                                .admits_stack(arg_index, allocator.allocator.code)
                             {
-                                match allocator.allocator.base.code.block(block)[inst_index]
+                                match allocator.allocator.code.block(block)[inst_index]
                                     .kind
                                     .opcode
                                 {
@@ -2311,19 +2428,23 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                                     | Opcode::MoveDouble
                                     | Opcode::MoveFloat
                                     | Opcode::Move32 => {
-                                        let other_arg_index = arg_index ^ 1;
-                                        let other_arg = allocator.allocator.base.code.block(block)
+                                        let other_arg_index = arg as *mut Arg as usize - args;
+                                        let other_arg_index = other_arg_index / std::mem::size_of::<Arg>();
+                                        let other_arg_index = other_arg_index ^ 1;
+                                        if other_arg_index >= allocator.allocator.code.block(block)[inst_index].args.len() {
+                                            return;
+                                        }
+                                        let other_arg = allocator.allocator.code.block(block)
                                             [inst_index]
                                             .args[other_arg_index];
 
-                                        if allocator.allocator.base.code.block(block)[inst_index]
+                                        if allocator.allocator.code.block(block)[inst_index]
                                             .args
                                             .len()
                                             == 2
                                             && other_arg.is_stack()
                                             && allocator
                                                 .allocator
-                                                .base
                                                 .code
                                                 .stack_slot(other_arg.stack_slot())
                                                 .is_spill()
@@ -2359,7 +2480,6 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
                             allocator
                                 .allocator
-                                .base
                                 .code
                                 .stack_slot_mut(stack_slot)
                                 .byte_size = bytes_for_width(spill_width) as _;
@@ -2382,7 +2502,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                         _ => unreachable!(),
                     };
 
-                    let tmp = allocator.allocator.base.code.new_tmp(inst_bank);
+                    let tmp = allocator.allocator.code.new_tmp(inst_bank);
 
                     let index = if BANK == Bank::GP {
                         AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
@@ -2402,7 +2522,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     // caused it to report hasLateUseOrDef in Inst::needsPadding.
                     insertion_set
                         .insert_inst(inst_index, Inst::new(Opcode::Nop.into(), inst.origin, &[]));
-                    allocator.allocator.base.code.block_mut(block)[inst_index] = inst;
+                    allocator.allocator.code.block_mut(block)[inst_index] = inst;
                     continue;
                 }
                 let origin = inst.origin;
@@ -2421,7 +2541,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                             Opcode::MoveDouble
                         };
 
-                        let new_tmp = allocator.allocator.base.code.new_tmp(BANK);
+                        let new_tmp = allocator.allocator.code.new_tmp(BANK);
                         *tmp = new_tmp;
 
                         let index = if BANK == Bank::GP {
@@ -2461,20 +2581,15 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     }
                 });
 
-                allocator.allocator.base.code.block_mut(block)[inst_index] = inst;
+                allocator.allocator.code.block_mut(block)[inst_index] = inst;
             }
 
-            insertion_set.execute(allocator.allocator.base.code, block);
+            insertion_set.execute(allocator.allocator.code, block);
 
             if has_aliased_tmps {
-                allocator
-                    .allocator
-                    .base
-                    .code
-                    .block_mut(block)
-                    .retain(|inst| {
-                        !ColoringAllocator::<InterferenceSet, BANK>::is_useless_move(inst)
-                    });
+                allocator.allocator.code.block_mut(block).retain(|inst| {
+                    !ColoringAllocator::<InterferenceSet, Alloc, BANK>::is_useless_move(inst)
+                });
             }
         }
     }

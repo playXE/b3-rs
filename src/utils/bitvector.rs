@@ -1,7 +1,4 @@
-use std::{
-    alloc::Layout,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
 /// This is a space-efficient, resizeable bitvector class. In the common case it
 /// occupies one word, but if necessary, it will inflate this one word to point
@@ -35,7 +32,6 @@ impl Default for BitVector {
 
 impl Clone for BitVector {
     fn clone(&self) -> Self {
-        
         if self.is_inline() {
             Self {
                 bits_or_pointer: self.bits_or_pointer,
@@ -364,7 +360,8 @@ impl BitVector {
                     (*new_out_of_line_bits)
                         .bits_mut()
                         .as_mut_ptr()
-                        .add(shift_in_words + 1).cast(),
+                        .add(shift_in_words + 1)
+                        .cast(),
                     0,
                     (new_num_words - 1 - shift_in_words) * std::mem::size_of::<usize>(),
                 );
@@ -372,10 +369,7 @@ impl BitVector {
                 if num_bits > self.len() {
                     let old_num_words = self.out_of_line_bits().num_words();
                     libc::memset(
-                        (*new_out_of_line_bits)
-                            .bits_mut()
-                            .as_mut_ptr()
-                            .cast(),
+                        (*new_out_of_line_bits).bits_mut().as_mut_ptr().cast(),
                         0,
                         shift_in_words * std::mem::size_of::<usize>(),
                     );
@@ -404,10 +398,7 @@ impl BitVector {
                     );
                 } else {
                     libc::memcpy(
-                        (*new_out_of_line_bits)
-                            .bits_mut()
-                            .as_mut_ptr()
-                            .cast(),
+                        (*new_out_of_line_bits).bits_mut().as_mut_ptr().cast(),
                         self.out_of_line_bits().bits().as_ptr().cast(),
                         new_num_words * std::mem::size_of::<usize>(),
                     );
@@ -427,7 +418,7 @@ impl BitVector {
     const fn max_inline_bits() -> usize {
         Self::bits_in_pointer() - 1
     }
-
+    #[allow(dead_code)]
     const fn byte_count(bits: usize) -> usize {
         (bits + 7) >> 3
     }
@@ -522,9 +513,7 @@ impl BitVector {
 impl Drop for BitVector {
     fn drop(&mut self) {
         if !self.is_inline() {
-            unsafe {
-                OutOfLineBits::destroy(self.out_of_line_bits_mut())
-            }
+            unsafe { OutOfLineBits::destroy(self.out_of_line_bits_mut()) }
         }
     }
 }
@@ -557,7 +546,7 @@ impl OutOfLineBits {
     unsafe fn create(num_bits: usize) -> *mut Self {
         let num_bits = (num_bits + 7) & !7;
         let size = std::mem::size_of::<Self>() + std::mem::size_of::<usize>() * (num_bits / 64);
-        
+
         /*let layout = Layout::from_size_align_unchecked(
             size,
             std::mem::align_of::<usize>(),
@@ -569,7 +558,7 @@ impl OutOfLineBits {
             num_bits,
             bits: [0; 1],
         });
-   
+
         ptr
     }
 

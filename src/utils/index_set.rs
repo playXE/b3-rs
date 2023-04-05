@@ -11,6 +11,12 @@ pub struct IndexSet<T: KeyIndex> {
     marker: PhantomData<T>
 }
 
+impl<T: KeyIndex + std::fmt::Debug> std::fmt::Debug for IndexSet<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_set().entries(self.set.iter()).finish()
+    }
+}
+
 impl<T: KeyIndex> Default for IndexSet<T> {
     fn default() -> Self {
         Self::new()

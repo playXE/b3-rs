@@ -8,7 +8,7 @@ struct ScopeInfo {
     time: u64,
 }
 
-pub fn phase_scope<R>(name: &str, f: impl FnOnce() -> R) -> R {
+pub fn phase_scope<R>(_name: &str, f: impl FnOnce() -> R) -> R {
     //let start = std::time::Instant::now();
     let r = f();
     //let elapsed = start.elapsed().as_micros();

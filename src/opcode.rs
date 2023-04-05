@@ -34,6 +34,8 @@ pub enum Opcode {
 
     /// Gets the base address of a StackSlot.
     SlotBase,
+    
+    Alloca,
 
     /// The magical argument register. This is viewed as executing at the top of the program
     /// regardless of where in control flow you put it, and the compiler takes care to ensure that we

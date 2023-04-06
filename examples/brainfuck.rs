@@ -8,7 +8,7 @@ pub struct BfJIT {
 }
 pub struct CGContext {
     pub opt_level: OptLevel,
-    pub use_lsra: bool,
+    pub regalloc: RegAlloc,
 }
 #[derive(Copy, Clone, Debug)]
 enum Token {
@@ -22,6 +22,7 @@ enum Token {
     LoopEnd,
 
     LoopToZero,
+    #[allow(dead_code)]
     LoopToAdd,
 }
 
@@ -119,7 +120,9 @@ impl BfJIT {
     fn do_translate(&self, _disasm: bool, input: &[Token]) -> Compilation {
         let mut options = b3::Options::default();
         options.opt_level = self.ctx.opt_level;
-        options.air_force_linear_scan_allocator = self.ctx.use_lsra;
+        options.air_force_linear_scan_allocator = self.ctx.regalloc == RegAlloc::LinearScan;
+        options.air_force_irc_allocator = self.ctx.regalloc == RegAlloc::IRC;
+        options.air_force_briggs_allocator = self.ctx.regalloc == RegAlloc::Briggs;
         let mut proc = b3::Procedure::new(options);
 
         let entry = proc.add_block(1.0);
@@ -255,9 +258,9 @@ impl BfJIT {
         let zero = builder.const64(0);
         builder.return_(Some(zero));
         let start = std::time::Instant::now();
-        let r = b3::compile(proc);  
+        let r = b3::compile(proc);
         println!("compile time: {:?}", start.elapsed());
-        r 
+        r
 
         /*let mut jmps_to_end: Vec<(Label, Jump)> = vec![];
 
@@ -359,13 +362,31 @@ extern "C" fn getchr() -> u8 {
 
 use std::io::{Read, Write};
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RegAlloc {
+    LinearScan,
+    IRC,
+    Briggs,
+}
+
+impl std::fmt::Display for RegAlloc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 fn main() {
     let input = "file.bf";
     let mut args = pico_args::Arguments::from_env();
-    let force_lsra = args.contains("--force-linear-scan");
-    let opt_level = args
-        .opt_value_from_str::<_, u8>("--optLevel")
-        .unwrap();
+    let regalloc = args.opt_value_from_os_str("--regAlloc", |key| {
+        Ok::<_, String>(match key.to_string_lossy().to_lowercase().as_str() {
+            "linearscan" => RegAlloc::LinearScan,
+            "irc" => RegAlloc::IRC,
+            "briggs" => RegAlloc::Briggs,
+            _ => RegAlloc::IRC,
+        })
+    }).unwrap().unwrap_or_else(|| RegAlloc::LinearScan);
+    let opt_level = args.opt_value_from_str::<_, u8>("--optLevel").unwrap();
 
     let opt_level = match opt_level {
         None => OptLevel::O1,
@@ -376,16 +397,24 @@ fn main() {
         },
     };
 
-    println!("Opt level: {:?}, use LSRA: {:?}", opt_level, force_lsra);
-
+    println!("Opt level: {:?}, Regalloc: {:?}", opt_level, regalloc);
+    
     let jit = BfJIT::new(CGContext {
         opt_level,
-        use_lsra: force_lsra,
+        regalloc,
     });
 
     let code = jit.translate(false, &std::fs::read_to_string(input).unwrap());
 
-   
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("jitdump.s")
+        .unwrap();
+    file.write_all(code.disassembly().as_bytes()).unwrap();
+
     let fun =
         unsafe { std::mem::transmute::<_, extern "C" fn(*mut u8) -> i64>(code.code_ref().start()) };
     let mut mem = vec![0u8; 100 * 1024];

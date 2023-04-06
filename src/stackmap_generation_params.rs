@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Label};
 
 use crate::{value::{ValueId, ValueRep}, air::{generation_context::GenerationContext, code::Code}, jit::{register_set::RegisterSetBuilder, reg::Reg}, procedure::Procedure};
@@ -76,13 +78,13 @@ impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
         result
     }
 
-    pub fn successor_labels(&self) -> Vec<&Box<Label>> {
+    pub fn successor_labels(&self) -> Vec<Rc<RefCell<Label>>> {
         let mut result = Vec::new();
 
-        for successor in self.context.code.block(self.context.current_block.unwrap()).successors.iter().rev() {
+        for successor in self.context.code.block(self.context.current_block.unwrap()).successors.iter() {
             let label = self.context.block_labels.get(&successor.0).unwrap();
 
-            result.push(label);
+            result.push(label.clone());
         }
 
         result

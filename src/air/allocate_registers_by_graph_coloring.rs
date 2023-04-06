@@ -1911,7 +1911,7 @@ impl<
     }
 
     fn build_low_priority_move_list(&mut self) {
-        if !is_x86() || true {
+        if !is_x86() {
             return;
         }
 

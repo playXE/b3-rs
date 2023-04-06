@@ -115,9 +115,98 @@ pub enum ValueData {
     StackMap(StackMapValue),
     Patchpoint(PatchpointValue),
     SlotBase(StackSlotId),
+    Switch(Vec<i64>),
+    Alloca(Type),
 }
 
 impl Value {
+
+    pub fn alloca(&self) -> Option<Type> {
+        match self.data {
+            ValueData::Alloca(ty) => Some(ty),
+            _ => None,
+        }
+    }
+
+    pub fn switch_cases(&self) -> Option<&[i64]> {
+        match self.data {
+            ValueData::Switch(ref cases) => Some(cases),
+            _ => None,
+        }
+    }
+
+    pub fn is_switch(&self) -> bool {
+        match self.data {
+            ValueData::Switch(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn switch_cases_mut(&mut self) -> Option<&mut Vec<i64>> {
+        match self.data {
+            ValueData::Switch(ref mut cases) => Some(cases),
+            _ => None,
+        }
+    }
+
+    pub fn num_case_values(&self) -> usize {
+        match self.data {
+            ValueData::Switch(ref cases) => cases.len(),
+            _ => 0,
+        }
+    }
+
+    pub fn case_value(&self, index: usize) -> Option<i64> {
+        match self.data {
+            ValueData::Switch(ref cases) => Some(cases[index]),
+            _ => None,
+        }
+    }
+
+    pub fn block_has_fallthrough(&self, block: BlockId, proc: &Procedure) -> bool {
+        let num_successors = proc.block(block).successor_list().len();
+        let num_values = self.switch_cases().unwrap().len();
+
+        num_values + 1 == num_successors
+    }
+
+    pub fn has_falltrhough(&self, proc: &Procedure) -> bool {
+        let block = self.owner.unwrap();
+        self.block_has_fallthrough(block, proc)
+    }
+
+    pub fn set_fallthrough(
+        this: ValueId,
+        proc: &mut Procedure,
+        block: BlockId,
+        target: FrequentBlock,
+    ) {
+        assert!(proc.value(this).is_switch());
+        if !proc.value(this).has_falltrhough(proc) {
+            proc.block_mut(block).successor_list_mut().push(target);
+        } else {
+            proc
+                .block_mut(block)
+                .successor_list_mut()
+                .last_mut()
+                .unwrap()
+                .0 = target.0;
+        }
+    }
+
+    pub fn is_free(&self) -> bool {
+        match self.kind.opcode() {
+            Opcode::Const32
+            | Opcode::Const64
+            | Opcode::ConstDouble
+            | Opcode::ConstFloat
+            | Opcode::Identity
+            | Opcode::Opaque
+            | Opcode::Nop => true,
+            _ => false,
+        }
+    }
+
     pub fn argument_reg(&self) -> Option<Reg> {
         match self.data {
             ValueData::Argument(reg) => Some(reg),
@@ -461,6 +550,8 @@ impl Value {
             children: TinyVec::new(),
         }
     }
+
+  
 
     pub fn typ(&self) -> Type {
         self.typ
@@ -2032,7 +2123,6 @@ impl ValueKey {
     }
 
     pub fn opcode(&self) -> Opcode {
-       
         self.kind.opcode()
     }
 
@@ -2263,4 +2353,3 @@ pub union ValueIndices {
     pub double_value: f64,
     pub float_value: f32,
 }
-

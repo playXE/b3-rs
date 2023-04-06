@@ -1,8 +1,6 @@
 #![allow(unused_comparisons, unused_imports, dead_code)]
-use num::{
-    traits::{WrappingAdd, WrappingShl, WrappingShr, WrappingSub},
-    Integer,
-};
+use num_integer::*;
+use num_traits::{WrappingAdd, WrappingShl, WrappingShr, WrappingSub};
 
 use crate::{
     blocks_in_pre_order, compute_division_magic::compute_division_magic, dominators::Dominators,
@@ -194,7 +192,6 @@ impl<'a> ReduceStrength<'a> {
             }
 
             Opcode::Add => {
-                
                 self.handle_commutativity();
 
                 if self.value.child(self.proc, 0).opcode(self.proc) == Opcode::Add
@@ -213,7 +210,7 @@ impl<'a> ReduceStrength<'a> {
 
                     if let Some(new_sum) = new_sum {
                         //println!("Reducing strength of Add(Add(value, constant1), constant2) to Add(value, constant1 + constant2): {:?} = {:?} + {:?} => {:?}", self.value, self.value.child(self.proc, 1),self.value.child(self.proc, 0).child(self.proc, 1), new_sum.as_int());
-                        
+
                         let new_sum = self.proc.add(new_sum);
                         self.insertion_set.insert_value(self.index, new_sum);
                         self.proc.value_mut(self.value).children[0] =
@@ -412,7 +409,6 @@ impl<'a> ReduceStrength<'a> {
                 }
             }
             Opcode::Sub => {
-                
                 // Turn this: Sub(BitXor(BitAnd(value, mask1), mask2), mask2)
                 // Into this: SShr(Shl(value, amount), amount)
                 // Conditions:
@@ -443,7 +439,6 @@ impl<'a> ReduceStrength<'a> {
                         .has_int()
                     && self.proc.value(self.value.child(self.proc, 1)).has_int()
                 {
-                   
                     let mask1 = self
                         .proc
                         .value(
@@ -517,7 +512,6 @@ impl<'a> ReduceStrength<'a> {
                 }
 
                 if self.proc.value(self.value).is_integer() {
-                   
                     // Turn this: Sub(Neg(value), 1)
                     // Into this: BitXor(value, -1)
                     if self.value.child(self.proc, 0).opcode(self.proc) == Opcode::Neg
@@ -3309,12 +3303,12 @@ macro_rules! range_for_mask_num {
     }};
 }
 
-fn top_of<T: num::PrimInt>(_: &T) -> IntRange {
+fn top_of<T: num_traits::PrimInt>(_: &T) -> IntRange {
     IntRange::top::<T>()
 }
 
 impl IntRange {
-    pub fn top<T: num::PrimInt>() -> Self {
+    pub fn top<T: num_traits::PrimInt>() -> Self {
         Self {
             min: T::min_value().to_i64().unwrap(),
             max: T::max_value().to_i64().unwrap(),
@@ -3343,7 +3337,7 @@ impl IntRange {
         range_for_mask!(mask)
     }
 
-    fn range_for_zshrt<T: num::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
+    fn range_for_zshrt<T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
         shift_amount: i32,
     ) -> Self {
         let mut mask = T::zero();
@@ -3360,7 +3354,7 @@ impl IntRange {
         }
     }
 
-    fn range_for_mask<T: num::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
+    fn range_for_mask<T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
         mask: T,
     ) -> Self {
         if mask.wrapping_add(&T::one()) == T::zero() {
@@ -3389,7 +3383,7 @@ impl IntRange {
         }
     }
 
-    fn could_overflow_add<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
+    fn could_overflow_add<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
         match (
             T::try_from(self.min),
             T::try_from(self.max),
@@ -3415,7 +3409,7 @@ impl IntRange {
         }
     }
 
-    fn could_overflow_sub<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
+    fn could_overflow_sub<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
         match (
             T::try_from(self.min),
             T::try_from(self.max),
@@ -3441,7 +3435,7 @@ impl IntRange {
         }
     }
 
-    fn could_overflow_mul<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
+    fn could_overflow_mul<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> bool {
         match (
             T::try_from(self.min),
             T::try_from(self.max),
@@ -3467,7 +3461,7 @@ impl IntRange {
         }
     }
 
-    fn shl<T: num::PrimInt + TryFrom<i64> + WrappingShl + WrappingShr>(
+    fn shl<T: num_traits::PrimInt + TryFrom<i64> + WrappingShl + WrappingShr>(
         &self,
         shift_amount: i32,
     ) -> Self {
@@ -3500,7 +3494,7 @@ impl IntRange {
         }
     }
 
-    fn sshr<T: num::PrimInt + TryFrom<i64> + WrappingShl + WrappingShr>(
+    fn sshr<T: num_traits::PrimInt + TryFrom<i64> + WrappingShl + WrappingShr>(
         &self,
         shift_amount: i32,
     ) -> Self {
@@ -3528,7 +3522,7 @@ impl IntRange {
     }
 
     pub fn zshr<
-        T: num::PrimInt
+        T: num_traits::PrimInt
             + TryFrom<i64>
             + WrappingShl
             + WrappingShr
@@ -3570,7 +3564,7 @@ impl IntRange {
         }
     }
 
-    fn add<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
+    fn add<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
         if self.could_overflow_add::<T>(other) {
             Self::top::<T>()
         } else {
@@ -3589,7 +3583,7 @@ impl IntRange {
         }
     }
 
-    fn sub<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
+    fn sub<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
         if self.could_overflow_sub::<T>(other) {
             Self::top::<T>()
         } else {
@@ -3608,7 +3602,7 @@ impl IntRange {
         }
     }
 
-    fn mul<T: num::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
+    fn mul<T: num_traits::PrimInt + TryFrom<i64>>(&self, other: &Self) -> Self {
         if self.could_overflow_mul::<T>(other) {
             Self::top::<T>()
         } else {
@@ -3644,7 +3638,7 @@ impl IntRange {
         }
     }
 
-    fn sext<T: num::PrimInt + TryFrom<i64>>(&self) -> Self {
+    fn sext<T: num_traits::PrimInt + TryFrom<i64>>(&self) -> Self {
         let type_min: i64 = T::min_value().to_i64().unwrap();
         let type_max: i64 = T::max_value().to_i64().unwrap();
 
@@ -3709,15 +3703,15 @@ impl IntRange {
     }
 }
 
-fn sum_overflows<T: num::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
+fn sum_overflows<T: num_traits::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
     a.checked_add(&b).is_none()
 }
 
-fn difference_overflows<T: num::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
+fn difference_overflows<T: num_traits::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
     a.checked_sub(&b).is_none()
 }
 
-fn product_overflows<T: num::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
+fn product_overflows<T: num_traits::PrimInt + TryFrom<i64>>(a: T, b: T) -> bool {
     a.checked_mul(&b).is_none()
 }
 

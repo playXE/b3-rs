@@ -85,7 +85,12 @@ impl Type {
             _ => false,
         }
     }
+
+    pub fn size(&self) -> u32 {
+        size_of_type(*self)
+    }
 }
+
 
 pub const fn pointer_type() -> Type {
     #[cfg(target_pointer_width = "64")]

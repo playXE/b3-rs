@@ -308,7 +308,7 @@ impl PatchpointSpecial {
             offset += 1;
         }
 
-        (generator.unwrap())(jit, &params);
+        (generator.unwrap())(jit, &mut params);
 
         Jump::default()
     }

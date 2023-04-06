@@ -1116,6 +1116,22 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(id);
     }
 
+    pub fn switch(&mut self, on: ValueId) -> ValueId {
+        assert!(self.procedure.value(on).typ().is_int(), "switch value must be an integer");
+        let value = Value::new(
+            Opcode::Switch,
+            Type::Void,
+            NumChildren::One,
+            &[on],
+            ValueData::Switch(vec![]),
+        );
+
+        let id = self.procedure.add(value);
+
+        self.add_value(id);
+        id
+    }
+
 
     /// Conditional branch on `on` value.
     /// 
@@ -1279,4 +1295,20 @@ impl<'a> BasicBlockBuilder<'a> {
 
         value
     }
+
+    pub fn alloca(&mut self, typ: Type) -> ValueId {
+        let value = Value::new(
+            Opcode::Alloca,
+            Type::Int64,
+            NumChildren::Zero,
+            &[],
+            ValueData::Alloca(typ),
+        );
+
+        let value = self.procedure.add(value);
+
+        self.add_value(value);
+
+        value
+    } 
 }

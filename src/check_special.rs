@@ -295,8 +295,8 @@ impl CheckSpecial {
 
             // Generate the handler
             let generator = generator.unwrap();
-            let params = StackmapGenerationParams::new(origin, reps, context);
-            generator(jit, &params);
+            let mut params = StackmapGenerationParams::new(origin, reps, context);
+            generator(jit, &mut params);
         }));
 
         Jump::default()  // As far as Air thinks, we are not a terminal.

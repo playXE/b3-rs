@@ -7,18 +7,18 @@ use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep, stackmap_gen
 #[derive(Clone)]
 pub struct StackMapValue {
     pub reps: Vec<ValueRep>,
-    pub generator: Option<Rc<dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)>>,
+    pub generator: Option<Rc<dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)>>,
     pub early_clobbered: RegisterSetBuilder,
     pub late_clobbered: RegisterSetBuilder,
     pub used_registers: RegisterSetBuilder,
 }
 
 impl StackMapValue {
-    pub fn set_generator(&mut self, generator: impl Fn(&mut TargetMacroAssembler, &StackmapGenerationParams) + 'static) {
+    pub fn set_generator(&mut self, generator: impl Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams) + 'static) {
         self.generator = Some(Rc::new(generator));
     }
 
-    pub fn generator(&self) -> Option<&dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)> {
+    pub fn generator(&self) -> Option<&dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)> {
         self.generator.as_ref().map(|x| &**x)
     }
 

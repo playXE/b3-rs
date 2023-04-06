@@ -1,8 +1,8 @@
 use std::{ops::Range, rc::Rc};
 
 use macroassembler::assembler::TargetMacroAssembler;
+use tinyvec::tiny_vec;
 
-use crate::{Options, Frequency};
 use crate::{
     air::{
         special::{Special, SpecialId},
@@ -22,8 +22,9 @@ use crate::{
     typ::{Type, TypeKind},
     value::{NumChildren, Value, ValueData, ValueId},
     variable::{Variable, VariableId},
-    ConstrainedValue, ValueRep, ValueRepKind,
+    ConstrainedValue, ValueRep, ValueRepKind, patchpoint_value::PatchpointValue, stackmap_value::StackMapValue,
 };
+use crate::{Frequency, Options};
 pub struct Procedure {
     pub(crate) options: Options,
     pub(crate) values: SparseCollection<Value>,
@@ -89,7 +90,9 @@ impl Procedure {
 
     /// Add a new successor to a block.
     pub fn add_successor(&mut self, block: BlockId, successor: BlockId) {
-        self.blocks[block.0].successor_list.push((successor, Frequency::Normal));
+        self.blocks[block.0]
+            .successor_list
+            .push((successor, Frequency::Normal));
     }
 
     pub fn num_entrypoints(&self) -> usize {
@@ -458,6 +461,7 @@ impl Procedure {
     }
 
     pub fn add_to_block(&mut self, block: BlockId, value: ValueId) {
+        self.value_mut(value).owner = Some(block);
         self.blocks[block.0].push(value);
     }
 
@@ -607,7 +611,7 @@ impl Procedure {
     /// Append value with some register representation to stackmap
     pub fn stackmap_append_some_register(&mut self, stackmap: ValueId, value: ValueId) {
         self.stackmap_append(stackmap, value, ValueRep::new(ValueRepKind::SomeRegister));
-    }   
+    }
 
     /// Append value with some register with clobber representation to stackmap
     pub fn stackmap_append_some_register_with_clobber(
@@ -653,7 +657,7 @@ impl Procedure {
     pub fn stackmap_clobber(&mut self, stackmap: ValueId, set: &RegisterSetBuilder) {
         self.stackmap_clobber_early(stackmap, set);
         self.stackmap_clobber_late(stackmap, set);
-    }   
+    }
 
     /// Set result constraints of patchpoint
     pub fn patchpoint_set_result_constraints(&mut self, stackmap: ValueId, constraints: ValueRep) {
@@ -675,9 +679,17 @@ impl Procedure {
     pub fn stackmap_set_generator(
         &mut self,
         stackmap: ValueId,
-        generator: Rc<dyn Fn(&mut TargetMacroAssembler, &StackmapGenerationParams)>,
+        generator: Rc<dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)>,
     ) {
         self.value_mut(stackmap).stackmap_mut().unwrap().generator = Some(generator);
+    }
+
+    pub fn patchpoint_mut(&mut self, patchpoint: ValueId) -> &mut PatchpointValue {
+        self.value_mut(patchpoint).patchpoint_mut().unwrap()
+    }
+
+    pub fn patchpoint(&self, patchpoint: ValueId) -> &PatchpointValue {
+        self.value(patchpoint).patchpoint().unwrap()
     }
 
     /// Get effects of patchpoint
@@ -688,6 +700,85 @@ impl Procedure {
     /// Get effects of patchpoint
     pub fn patchpoint_effects(&self, patchpoint: ValueId) -> &Effects {
         &self.value(patchpoint).patchpoint().unwrap().effects
+    }
+
+    pub fn switch_has_fallthrough(&self, value: ValueId) -> bool {
+        assert!(self.value(value).is_switch());
+        self.value(value).has_falltrhough(self)
+    }
+
+    pub fn switch_fallthrough(&mut self, value: ValueId, block: BlockId, target: FrequentBlock) {
+        assert!(self.value(value).is_switch());
+        Value::set_fallthrough(value, self, block, target);
+    }
+
+    pub fn switch_block_has_fallthrough(&self, value: ValueId, block: BlockId) -> bool {
+        assert!(self.value(value).is_switch());
+        self.value(value).block_has_fallthrough(block, self)
+    }
+
+    pub fn switch_append_case_block(
+        &mut self,
+        value: ValueId,
+        block: BlockId,
+        case: (i64, FrequentBlock),
+    ) {
+        if !self.value(value).has_falltrhough(self) {
+            self.block_mut(block).successor_list_mut().push(case.1);
+        } else {
+            let last = self
+                .block_mut(block)
+                .successor_list()
+                .last()
+                .copied()
+                .unwrap();
+            self.block_mut(block).successor_list_mut().push(last);
+            let ix = self.block(block).successor_list().len() - 2;
+            self.block_mut(block).successor_list_mut()[ix] = case.1;
+        }
+
+        self.value_mut(value)
+            .switch_cases_mut()
+            .unwrap()
+            .push(case.0);
+    }
+
+    pub fn switch_append_case(&mut self, value: ValueId, case: (i64, FrequentBlock)) {
+        assert!(self.value(value).is_switch());
+        let owner = self.value(value).owner.expect("no owner for switch value");
+        self.switch_append_case_block(value, owner, case);
+    }
+
+    pub fn add_patchpoint(&mut self, typ: Type) -> ValueId {
+        let value = Value::new(
+            Opcode::Patchpoint,
+            typ,
+            NumChildren::Zero,
+            &[],
+            ValueData::Patchpoint(PatchpointValue {
+                base: StackMapValue {
+                    reps: vec![],
+                    generator: None,
+                    early_clobbered: Default::default(),
+                    late_clobbered: Default::default(),
+                    used_registers: Default::default(),
+                },
+                effects: Effects::for_call(),
+                result_constraints: tiny_vec!([ValueRep; 1] =>
+                    if typ == Type::Void
+                    {
+                         ValueRep::new(ValueRepKind::WarmAny)
+                    } else {
+                        ValueRep::new(ValueRepKind::SomeRegister)
+                }),
+                num_fp_scratch_registers: 0,
+                num_gp_scratch_registers: 0,
+            }),
+        );
+
+        let value = self.add(value);
+        
+        value
     }
 }
 

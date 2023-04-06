@@ -2,6 +2,7 @@
 #![feature(adt_const_params)]
 
 pub mod air;
+pub mod alloca_to_reg;
 pub mod bank;
 pub mod block;
 pub mod block_insertion_set;
@@ -10,15 +11,16 @@ pub mod check_special;
 pub mod compile;
 pub mod compute_division_magic;
 pub mod data_section;
+pub mod lower_macros;
 pub mod dominators;
 pub mod effects;
 pub mod eliminate_dead_code;
 pub mod ensure_loop_pre_headers;
 pub mod estimate_static_exec_counts;
 pub mod fix_ssa;
-pub mod alloca_to_reg;
 pub mod generate;
 pub mod hoist_loop_invariant_values;
+pub mod infer_switches;
 pub mod insertion_set;
 pub mod jit;
 pub mod kind;
@@ -79,7 +81,7 @@ pub fn invert(tri: TriState) -> TriState {
     }
 }
 
-use num::traits::{Float, One, PrimInt, Unsigned};
+use num_traits::{Float, One, PrimInt, Unsigned};
 pub fn chill_div<T: PrimInt + One>(numerator: T, denominator: T) -> T {
     if denominator == T::zero() {
         T::zero()

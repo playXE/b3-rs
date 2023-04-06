@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use macroassembler::assembler::{
     abstract_macro_assembler::{Address, Jump, JumpList, Label},
     TargetMacroAssembler,
@@ -35,9 +37,11 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         eliminate_dead_code(code);
 
         let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
-        if code.proc.options.air_force_linear_scan_allocator
-            || code.proc.options.opt_level <= OptLevel::O1
-            || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring
+        if !(code.proc.options.air_force_briggs_allocator
+            || code.proc.options.air_force_irc_allocator)
+            && (code.proc.options.air_force_linear_scan_allocator
+                || code.proc.options.opt_level <= OptLevel::O1
+                || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring)
         {
             // When we're compiling quickly, we do register and stack allocation in one linear scan
             // phase. It's fast because it computes liveness only once.
@@ -80,7 +84,6 @@ fn generate_with_already_allocated_registers<'a>(
     code: &'a mut Code<'a>,
     jit: &mut TargetMacroAssembler,
 ) {
-    
     let mut context = GenerationContext {
         late_paths: vec![],
         block_labels: IndexMap::with_capacity(code.blocks.len()),
@@ -90,7 +93,9 @@ fn generate_with_already_allocated_registers<'a>(
     };
 
     for block in (0..context.code.blocks.len()).map(BasicBlockId) {
-        context.block_labels.insert(block, Box::new(Label::unset()));
+        context
+            .block_labels
+            .insert(block, Rc::new(RefCell::new(Label::unset())));
     }
 
     let mut block_jumps = IndexMap::with_capacity(context.code.blocks.len());
@@ -100,8 +105,8 @@ fn generate_with_already_allocated_registers<'a>(
                 jit: &mut TargetMacroAssembler,
                 jump: Jump,
                 target| {
-        if ctx.block_labels.get(&target).unwrap().is_set() {
-            jump.link_to(jit, **ctx.block_labels.get(&target).unwrap());
+        if ctx.block_labels.get(&target).unwrap().borrow().is_set() {
+            jump.link_to(jit, *ctx.block_labels.get(&target).unwrap().borrow());
             return;
         }
 
@@ -120,7 +125,11 @@ fn generate_with_already_allocated_registers<'a>(
         });
 
         let label = jit.label();
-        *context.block_labels.get_mut(&block_id).unwrap() = Box::new(label);
+        *context
+            .block_labels
+            .get_mut(&block_id)
+            .unwrap()
+            .borrow_mut() = label;
 
         if let Some(entrypoint_index) = context.code.entrypoint_index(block_id) {
             jit.comment(format!("entrypoint {}", entrypoint_index));

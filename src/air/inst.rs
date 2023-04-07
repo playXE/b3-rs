@@ -47,13 +47,13 @@ impl Default for Inst {
 
 impl Inst {
     pub fn extra_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
-        assert!(self.kind.opcode == Opcode::Patch);
+        debug_assert!(self.kind.opcode == Opcode::Patch);
         code.special(self.args[0].special())
             .extra_clobbered_regs(code, self)
     }
 
     pub fn extra_early_clobbered_regs(&self, code: &Code<'_>) -> RegisterSetBuilder {
-        assert!(self.kind.opcode == Opcode::Patch);
+        debug_assert!(self.kind.opcode == Opcode::Patch);
         code.special(self.args[0].special())
             .extra_early_clobbered_regs(code, self)
     }

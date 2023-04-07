@@ -1,5 +1,7 @@
 use crate::{procedure::Procedure, block::BlockId};
 
+
+/// Simple pass that estimates basic block frequencies based on loop analysis.
 pub fn estimate_static_execution_counts(proc: &mut Procedure) {
     proc.natural_loops_or_compute();
     let natural_loops = proc.natural_loops();

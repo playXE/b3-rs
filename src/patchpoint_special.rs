@@ -267,7 +267,7 @@ impl PatchpointSpecial {
     pub fn generate<'a>(
         inst: &Inst,
         jit: &mut TargetMacroAssembler,
-        context: &'a mut GenerationContext<'a>,
+        context: &'a mut GenerationContext<'_, '_>,
     ) -> Jump {
         let value = context.code.proc.value(inst.origin);
         let mut reps = vec![];

@@ -37,12 +37,17 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         eliminate_dead_code(code);
 
         let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
-        if !(code.proc.options.air_force_briggs_allocator
-            || code.proc.options.air_force_irc_allocator)
-            && (code.proc.options.air_force_linear_scan_allocator
-                || code.proc.options.opt_level <= OptLevel::O1
-                || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring)
-        {
+
+        let mut use_linear_scan = 
+            code.proc.options.opt_level <= OptLevel::O1
+            || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring;
+        if code.proc.options.air_force_linear_scan_allocator {
+            use_linear_scan = true;
+        } else if code.proc.options.air_force_irc_allocator {
+            use_linear_scan = false;
+        }
+
+        if use_linear_scan {
             // When we're compiling quickly, we do register and stack allocation in one linear scan
             // phase. It's fast because it computes liveness only once.
             allocate_registers_and_stack_by_linear_scan(code);
@@ -73,15 +78,19 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
-
+       
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
         // best order for blocks but aids in optimizations.
         optimize_block_order(code);
     });
 }
 
-fn generate_with_already_allocated_registers<'a>(
-    code: &'a mut Code<'a>,
+pub fn generate<'a, 'b>(code: &'a mut Code<'b>, jit: &mut TargetMacroAssembler) {
+    generate_with_already_allocated_registers(code, jit);
+}
+
+fn generate_with_already_allocated_registers<'a, 'b>(
+    code: &'a mut Code<'b>,
     jit: &mut TargetMacroAssembler,
 ) {
     let mut context = GenerationContext {
@@ -131,6 +140,7 @@ fn generate_with_already_allocated_registers<'a>(
             .unwrap()
             .borrow_mut() = label;
 
+        jit.comment(format!("BB{}:", block_id.0));
         if let Some(entrypoint_index) = context.code.entrypoint_index(block_id) {
             jit.comment(format!("entrypoint {}", entrypoint_index));
 
@@ -195,9 +205,18 @@ fn generate_with_already_allocated_registers<'a>(
         context.current_block = None;
     }
 
+    let num_entrypoints = context.code.entrypoints.len();
+    context.code.entrypoint_labels = vec![Label::unset(); num_entrypoints];
+
+    for i in 0..context.code.entrypoint_labels.len() {
+        let id = context.code.entrypoints[i].0;
+        context.code.entrypoint_labels[i] = *context.block_labels.get(&id).unwrap().borrow();
+    }
+
     for late_path in std::mem::take(&mut context.late_paths) {
         late_path(jit, &mut context);
     }
+
     //});
 }
 
@@ -233,10 +252,6 @@ pub fn emit_restore(jit: &mut TargetMacroAssembler, list: &RegisterAtOffsetList,
         );
         i += 1;
     }
-}
-
-pub fn generate<'a>(code: &'a mut Code<'a>, jit: &mut TargetMacroAssembler) {
-    generate_with_already_allocated_registers(code, jit);
 }
 
 pub fn emit_callee_saves_for(jit: &mut TargetMacroAssembler, callee_saves: &RegisterAtOffsetList) {
@@ -382,8 +397,9 @@ pub fn restore_return_address_after_call(jit: &mut TargetMacroAssembler, reg: u8
 }
 
 pub fn emit_save(jit: &mut TargetMacroAssembler, list: &RegisterAtOffsetList) {
-    jit.comment(format!("emitSave {}", list));
-
+    if list.register_count() != 0 {
+        jit.comment(format!("emitSave {}", list));
+    }
     let mut i = 0;
 
     while i < list.register_count() {

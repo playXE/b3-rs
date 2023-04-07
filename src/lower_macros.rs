@@ -190,7 +190,7 @@ impl<'a> LowerMacros<'a> {
                 }
 
                 let mut has_unhandled_indices = false;
-                println!("{} {:?} {}..{}", table_size, handled_indices, start, end);
+            
                 for i in 0..table_size {
                     if !handled_indices.get(i) {
                         has_unhandled_indices = true;
@@ -239,7 +239,7 @@ impl<'a> LowerMacros<'a> {
                             let mut label_index = 0;
                             for table_index in bvec.iter() {
                                 let loc = link_buffer.location_of(*successors[label_index].borrow());
-                                println!("{} {:p}", table_index, loc);
+                               
                                 jump_table.cast::<*mut u8>().add(table_index).write(loc);
                                 label_index += 1;
                             }

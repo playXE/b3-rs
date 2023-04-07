@@ -74,7 +74,7 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                 if self.should_visit.get(block_index) {
                     
                     self.should_visit.set(block_index, false);
-                    assert!(self.not_bottom.get(block_index));
+                    debug_assert!(self.not_bottom.get(block_index));
                     self.block = Some(BasicBlockId(block_index));
                     self.inst_index = 0;
                     self.state = self.at_head[self.block.unwrap()].clone();
@@ -253,7 +253,7 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
         }
 
         inst = inst_copy;
-        assert!(inst.is_valid_form(self.code), "invalid form for {}", inst);
+        debug_assert!(inst.is_valid_form(self.code), "invalid form for {}", inst);
         let inst2 = unsafe { &*(&inst as *const Inst) };
         inst.for_each_arg_mut(this.code, |_, arg, role, bank, width| {
             let arg_copy = *arg;

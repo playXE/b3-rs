@@ -1043,27 +1043,27 @@ impl Arg {
     }
 
     pub fn tmp(&self) -> Tmp {
-        assert!(self.is_tmp());
+        debug_assert!(self.is_tmp());
         self.base
     }
 
     pub fn value(&self) -> i64 {
-        assert!(self.is_some_imm());
+        debug_assert!(self.is_some_imm());
         self.offset
     }
 
     pub fn pointer_value(&self) -> *const u8 {
-        assert!(self.is_some_imm());
+        debug_assert!(self.is_some_imm());
         self.offset as *const u8
     }
 
     pub fn ptr(&self) -> Tmp {
-        assert!(self.is_simple_addr());
+        debug_assert!(self.is_simple_addr());
         self.base
     }
 
     pub fn base(&self) -> Tmp {
-        assert!(
+        debug_assert!(
             self.is_addr()
                 || self.is_index()
                 || self.is_pre_index()
@@ -1082,7 +1082,7 @@ impl Arg {
         if self.kind() == ArgKind::Stack {
             return self.scale as _;
         }
-        assert!(
+        debug_assert!(
             self.kind == ArgKind::Addr
                 || self.kind == ArgKind::ExtendedOffsetAddr
                 || self.kind == ArgKind::CallArg
@@ -1094,7 +1094,7 @@ impl Arg {
     }
 
     pub fn stack_slot(&self) -> StackSlotId {
-        assert!(self.is_stack());
+        debug_assert!(self.is_stack());
         // FIXME: This code is direct copy from the original code.
         // It is not a safe version, rewrite it to a safe version in future.
 
@@ -1103,28 +1103,28 @@ impl Arg {
     }
 
     pub fn special(&self) -> SpecialId {
-        assert!(self.is_special());
+        debug_assert!(self.is_special());
 
         SpecialId(self.offset as _)
     }
 
     pub fn index(&self) -> Tmp {
-        assert!(self.kind == ArgKind::Index);
+        debug_assert!(self.kind == ArgKind::Index);
         self.index
     }
 
     pub fn scale(&self) -> usize {
-        assert!(self.kind == ArgKind::Index);
+        debug_assert!(self.kind == ArgKind::Index);
         self.scale as usize
     }
 
     pub fn log_scale(&self) -> usize {
-        assert!(self.kind == ArgKind::Index);
+        debug_assert!(self.kind == ArgKind::Index);
         log_scale(self.scale as usize)
     }
 
     pub fn width(&self) -> Width {
-        assert!(self.is_width_arg());
+        debug_assert!(self.is_width_arg());
         width_for_bytes(self.offset as _)
     }
 
@@ -1214,7 +1214,7 @@ impl Arg {
     }
 
     pub fn gpr(&self) -> u8 {
-        assert!(self.is_gpr());
+        debug_assert!(self.is_gpr());
         self.tmp().gpr()
     }
 
@@ -1223,7 +1223,7 @@ impl Arg {
     }
 
     pub fn fpr(&self) -> u8 {
-        assert!(self.is_fpr(), "not fpr: {}", self);
+        debug_assert!(self.is_fpr(), "not fpr: {}", self);
         self.tmp().fpr()
     }
 
@@ -1232,44 +1232,44 @@ impl Arg {
     }
 
     pub fn reg(&self) -> Reg {
-        assert!(self.is_reg());
+        debug_assert!(self.is_reg());
         self.tmp().reg()
     }
 
     pub fn gp_tmp_index(&self) -> usize {
-        assert!(self.is_gp_tmp());
+        debug_assert!(self.is_gp_tmp());
         self.tmp().gp_tmp_index()
     }
 
     pub fn fp_tmp_index(&self) -> usize {
-        assert!(self.is_fp_tmp());
+        debug_assert!(self.is_fp_tmp());
         self.tmp().fp_tmp_index()
     }
 
     pub fn tmp_index(&self) -> usize {
-        assert!(self.is_tmp());
+        debug_assert!(self.is_tmp());
         self.tmp().tmp_index()
     }
 
     pub fn as_imm32(&self) -> i32 {
-        assert!(self.is_imm() || self.is_bit_imm());
+        debug_assert!(self.is_imm() || self.is_bit_imm());
         self.offset as _
     }
 
     pub fn as_imm64(&self) -> i64 {
-        assert!(self.is_big_imm() || self.is_bit_imm64());
+        debug_assert!(self.is_big_imm() || self.is_bit_imm64());
         self.offset as _
     }
 
     #[cfg(target_pointer_width = "32")]
     pub fn as_big_imm(&self) -> i32 {
-        assert!(self.is_big_imm());
+        debug_assert!(self.is_big_imm());
         self.offset as _
     }
 
     #[cfg(target_pointer_width = "64")]
     pub fn as_big_imm(&self) -> i64 {
-        assert!(self.is_big_imm());
+        debug_assert!(self.is_big_imm());
         self.offset as _
     }
 

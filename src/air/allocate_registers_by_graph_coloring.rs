@@ -267,13 +267,13 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
         if is_new_edge {
             if !self.is_precolored(a) {
-                assert!(!self.adjacency_list[a as usize].contains(&b));
+                debug_assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
                 self.degrees[a as usize] += 1;
             }
 
             if !self.is_precolored(b) {
-                assert!(
+                debug_assert!(
                     !self.adjacency_list[b as usize].contains(&a),
                     "edge {} {} already exists in adjlist: {:?}",
                     Self::index_to_tmp(a),
@@ -294,12 +294,12 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 
         if is_new_edge {
             if !self.is_precolored(a) {
-                assert!(!self.adjacency_list[a as usize].contains(&b));
+                debug_assert!(!self.adjacency_list[a as usize].contains(&b));
                 self.adjacency_list[a as usize].push(b);
             }
 
             if !self.is_precolored(b) {
-                assert!(!self.adjacency_list[b as usize].contains(&a));
+                debug_assert!(!self.adjacency_list[b as usize].contains(&a));
                 self.adjacency_list[b as usize].push(a);
             }
 

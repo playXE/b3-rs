@@ -543,7 +543,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
 
             if let Some(spill_tmp) = spill_tmp {
                 let spill_entry = &self.map[spill_tmp];
-                assert!(spill_entry.assigned.is_set());
+                debug_assert!(spill_entry.assigned.is_set());
                 if spill_entry.is_unspillable
                     || (!self.map[tmp].is_unspillable
                         && spill_entry.interval.end <= self.map[tmp].interval.end)
@@ -593,8 +593,8 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             .add_stack_slot(size_of::<usize>(), StackSlotKind::Spill);
 
         let entry = &mut self.map[tmp];
-        assert!(entry.spilled.is_none());
-        assert!(!entry.is_unspillable);
+        debug_assert!(entry.spilled.is_none());
+        debug_assert!(!entry.is_unspillable);
         entry.spilled = Some(slot);
         entry.assigned = Reg::default();
         self.did_spill = true;

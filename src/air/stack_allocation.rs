@@ -70,7 +70,7 @@ pub fn assign(code: &mut Code<'_>, slot: StackSlotId, other_slots: &[StackSlotId
 pub fn allocate_and_get_escaped_slots_without_changing_frame_size(
     code: &mut Code<'_>,
 ) -> Vec<StackSlotId> {
-    assert!(code.frame_size == 0);
+    debug_assert!(code.frame_size == 0);
     let mut assigned_escaped_stack_slots = Vec::new();
     let mut escaped_stack_slot_worklist = Vec::new();
 
@@ -83,7 +83,7 @@ pub fn allocate_and_get_escaped_slots_without_changing_frame_size(
             }
         } else {
             // It would be super strange to have an unlocked stack slot that has an offset already.
-            assert!(code.stack_slot(slot).offset_from_fp == 0);
+            debug_assert!(code.stack_slot(slot).offset_from_fp == 0);
         }
     }
 
@@ -108,8 +108,8 @@ pub fn update_frame_size_based_on_stack_slots(code: &mut Code<'_>) {
 }
 
 fn ranges_overlap(left_min: isize, left_max: isize, right_min: isize, right_max: isize) -> bool {
-    assert!(left_min < left_max);
-    assert!(right_min < right_max);
+    debug_assert!(left_min < left_max);
+    debug_assert!(right_min < right_max);
 
     left_max > right_min && right_max > left_min
 }

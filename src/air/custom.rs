@@ -175,7 +175,7 @@ impl CCallCustom {
             }
         }
 
-        assert!(index == inst.args.len());
+        debug_assert!(index == inst.args.len());
     }
 
     pub fn for_each_arg_mut(
@@ -213,7 +213,7 @@ impl CCallCustom {
             }
         }
 
-        assert!(index == inst.args.len());
+        debug_assert!(index == inst.args.len());
     }
 
     pub fn is_valid_form_static(args: &[ArgKind]) -> bool {
@@ -400,8 +400,8 @@ impl ShuffleCustom {
             };
 
             lambda(i, src, ArgRole::Use, bank, width);
-            lambda(i + 1,dst, ArgRole::Def, bank, width);
-            lambda(i + 2,width_arg, ArgRole::Use, bank, width);
+            lambda(i + 1, dst, ArgRole::Def, bank, width);
+            lambda(i + 2, width_arg, ArgRole::Use, bank, width);
 
             i += 3;
         }
@@ -588,7 +588,7 @@ impl EntrySwitchCustom {
     }
 
     pub fn has_non_arg_effects(inst: &Inst, code: &Code<'_>) -> bool {
-        false
+        true
     }
 
     pub fn has_non_arg_non_control_effects(inst: &Inst, code: &Code<'_>) -> bool {

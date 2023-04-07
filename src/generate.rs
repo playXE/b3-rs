@@ -23,8 +23,6 @@ pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
 pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     proc.reset_reachability();
     proc.dominators_or_compute();
-    //alloca_to_reg(proc);
-
     if proc.options.opt_level >= OptLevel::O2 {
         // TODO: Should we run `fix_ssa` after or before `reduce_strength`?
         // Seems like running it before is better since `reduce_strength` can
@@ -35,13 +33,13 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
 
         // convet sequence of branches to switches when possible
         infer_switches(proc);
+
+        // Convert to SSA form.
+        fix_ssa(proc);
     } else if proc.options.opt_level >= OptLevel::O1 {
         // Reduces strength in one pass.
         reduce_strength(proc);
     }
-
-    // Convert to SSA form.
-    fix_ssa(proc);
 
     lower_macros(proc);
 
@@ -61,12 +59,12 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         // overwrite them.
         estimate_static_execution_counts(proc);
     }
-    println!("{}", proc.display_());
+
     let code = lower_to_air(proc);
-    println!("{}", code);
+
     code
 }
 
-pub fn generate<'a>(air: &'a mut Code<'a>, jit: &mut TargetMacroAssembler) {
+pub fn generate<'a, 'b>(air: &'a mut Code<'b>, jit: &mut TargetMacroAssembler) {
     air::generate::generate(air, jit);
 }

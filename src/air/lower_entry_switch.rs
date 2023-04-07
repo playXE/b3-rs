@@ -24,7 +24,7 @@ pub fn lower_entry_switch(code: &mut Code) {
         worklist.push_all(code.block(block).predecessors.iter().copied());
     }
 
-    assert!(worklist.saw(BasicBlockId(0)), "EntrySwitch must be reachable from the entry block");
+    debug_assert!(worklist.saw(BasicBlockId(0)), "EntrySwitch must be reachable from the entry block");
 
     let mut entrypoint_frequencies = vec![Frequency::Rare; code.proc.num_entrypoints()];
 
@@ -78,10 +78,7 @@ pub fn lower_entry_switch(code: &mut Code) {
                 code.block_mut(new_block).push(inst.clone());
             }
 
-            code.block_mut(new_block).successors = code.block(block).successors.iter().map(|(block, frequency)| {
-                (map[*block], *frequency)
-            }).collect();
-
+            code.block_mut(new_block).successors = code.block(block).successors.clone();
             for successor in code.block_mut(block).successors.iter_mut().map(|(block, _)| block) {
                 if let Some(replacement) = map.get(&successor) {
                     *successor = *replacement;
@@ -95,7 +92,7 @@ pub fn lower_entry_switch(code: &mut Code) {
     for block in worklist.seen().indices().map(BasicBlockId) {
         fix_entry_switch(code, block, 0);
     }
-
+    println!("{}", code);
     code.entrypoints = entrypoints;
     code.reset_reachability();
 }

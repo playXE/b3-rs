@@ -177,6 +177,11 @@ pub fn blocks_in_optimized_order(code: &Code) -> Vec<BasicBlockId> {
         }
     };
 
+    for i in 1..code.entrypoints.len() {
+        let block = code.entrypoints[i];
+        append_successor(&mut sorted_successors, &mut sorted_slow_successors, block);
+    }
+
     fast_worklist.push(BasicBlockId(0));
 
     while let Some(block) = fast_worklist.pop() {
@@ -207,8 +212,8 @@ pub fn blocks_in_optimized_order(code: &Code) -> Vec<BasicBlockId> {
         sorted_successors.process(code, &mut fast_worklist);
     }
 
-    assert!(fast_worklist.is_empty());
-    assert!(slow_worklist.is_empty());
+    debug_assert!(fast_worklist.is_empty());
+    debug_assert!(slow_worklist.is_empty());
 
     blocks_in_order
 }
@@ -246,6 +251,8 @@ pub fn optimize_block_order(code: &mut Code) {
     for (i, block) in code.blocks.iter_mut().enumerate() {
         block.index = i;
     }
+
+   
     assert_eq!(code.blocks.len(), blocks_in_order.len());
     code.reset_reachability();
     // Finally, flip any branches that we recognize. It's most optimal if the taken successor does not point

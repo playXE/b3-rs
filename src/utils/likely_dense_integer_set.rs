@@ -103,7 +103,7 @@ impl LikelyDenseIntegerSet {
 
     pub fn add(&mut self, value: u32) -> bool {
         if self.size == 0 {
-            assert!(self.is_bitvector());
+            debug_assert!(self.is_bitvector());
             self.min = value & !63;
             self.max = value;
             self.size = 1;
@@ -154,14 +154,14 @@ impl LikelyDenseIntegerSet {
         if would_be_hashset_size * 2 < bitvector_size as usize {
             self.transition_to_hash_set();
             let result = self.hashset_mut().insert(value);
-            assert!(result);
+            debug_assert!(result);
             self.min = new_min;
             self.max = new_max;
             return true;
         }
 
         if value < self.min {
-            assert!(new_min < self.min);
+            debug_assert!(new_min < self.min);
             let shift = self.min - new_min;
             self.bitvector_mut()
                 .shift_right_by_multiple_of_64(shift as usize);
@@ -171,7 +171,7 @@ impl LikelyDenseIntegerSet {
         let ix = value as usize - self.min as usize;
 
         let is_new_entry = !self.bitvector_mut().set(ix, true);
-        assert!(is_new_entry);
+        debug_assert!(is_new_entry);
         self.max = new_max;
         return true;
     }
@@ -233,7 +233,7 @@ impl LikelyDenseIntegerSet {
     }
 
     fn transition_to_hash_set(&mut self) {
-        assert!(self.is_bitvector());
+        debug_assert!(self.is_bitvector());
         let mut new_set = IndexSet::with_capacity(self.size + 1);
 
         for old_index in self.bitvector().iter() {
@@ -247,11 +247,11 @@ impl LikelyDenseIntegerSet {
         }
 
         self.size = u32::MAX as _;
-        assert!(!self.is_bitvector());
+        debug_assert!(!self.is_bitvector());
     }
 
     fn transition_to_bitvector(&mut self) {
-        assert!(!self.is_bitvector());
+        debug_assert!(!self.is_bitvector());
 
         let mut new_bitvector = BitVector::new();
         new_bitvector.ensure_size(self.max as usize - self.min as usize + 1);
@@ -297,16 +297,16 @@ mod tests {
     fn test_dense_set() {
         let mut set = LikelyDenseIntegerSet::new();
         for i in 0..1000 {
-            assert!(set.add(i));
+            debug_assert!(set.add(i));
         }
         for i in 0..1000 {
-            assert!(!set.add(i));
+            debug_assert!(!set.add(i));
         }
         for i in 0..1000 {
-            assert!(set.contains(i));
+            debug_assert!(set.contains(i));
         }
         for i in 1000..2000 {
-            assert!(!set.contains(i));
+            debug_assert!(!set.contains(i));
         }
         assert_eq!(set.len(), 1000);
         assert_eq!(set.iter().count(), 1000);
@@ -346,15 +346,15 @@ mod tests {
         set.add(64002);
         set.add(64004);
 
-        assert!(set.contains(64000));
-        assert!(set.contains(64002));
-        assert!(set.contains(64004));
+        debug_assert!(set.contains(64000));
+        debug_assert!(set.contains(64002));
+        debug_assert!(set.contains(64004));
 
         set.add(13);
 
-        assert!(set.contains(64000));
-        assert!(set.contains(64002));
-        assert!(set.contains(64004));
-        assert!(set.contains(13));
+        debug_assert!(set.contains(64000));
+        debug_assert!(set.contains(64002));
+        debug_assert!(set.contains(64004));
+        debug_assert!(set.contains(13));
     }
 }

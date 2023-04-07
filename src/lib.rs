@@ -10,6 +10,7 @@ pub mod break_critical_edges;
 pub mod check_special;
 pub mod compile;
 pub mod compute_division_magic;
+pub mod fold_path_constants;
 pub mod data_section;
 pub mod lower_macros;
 pub mod dominators;
@@ -140,9 +141,6 @@ pub enum OptLevel {
     ///
     /// Might use graph coloring to reduce register pressure.
     O2,
-    /// Perform all optimizations.
-    ///
-    /// Uses graph coloring to reduce register pressure.
     O3,
 }
 
@@ -249,3 +247,7 @@ pub use procedure::*;
 pub use typ::*;
 pub use value::*;
 pub use width::*;
+pub use effects::*;
+pub use macroassembler;
+pub use jit::compilation::Compilation;
+pub use jit::reg::*;

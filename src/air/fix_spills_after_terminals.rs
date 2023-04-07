@@ -1,6 +1,8 @@
 use crate::air::{inst::Inst, opcode::Opcode};
 
-use super::{code::Code, insertion_set::InsertionSet, basic_block::BasicBlockId, block_order::rpo_sort};
+use super::{
+    basic_block::BasicBlockId, block_order::rpo_sort, code::Code, insertion_set::InsertionSet,
+};
 
 /// Because there may be terminals that produce values, the register allocator may
 /// want to spill those terminals. It'll happen to spill it after
@@ -21,16 +23,17 @@ pub fn fix_spills_after_terminals(code: &mut Code<'_>) {
     for block_id in (0..code.blocks.len()).map(BasicBlockId) {
         let mut terminal_index = code.block(block_id).len();
         let mut found_terminal = false;
-
+        
         while terminal_index > 0 {
             terminal_index -= 1;
+
             if code.block(block_id)[terminal_index].is_terminal(code) {
                 found_terminal = true;
                 break;
             }
         }
 
-        assert!(found_terminal);
+        debug_assert!(found_terminal);
 
         if terminal_index == code.block(block_id).len() - 1 {
             continue;
@@ -61,7 +64,9 @@ pub fn fix_spills_after_terminals(code: &mut Code<'_>) {
                     code.block_mut(new_block).insts.push(inst);
                 }
 
-                code.block_mut(new_block).insts.push(Inst::new(Opcode::Jump.into(), origin, &[]));
+                code.block_mut(new_block)
+                    .insts
+                    .push(Inst::new(Opcode::Jump.into(), origin, &[]));
                 code.block_mut(new_block).successors.push(successor);
                 code.block_mut(block_id).successors[i].0 = new_block;
 

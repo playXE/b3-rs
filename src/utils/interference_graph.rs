@@ -297,7 +297,7 @@ impl<G: InterferenceGraph> InterferenceGraph for UndirectedEdgesDuplicatingAdapt
     fn add_and_return_is_new_entry(&mut self, u: u32, v: u32) -> bool {
         let is_new_entry1 = self.graph.add_and_return_is_new_entry(u, v);
         let is_new_entry2 = self.graph.add_and_return_is_new_entry(v, u);
-        assert!(is_new_entry1 == is_new_entry2);
+        debug_assert!(is_new_entry1 == is_new_entry2);
         is_new_entry1
     }
 

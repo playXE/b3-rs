@@ -1203,7 +1203,7 @@ writeH("opcode_generated") {
     outp.puts "}"
     
 
-    outp.puts "pub fn generate(&self, jit: &mut TargetMacroAssembler, context: &mut GenerationContext<'_>) -> Jump"
+    outp.puts "pub fn generate(&self, jit: &mut TargetMacroAssembler, context: &mut GenerationContext<'_, '_>) -> Jump"
     outp.puts "{"
     #outp.puts "jit.comment(format!(\"{}\", self));"
     outp.puts "let mut result = Jump::default();"

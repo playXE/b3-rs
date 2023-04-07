@@ -1,6 +1,6 @@
 #![allow(unused_comparisons, unused_imports, dead_code)]
 use num_integer::*;
-use num_traits::{WrappingAdd, WrappingShl, WrappingShr, WrappingSub};
+use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingShr, WrappingSub};
 
 use crate::{
     blocks_in_pre_order, compute_division_magic::compute_division_magic, dominators::Dominators,
@@ -3337,7 +3337,9 @@ impl IntRange {
         range_for_mask!(mask)
     }
 
-    fn range_for_zshrt<T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
+    fn range_for_zshrt<
+        T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd,
+    >(
         shift_amount: i32,
     ) -> Self {
         let mut mask = T::zero();
@@ -3354,7 +3356,9 @@ impl IntRange {
         }
     }
 
-    fn range_for_mask<T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd>(
+    fn range_for_mask<
+        T: num_traits::PrimInt + WrappingShr + WrappingSub + Integer + WrappingAdd,
+    >(
         mask: T,
     ) -> Self {
         if mask.wrapping_add(&T::one()) == T::zero() {
@@ -3750,7 +3754,7 @@ fn should_swap_binary_operands(proc: &Procedure, value: ValueId) -> bool {
     // Note that we have commutative operations that take more than two children. Those operations may
     // commute their first two children while leaving the rest unaffected.
 
-    assert!(proc.value(value).children.len() >= 2);
+    debug_assert!(proc.value(value).children.len() >= 2);
 
     // Leave it alone if the right child is a constant.
     if proc.value(value.child(proc, 1)).is_constant() {

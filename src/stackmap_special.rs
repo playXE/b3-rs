@@ -4,8 +4,9 @@ use crate::{
     air::{
         arg::{Arg, ArgKind, ArgRole},
         code::Code,
+        generation_context::GenerationContext,
         inst::Inst,
-        tmp::Tmp, generation_context::GenerationContext,
+        tmp::Tmp,
     },
     bank::{bank_for_type, Bank},
     jit::{reg::Reg, register_set::RegisterSetBuilder},
@@ -50,7 +51,6 @@ impl StackMapSpecial {
 
         value.stackmap().unwrap().early_clobbered
     }
-
 
     pub fn for_each_arg_impl_mut(
         num_ignored_b3_args: usize,
@@ -143,7 +143,13 @@ impl StackMapSpecial {
 
             let typ = code.proc.value(child.value).typ();
 
-            callback(i + num_ignored_air_args, &mut arg, role, bank_for_type(typ), width_for_type(typ));
+            callback(
+                i + num_ignored_air_args,
+                &mut arg,
+                role,
+                bank_for_type(typ),
+                width_for_type(typ),
+            );
             inst.args[i + num_ignored_air_args] = arg;
         }
     }
@@ -239,7 +245,13 @@ impl StackMapSpecial {
 
             let typ = code.proc.value(child.value).typ();
 
-            callback(i + num_ignored_air_args, &arg, role, bank_for_type(typ), width_for_type(typ));
+            callback(
+                i + num_ignored_air_args,
+                &arg,
+                role,
+                bank_for_type(typ),
+                width_for_type(typ),
+            );
         }
     }
 
@@ -309,11 +321,19 @@ impl StackMapSpecial {
         false
     }
 
-    pub fn reps_impl(context: &mut GenerationContext<'_>, num_ignored_b3_args: usize, num_ignored_air_args: usize, inst: &Inst) -> Vec<ValueRep> {
-        let mut result = vec![];    
+    pub fn reps_impl(
+        context: &mut GenerationContext<'_, '_>,
+        num_ignored_b3_args: usize,
+        num_ignored_air_args: usize,
+        inst: &Inst,
+    ) -> Vec<ValueRep> {
+        let mut result = vec![];
 
         for i in 0..context.code.proc.value(inst.origin).children.len() - num_ignored_b3_args {
-            result.push(Self::rep_for_arg(context.code, &inst.args[i + num_ignored_air_args]));
+            result.push(Self::rep_for_arg(
+                context.code,
+                &inst.args[i + num_ignored_air_args],
+            ));
         }
 
         result
@@ -322,8 +342,7 @@ impl StackMapSpecial {
     pub fn rep_for_arg(code: &Code<'_>, arg: &Arg) -> ValueRep {
         match arg.kind() {
             ArgKind::Tmp => ValueRep::reg(arg.reg()),
-            ArgKind::Imm 
-            | ArgKind::BigImm => ValueRep::constant(arg.value()),
+            ArgKind::Imm | ArgKind::BigImm => ValueRep::constant(arg.value()),
             ArgKind::ExtendedOffsetAddr | ArgKind::Addr => {
                 if arg.base() == Tmp::from_reg(Reg::new_gpr(CALL_FRAME_REGISTER)) {
                     return ValueRep::stack(arg.offset() as _);

@@ -1,36 +1,55 @@
 use std::{cell::RefCell, rc::Rc};
 
-use macroassembler::assembler::{TargetMacroAssembler, abstract_macro_assembler::Label};
+use macroassembler::assembler::{abstract_macro_assembler::Label, TargetMacroAssembler};
 
-use crate::{value::{ValueId, ValueRep}, air::{generation_context::GenerationContext, code::Code}, jit::{register_set::RegisterSetBuilder, reg::Reg}, procedure::Procedure};
+use crate::{
+    air::{code::Code, generation_context::GenerationContext},
+    jit::{reg::Reg, register_set::RegisterSetBuilder},
+    procedure::Procedure,
+    value::{ValueId, ValueRep},
+};
 
 // NOTE: It's possible to capture StackmapGenerationParams by value, but not all of the methods will
 // work if you do that.
-pub struct StackmapGenerationParams<'a, 'b> {
+pub struct StackmapGenerationParams<'a, 'b, 'c> {
     value: ValueId,
     reps: Vec<ValueRep>,
     pub(crate) gp_scratch: Vec<u8>,
     pub(crate) fp_scratch: Vec<u8>,
-    context: &'a mut GenerationContext<'b>
+    context: &'a mut GenerationContext<'b, 'c>,
 }
 
-impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
-    pub(crate) fn new(value: ValueId, reps: Vec<ValueRep>, context: &'a mut GenerationContext<'b>) -> Self {
+impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
+    pub(crate) fn new(
+        value: ValueId,
+        reps: Vec<ValueRep>,
+        context: &'a mut GenerationContext<'b, 'c>,
+    ) -> Self {
         Self {
             value,
             reps,
             context,
             gp_scratch: vec![],
-            fp_scratch: vec![]
+            fp_scratch: vec![],
         }
     }
 
-    pub fn add_late_path(&mut self, path: Box<dyn FnOnce(&mut TargetMacroAssembler, &mut GenerationContext)>) {
+    pub fn add_late_path(
+        &mut self,
+        path: Box<dyn FnOnce(&mut TargetMacroAssembler, &mut GenerationContext)>,
+    ) {
         self.context.late_paths.push(path);
     }
 
     pub fn used_registers(&self) -> &RegisterSetBuilder {
-        &self.context.code.proc.value(self.value).patchpoint().unwrap().used_registers
+        &self
+            .context
+            .code
+            .proc
+            .value(self.value)
+            .patchpoint()
+            .unwrap()
+            .used_registers
     }
 
     pub fn gp_scratch(&self, index: usize) -> u8 {
@@ -63,7 +82,8 @@ impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
         let mut result = *self.used_registers();
 
         let mut unsaved_callee_save_registers = RegisterSetBuilder::callee_saved_registers();
-        unsaved_callee_save_registers.exclude(&self.context.code.callee_save_registers.to_register_set());
+        unsaved_callee_save_registers
+            .exclude(&self.context.code.callee_save_registers.to_register_set());
 
         result.merge_regs(&unsaved_callee_save_registers);
 
@@ -81,7 +101,13 @@ impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
     pub fn successor_labels(&self) -> Vec<Rc<RefCell<Label>>> {
         let mut result = Vec::new();
 
-        for successor in self.context.code.block(self.context.current_block.unwrap()).successors.iter() {
+        for successor in self
+            .context
+            .code
+            .block(self.context.current_block.unwrap())
+            .successors
+            .iter()
+        {
             let label = self.context.block_labels.get(&successor.0).unwrap();
 
             result.push(label.clone());
@@ -91,8 +117,17 @@ impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
     }
 
     pub fn fallthrough_to_successor(&self, successor_index: usize) -> bool {
-        let successor = self.context.code.block(self.context.current_block.unwrap()).successors[successor_index].0;
-        let next_block = self.context.code.find_next_block_index(self.context.current_block.unwrap().0).unwrap_or(usize::MAX);
+        let successor = self
+            .context
+            .code
+            .block(self.context.current_block.unwrap())
+            .successors[successor_index]
+            .0;
+        let next_block = self
+            .context
+            .code
+            .find_next_block_index(self.context.current_block.unwrap().0)
+            .unwrap_or(usize::MAX);
 
         next_block == successor.0
     }
@@ -114,7 +149,7 @@ impl<'a, 'b> StackmapGenerationParams<'a, 'b> {
     }
 }
 
-impl std::ops::Index<usize> for StackmapGenerationParams<'_, '_> {
+impl std::ops::Index<usize> for StackmapGenerationParams<'_, '_, '_> {
     type Output = ValueRep;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -122,7 +157,7 @@ impl std::ops::Index<usize> for StackmapGenerationParams<'_, '_> {
     }
 }
 
-impl std::ops::Deref for StackmapGenerationParams<'_, '_> {
+impl std::ops::Deref for StackmapGenerationParams<'_, '_, '_> {
     type Target = [ValueRep];
 
     fn deref(&self) -> &Self::Target {

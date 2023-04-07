@@ -93,12 +93,12 @@ impl BitVector {
         }
 
         self.bits_or_pointer &= !other.bits_or_pointer;
-        assert!(self.is_inline());
+        debug_assert!(self.is_inline());
     }
 
     fn exclude_slow(&mut self, other: &Self) {
         if other.is_inline() {
-            assert!(!self.is_inline());
+            debug_assert!(!self.is_inline());
             let other_bits = Self::cleanse_inline_bits(other.bits_or_pointer);
             let my_bits = self.out_of_line_bits_mut();
             my_bits.bits_mut()[0] &= !other_bits;
@@ -108,14 +108,14 @@ impl BitVector {
         if self.is_inline() {
             self.bits_or_pointer &= !other.out_of_line_bits().bits()[0];
             self.bits_or_pointer |= 1 << Self::max_inline_bits();
-            assert!(self.is_inline());
+            debug_assert!(self.is_inline());
             return;
         }
 
         self.ensure_size(other.len());
 
-        assert!(!other.is_inline());
-        assert!(!self.is_inline());
+        debug_assert!(!other.is_inline());
+        debug_assert!(!self.is_inline());
 
         let a = self.out_of_line_bits_mut();
         let b = other.out_of_line_bits();
@@ -127,7 +127,7 @@ impl BitVector {
 
     fn merge_slow(&mut self, other: &Self) {
         if other.is_inline() {
-            assert!(!self.is_inline());
+            debug_assert!(!self.is_inline());
             let other_bits = Self::cleanse_inline_bits(other.bits_or_pointer);
             let my_bits = self.out_of_line_bits_mut();
             my_bits.bits_mut()[0] |= other_bits;
@@ -136,8 +136,8 @@ impl BitVector {
 
         self.ensure_size(other.len());
 
-        assert!(!other.is_inline());
-        assert!(!self.is_inline());
+        debug_assert!(!other.is_inline());
+        debug_assert!(!self.is_inline());
 
         let a = self.out_of_line_bits_mut();
         let b = other.out_of_line_bits();
@@ -149,7 +149,7 @@ impl BitVector {
 
     fn filter_slow(&mut self, other: &Self) {
         if other.is_inline() {
-            assert!(!self.is_inline());
+            debug_assert!(!self.is_inline());
             let other_bits = Self::cleanse_inline_bits(other.bits_or_pointer);
             let my_bits = self.out_of_line_bits_mut();
             my_bits.bits_mut()[0] &= other_bits;
@@ -159,14 +159,14 @@ impl BitVector {
         if self.is_inline() {
             self.bits_or_pointer &= other.out_of_line_bits().bits()[0];
             self.bits_or_pointer |= 1 << Self::max_inline_bits();
-            assert!(self.is_inline());
+            debug_assert!(self.is_inline());
             return;
         }
 
         self.ensure_size(other.len());
 
-        assert!(!other.is_inline());
-        assert!(!self.is_inline());
+        debug_assert!(!other.is_inline());
+        debug_assert!(!self.is_inline());
 
         let a = self.out_of_line_bits_mut();
         let b = other.out_of_line_bits();
@@ -220,7 +220,7 @@ impl BitVector {
     }
 
     pub fn quick_clear(&mut self, bit: usize) -> bool {
-        assert!(bit < self.len());
+        debug_assert!(bit < self.len());
 
         unsafe {
             let word = &mut *self.bits_mut().add(bit / Self::bits_in_pointer());
@@ -232,7 +232,7 @@ impl BitVector {
     }
 
     pub fn quick_set(&mut self, bit: usize, value: bool) -> bool {
-        assert!(bit < self.len());
+        debug_assert!(bit < self.len());
         if value == false {
             return self.quick_clear(bit);
         }
@@ -246,7 +246,7 @@ impl BitVector {
     }
 
     pub fn quick_get(&self, bit: usize) -> bool {
-        assert!(bit < self.len());
+        debug_assert!(bit < self.len());
         unsafe {
             (self.bits().add(bit / Self::bits_in_pointer()).read()
                 & (1 << (bit & (Self::bits_in_pointer() - 1))))
@@ -327,8 +327,8 @@ impl BitVector {
     }
 
     pub fn shift_right_by_multiple_of_64(&mut self, shift_in_bits: usize) {
-        assert!(shift_in_bits % 64 == 0);
-        assert!(8 % std::mem::size_of::<usize>() == 0);
+        debug_assert!(shift_in_bits % 64 == 0);
+        debug_assert!(8 % std::mem::size_of::<usize>() == 0);
         let shift_in_words = shift_in_bits / 64;
         let num_bits = self.len() + shift_in_bits;
         self.resize_out_of_line(num_bits, shift_in_words);
@@ -342,7 +342,7 @@ impl BitVector {
     }
 
     fn resize_out_of_line(&mut self, num_bits: usize, shift_in_words: usize) {
-        assert!(num_bits > Self::max_inline_bits());
+        debug_assert!(num_bits > Self::max_inline_bits());
 
         unsafe {
             let new_out_of_line_bits = OutOfLineBits::create(num_bits);
@@ -361,7 +361,7 @@ impl BitVector {
                     .add(shift_in_words);
 
                 addr.write(self.bits_or_pointer & !(1 << Self::max_inline_bits()));
-                assert!(shift_in_words + 1 <= new_num_words);
+                debug_assert!(shift_in_words + 1 <= new_num_words);
                 libc::memset(
                     (*new_out_of_line_bits)
                         .bits_mut()
@@ -390,7 +390,7 @@ impl BitVector {
                         old_num_words * std::mem::size_of::<usize>(),
                     );
 
-                    assert!(shift_in_words + old_num_words <= new_num_words);
+                    debug_assert!(shift_in_words + old_num_words <= new_num_words);
 
                     libc::memset(
                         (*new_out_of_line_bits)
@@ -580,7 +580,7 @@ pub fn find_bit_in_word(
     value: bool,
 ) -> bool {
     let bits_in_word = std::mem::size_of::<usize>() << 3;
-    assert!(*start_or_result_index <= bits_in_word && end_index <= bits_in_word);
+    debug_assert!(*start_or_result_index <= bits_in_word && end_index <= bits_in_word);
 
     let mut index = *start_or_result_index;
     word >>= index;

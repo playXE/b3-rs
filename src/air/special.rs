@@ -30,7 +30,7 @@ impl Special {
         &self,
         inst: &Inst,
         jit: &mut TargetMacroAssembler,
-        gc: &'a mut GenerationContext<'a>,
+        gc: &'a mut GenerationContext<'_, '_>,
     ) -> Jump {
         match self.kind {
             SpecialKind::CCall(ref _special) => CCallSpecial::generate(inst, jit, gc),

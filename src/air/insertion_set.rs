@@ -142,13 +142,13 @@ pub mod phased {
         let mut last_index = target.len();
 
         for index_in_insertion in (0..num_insertions).rev() {
-            assert!(
+            debug_assert!(
                 index_in_insertion == 0
                     || insertions[index_in_insertion].index()
                         >= insertions[index_in_insertion - 1].index()
             );
 
-            assert!(insertions[index_in_insertion].index() <= original_target_size);
+            debug_assert!(insertions[index_in_insertion].index() <= original_target_size);
             let first_index = insertions[index_in_insertion].index() + index_in_insertion;
             let index_offset = index_in_insertion + 1;
 

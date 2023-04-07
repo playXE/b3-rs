@@ -106,14 +106,14 @@ pub fn lower_stack_args(code: &mut Code) {
                                 // that arises: ZDef's are only 32-bit right now. So, when we hit these
                                 // assertions it means that we need to implement those other kinds of
                                 // zero fills.
-                                assert!(slot.byte_size() == 8);
-                                assert!(width == Width::W32);
+                                debug_assert!(slot.byte_size() == 8);
+                                debug_assert!(width == Width::W32);
 
                                 let store_opcode = Opcode::Move32;
                                 let kind = ArgKind::Imm;
                                 let operand = Arg::new_imm(0);
 
-                                assert!(is_valid_form(store_opcode, &[kind, ArgKind::Stack]));
+                                debug_assert!(is_valid_form(store_opcode, &[kind, ArgKind::Stack]));
                                 let new_inst = Inst::new(
                                     store_opcode.into(),
                                     origin,

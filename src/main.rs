@@ -1,24 +1,67 @@
-use std::rc::Rc;
-
-use b3::{jit::reg::Reg, Frequency, ValueRep, alloca_to_reg::{get_allocas_without_identity, alloca_to_reg}};
-use macroassembler::jit::gpr_info::*;
+use b3::macroassembler::jit::gpr_info::*;
 
 fn main() {
-    let mut opts = b3::Options::default();
-    opts.opt_level = b3::OptLevel::O3;
+    let opts = b3::Options::default();
     let mut proc = b3::Procedure::new(opts);
 
+    // Create entry block. The argument to `add_block` is block frequency. 
+    // Blocks with different frequences are ordered differently. By default
+    // they are recalculated before lowering to Assembly IR.
+    // set `opts.estimate_static_execution_counts` to `false` to use user provided frequency.
     let entry = proc.add_block(1.0);
 
     let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
 
-    let a = builder.alloca(b3::Type::Int64);
+    // Argument management is offloaded to client code. Here we load argument from first GPR argument register,
+    // it is RDI on x86-64
+    let number = builder.argument(b3::Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
 
-    let i = builder.const64(42);
-    builder.store(i, a, 0, None, None);
-    let l = builder.load(b3::Type::Int64, a, 0, None, None);
-    builder.return_(Some(l)); 
-    let compile = b3::compile(proc);
+    // Declare variables. They are automatically converted to SSA form.
+    let i = builder.procedure.add_variable(b3::Type::Int32);
+    let factorial = builder.procedure.add_variable(b3::Type::Int32);
 
-    println!("{}", compile.disassembly());
+    // Create blocks for `for` loop. 
+    let for_header = builder.procedure.add_block(1.0);
+    let for_body = builder.procedure.add_block(1.0);
+    let for_exit = builder.procedure.add_block(1.0);
+
+    let one = builder.const32(1);
+    builder.var_set(factorial, one);
+    builder.var_set(i, one);
+
+    builder.jump(Some(for_header));
+
+    builder.block = for_header;
+
+    let i_value = builder.var_get(i);
+    let cmp = builder.binary(b3::Opcode::LessEqual, i_value, number);
+
+    // Conditional branch.
+    builder.branch(cmp, for_body, (for_exit, b3::Frequency::Normal));
+
+    builder.block = for_body;
+
+    let i_value = builder.var_get(i);
+    let factorial_value = builder.var_get(factorial);
+    let mul = builder.binary(b3::Opcode::Mul, i_value, factorial_value);
+    builder.var_set(factorial, mul);
+
+    let i_value = builder.var_get(i);
+    let one = builder.const32(1);
+    let add = builder.binary(b3::Opcode::Add, i_value, one);
+
+    builder.var_set(i, add);
+
+    builder.jump(Some(for_header));
+
+    builder.block = for_exit;
+
+    let factorial_value = builder.var_get(factorial);
+    builder.return_(Some(factorial_value));
+
+    // Compiles code to 
+    let compilation = b3::compile(proc);
+    let func: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(compilation.entrypoint(0)) };
+
+    assert_eq!(func(5), 120);
 }

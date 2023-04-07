@@ -80,13 +80,13 @@ impl Tmp {
     }
 
     const fn decode_gpr(value: i32) -> u8 {
-        assert!(Self::is_encoded_gpr(value));
+        debug_assert!(Self::is_encoded_gpr(value));
         ((value as i32 - Self::encode_gpr(TargetAssembler::first_register() as _))
             + TargetAssembler::first_register() as i32) as _
     }
 
     const fn decode_fpr(value: i32) -> u8 {
-        assert!(Self::is_encoded_fpr(value));
+        debug_assert!(Self::is_encoded_fpr(value));
         /*((value as i32 - Self::encode_fpr(TargetAssembler::first_fp_register() as _))
             + TargetAssembler::first_fp_register() as i32) as _*/
 
@@ -95,12 +95,12 @@ impl Tmp {
     }
 
     const fn decode_gp_tmp(value: i32) -> usize {
-        assert!(Self::is_encoded_gp_tmp(value));
+        debug_assert!(Self::is_encoded_gp_tmp(value));
         (value as i32 - (Self::encode_gpr(TargetAssembler::last_register()) + 1)) as usize
     }
 
     const fn decode_fp_tmp(value: i32) -> usize {
-        assert!(Self::is_encoded_fp_tmp(value));
+        debug_assert!(Self::is_encoded_fp_tmp(value));
         ((Self::encode_fpr(TargetAssembler::last_fp_register()) - 1) - value) as usize
     }
 
@@ -267,8 +267,8 @@ impl<const BANK: Bank> KeyIndex for AbsoluteIndexed<BANK> {
 
 impl AbsoluteIndexed<{Bank::GP}> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
-        assert!(tmp.is_gp());
-        assert!(tmp.internal_value() > 0);
+        debug_assert!(tmp.is_gp());
+        debug_assert!(tmp.internal_value() > 0);
         tmp.internal_value() as _ 
     }
 
@@ -289,8 +289,8 @@ impl AbsoluteIndexed<{Bank::GP}> {
 
 impl AbsoluteIndexed<{Bank::FP}> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
-        assert!(tmp.is_fp());
-        assert!(tmp.internal_value() < 0);
+        debug_assert!(tmp.is_fp());
+        debug_assert!(tmp.internal_value() < 0);
         (-tmp.internal_value()) as _
     }
 

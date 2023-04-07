@@ -11,23 +11,24 @@
 //! It is possible to speak of an x86-64 instruction while compiling for ARM64, for example. Clients of Air,
 //! such as the B3 to Air lowering phase, are allowed to pick any Air opcode and ask if
 //! that opcode would be valid on the current CPU. They are also allowed to check if specific forms of any given opcode are valid.
-//! This allows clients to optimize for multiple instruction sets by cascading through the possible opcodes that they know of, 
-//! starting with the one they think is most efficient. Some of those opcodes may only be available on one CPU while others are 
-//! available everywhere. Instruction selection does not need to know which instructions work on which CPUs; 
+//! This allows clients to optimize for multiple instruction sets by cascading through the possible opcodes that they know of,
+//! starting with the one they think is most efficient. Some of those opcodes may only be available on one CPU while others are
+//! available everywhere. Instruction selection does not need to know which instructions work on which CPUs;
 //! Air will tell you if some instruction happens to not be valid right now for whatever reason.
 //!
 //! Air opcodes support overloading. For example, the Add32 opcode has both two-operand and three-operand overloads,
-//!  and those overloads have multiple forms: the first operand may or may not be permitted to be an immediate and depending 
-//! on the CPU and some of the other operands may or may not be allowed to be memory addresses. 
-//! We use opcode overload to refer to all forms of an opcode that share the same number of arguments, 
-//! and opcode form to mean the number of arguments and their types. A fundamental Air operation is Inst::is_valid_form(), 
-//! which tells the client if the instruction's current form is valid on the current CPU. 
-//! This may return false either because the Inst is not well-formed for any CPU or because it is not valid for 
+//!  and those overloads have multiple forms: the first operand may or may not be permitted to be an immediate and depending
+//! on the CPU and some of the other operands may or may not be allowed to be memory addresses.
+//! We use opcode overload to refer to all forms of an opcode that share the same number of arguments,
+//! and opcode form to mean the number of arguments and their types. A fundamental Air operation is Inst::is_valid_form(),
+//! which tells the client if the instruction's current form is valid on the current CPU.
+//! This may return false either because the Inst is not well-formed for any CPU or because it is not valid for
 //! the current CPU even though it may be valid on some other CPU. There is also [is_valid_form()](is_valid_form), which can answer
-//!  if the form you are intending to use will be valid even if you have not created an Inst yet. 
+//!  if the form you are intending to use will be valid even if you have not created an Inst yet.
 //! This allows clients to generate Air by experimenting with different forms before settling on the one that the current CPU supports.
 
 pub mod allocate_registers_and_stack_by_linear_scan;
+pub mod allocate_registers_and_stack_by_local;
 pub mod allocate_registers_by_graph_coloring;
 pub mod allocate_stack_by_graph_coloring;
 pub mod arg;

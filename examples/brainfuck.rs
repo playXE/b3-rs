@@ -261,91 +261,6 @@ impl BfJIT {
         let r = b3::compile(proc);
         println!("compile time: {:?}", start.elapsed());
         r
-
-        /*let mut jmps_to_end: Vec<(Label, Jump)> = vec![];
-
-        let mut masm = MacroAssemblerX86Common::new();
-
-        for t in input {
-            match *t {
-                Token::Forward(n) => {
-                    masm.comment(format!("forward {}", n));
-                    masm.add64(n as i32, edi);
-                }
-                Token::Backward(n) => {
-                    masm.comment(format!("backward {}", n));
-                    masm.sub64(n as i32, edi);
-                }
-                Token::Add(n) => {
-                    masm.comment(format!("add {}", n));
-                    masm.add8(n as i32, Address::new(edi, 0));
-                }
-                Token::Sub(n) => {
-                    masm.comment(format!("sub {}", n));
-                    masm.sub8(n as i32, Address::new(edi, 0));
-                }
-
-                Token::Output => {
-                    masm.comment("output");
-                    masm.assembler.push_r(edi);
-                    masm.load8_signed_extend_to_32(Address::new(edi, 0), edi);
-                    masm.call_op(Some(AbsoluteAddress::new(putchar as _)));
-                    masm.assembler.pop_r(edi);
-                }
-
-                Token::Input => {
-                    masm.comment("input");
-                    masm.assembler.push_r(edi);
-                    masm.call_op(Some(AbsoluteAddress::new(getchr as _)));
-                    masm.assembler.pop_r(edi);
-                    masm.store8(eax, Address::new(edi, 0));
-                }
-
-                Token::LoopBegin => {
-                    masm.comment("loop begin");
-                    let jend = masm.branch8(RelationalCondition::Equal, Address::new(edi, 0), 0);
-                    let start = masm.label();
-
-                    jmps_to_end.push((start, jend));
-                }
-
-                Token::LoopEnd => {
-
-                    masm.comment("loop end");
-                    let (start, jend) = jmps_to_end.pop().unwrap();
-
-                    masm.load8_signed_extend_to_32(Address::new(edi, 0), eax);
-
-                    let j = masm.branch32(RelationalCondition::NotEqual, eax, 0i32);
-                    j.link_to(&mut masm, start);
-                    jend.link(&mut masm);
-                }
-
-                Token::LoopToZero => {
-                    masm.comment("loop to zero");
-                    masm.store8(0i32, Address::new(edi, 0));
-                }
-
-                Token::LoopToAdd => {
-                    masm.comment("loop to add");
-                    masm.load8(Address::new(edi, 0), esi);
-                    masm.add32(esi, Address::new(edi, 1));
-                    masm.store8(0i32, Address::new(edi, 0));
-                }
-            }
-        }
-
-        masm.ret();
-        assert!(jmps_to_end.is_empty());
-        let mut buffer = LinkBuffer::from_macro_assembler(&mut masm);
-
-        let mut fmt = String::new();
-
-        let code = buffer.finalize_with_disassembly(disasm, "brainfuck", &mut fmt).unwrap();
-
-        println!("{}", fmt);
-
-        code*/
     }
 }
 
@@ -375,17 +290,26 @@ impl std::fmt::Display for RegAlloc {
     }
 }
 
+use std::ffi::OsStr;
+use std::path::PathBuf;
+fn parse_path(s: &OsStr) -> Result<PathBuf, &'static str> {
+    Ok(s.into())
+}
+
+
 fn main() {
-    let input = "file.bf";
     let mut args = pico_args::Arguments::from_env();
-    let regalloc = args.opt_value_from_os_str("--regAlloc", |key| {
-        Ok::<_, String>(match key.to_string_lossy().to_lowercase().as_str() {
-            "linearscan" => RegAlloc::LinearScan,
-            "irc" => RegAlloc::IRC,
-            "briggs" => RegAlloc::Briggs,
-            _ => RegAlloc::IRC,
+    let regalloc = args
+        .opt_value_from_os_str("--regAlloc", |key| {
+            Ok::<_, String>(match key.to_string_lossy().to_lowercase().as_str() {
+                "linearscan" => RegAlloc::LinearScan,
+                "irc" => RegAlloc::IRC,
+                "briggs" => RegAlloc::Briggs,
+                _ => RegAlloc::IRC,
+            })
         })
-    }).unwrap().unwrap_or_else(|| RegAlloc::LinearScan);
+        .unwrap()
+        .unwrap_or_else(|| RegAlloc::LinearScan);
     let opt_level = args.opt_value_from_str::<_, u8>("--optLevel").unwrap();
 
     let opt_level = match opt_level {
@@ -397,15 +321,27 @@ fn main() {
         },
     };
 
+    let input = args
+        .opt_value_from_os_str(["-i", "--input"], parse_path)
+        .unwrap();
+
+    if input.is_none() {
+        println!(
+            "No input provided. To compile brainfuck program run `brainfuck -i <program_name>"
+        );
+        return;
+    }
+
+    let input = input.unwrap();
+
     println!("Opt level: {:?}, Regalloc: {:?}", opt_level, regalloc);
-    
+
     let jit = BfJIT::new(CGContext {
         opt_level,
         regalloc,
     });
 
     let code = jit.translate(false, &std::fs::read_to_string(input).unwrap());
-
 
     let mut file = std::fs::OpenOptions::new()
         .write(true)

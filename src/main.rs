@@ -1,67 +1,86 @@
-use b3::macroassembler::jit::gpr_info::*;
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
+
+use b3::{jit::register_set::RegisterSetBuilder, macroassembler::jit::gpr_info::*, ValueRep};
+use macroassembler::assembler::buffer::AssemblerLabel;
+use once_cell::sync::Lazy;
+
+static CODE_MAP: Lazy<Mutex<HashMap<usize, Vec<ValueRep>>>> =
+    Lazy::new(|| Mutex::new(Default::default()));
+use unwind::{Cursor, get_context, RegNum};
+extern "C" fn walk_stack() {
+    get_context!(context);
+
+    let mut cursor = Cursor::local(context).unwrap();
+
+    loop {
+        let ip = cursor.register(RegNum::IP).unwrap();
+        if let Some(map) = CODE_MAP.lock().unwrap().get(&(ip as usize)) {
+            for rep in map.iter() {
+                println!("0x{:x}: {}", ip, rep);
+            }
+        }
+        if !cursor.step().unwrap() {
+            break;
+        }
+    }
+}
 
 fn main() {
-    let opts = b3::Options::default();
-    let mut proc = b3::Procedure::new(opts);
+    let mut proc = b3::Procedure::new(Default::default());
 
-    // Create entry block. The argument to `add_block` is block frequency. 
-    // Blocks with different frequences are ordered differently. By default
-    // they are recalculated before lowering to Assembly IR.
-    // set `opts.estimate_static_execution_counts` to `false` to use user provided frequency.
     let entry = proc.add_block(1.0);
 
     let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
 
-    // Argument management is offloaded to client code. Here we load argument from first GPR argument register,
-    // it is RDI on x86-64
-    let number = builder.argument(b3::Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
+    let arg = builder.argument(b3::Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
+    let arg2 = builder.argument(b3::Reg::new_gpr(ARGUMENT_GPR1), b3::Type::Int64);
 
-    // Declare variables. They are automatically converted to SSA form.
-    let i = builder.procedure.add_variable(b3::Type::Int32);
-    let factorial = builder.procedure.add_variable(b3::Type::Int32);
+    let stackmap = builder.patchpoint(b3::Type::Void);
+    builder
+        .procedure
+        .stackmap_append(stackmap, arg, ValueRep::stack_argument(8));
+    builder
+        .procedure
+        .stackmap_append(stackmap, arg2, ValueRep::stack_argument(0));
+    let mut rset = RegisterSetBuilder::new();
+    rset.add(b3::Reg::new_gpr(T0), b3::Width::W64);
+    builder.procedure.stackmap_clobber(stackmap, &rset);
 
-    // Create blocks for `for` loop. 
-    let for_header = builder.procedure.add_block(1.0);
-    let for_body = builder.procedure.add_block(1.0);
-    let for_exit = builder.procedure.add_block(1.0);
+    let gcpoint = Rc::new(RefCell::new((AssemblerLabel::default(), vec![])));
+    {
+        let gcpoint = gcpoint.clone();
+        builder.procedure.stackmap_set_generator(
+            stackmap,
+            Rc::new(move |jit, params| {
+                let arg = params[0];
+                let arg2 = params[1];
+                gcpoint.borrow_mut().1.push(arg);
+                gcpoint.borrow_mut().1.push(arg2);
+                jit.mov(walk_stack as i64, T0);
+                let label = jit.call_op(Some(T0)).expect("label");
+                gcpoint.borrow_mut().0 = label.label;
+            }),
+        );
+    }
 
-    let one = builder.const32(1);
-    builder.var_set(factorial, one);
-    builder.var_set(i, one);
+    builder.return_(None);
 
-    builder.jump(Some(for_header));
-
-    builder.block = for_header;
-
-    let i_value = builder.var_get(i);
-    let cmp = builder.binary(b3::Opcode::LessEqual, i_value, number);
-
-    // Conditional branch.
-    builder.branch(cmp, for_body, (for_exit, b3::Frequency::Normal));
-
-    builder.block = for_body;
-
-    let i_value = builder.var_get(i);
-    let factorial_value = builder.var_get(factorial);
-    let mul = builder.binary(b3::Opcode::Mul, i_value, factorial_value);
-    builder.var_set(factorial, mul);
-
-    let i_value = builder.var_get(i);
-    let one = builder.const32(1);
-    let add = builder.binary(b3::Opcode::Add, i_value, one);
-
-    builder.var_set(i, add);
-
-    builder.jump(Some(for_header));
-
-    builder.block = for_exit;
-
-    let factorial_value = builder.var_get(factorial);
-    builder.return_(Some(factorial_value));
-
-    // Compiles code to 
     let compilation = b3::compile(proc);
-    let func: extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(compilation.entrypoint(0)) };
 
-    assert_eq!(func(5), 120);
+    println!("{}", compilation.disassembly());
+    unsafe {
+        let call_addr = compilation
+            .entrypoint(0)
+            .add(gcpoint.borrow().0.offset as usize);
+      
+       
+        CODE_MAP
+            .lock()
+            .unwrap()
+            .insert(call_addr as usize, gcpoint.borrow().1.clone());
+
+        let func: extern "C" fn(i64, i64) = std::mem::transmute(compilation.entrypoint(0));
+
+        func(1, 2);
+    }
 }

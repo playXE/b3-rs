@@ -152,7 +152,9 @@ fn clif_factorial(optimize: bool) {
         Ok(isa_builder) => {
             let isa = isa_builder.finish(shared_flags).unwrap();
             context.optimize(&*isa).unwrap();
-            isa.compile_function(&context.func, true).unwrap()
+            //context.compute_domtree();
+
+            isa.compile_function(&context.func, &context.domtree, true).unwrap()
         }
     };
 

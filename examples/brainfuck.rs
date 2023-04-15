@@ -3,6 +3,9 @@ use b3::jit::reg::Reg;
 use b3::{self, BasicBlockBuilder, Frequency, OptLevel};
 use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
+#[global_allocator]
+static MI: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 pub struct BfJIT {
     ctx: CGContext,
 }

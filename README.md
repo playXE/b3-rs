@@ -22,7 +22,7 @@ fn main() {
     // set `opts.estimate_static_execution_counts` to `false` to use user provided frequency.
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     // Argument management is offloaded to client code. Here we load argument from first GPR argument register,
     // it is RDI on x86-64

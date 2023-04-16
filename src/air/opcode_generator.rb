@@ -26,7 +26,6 @@
 require "pathname"
 
 
-
 def underscore(camel_cased_word)
     return camel_cased_word.to_s unless /[A-Z-]|::/.match?(camel_cased_word)
     word = camel_cased_word.to_s.gsub("::", "/")

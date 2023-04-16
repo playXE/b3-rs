@@ -140,7 +140,7 @@ impl TracingInterpreter {
         let mut proc = b3::Procedure::new(opts);
 
         let entry = proc.add_block(1.0);
-        let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+        let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
         let stack = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
         let pc = builder.argument(Reg::new_gpr(ARGUMENT_GPR1), b3::Type::Int64);

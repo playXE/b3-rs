@@ -18,7 +18,7 @@ fn test_simple() {
 
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     let a = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
     let b = builder.argument(Reg::new_gpr(ARGUMENT_GPR1), b3::Type::Int64);
@@ -47,7 +47,7 @@ fn test_simple_double() {
 
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     let a = builder.argument(Reg::new_fpr(ARGUMENT_FPR0), b3::Type::Double);
     let b = builder.argument(Reg::new_fpr(ARGUMENT_FPR1), b3::Type::Double);
@@ -78,7 +78,7 @@ fn test_stack_slot() {
 
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     let a = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
 
@@ -107,7 +107,7 @@ fn test_patchpoint() {
 
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     let a = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
 
@@ -153,7 +153,7 @@ fn test_check() {
 
     let entry = proc.add_block(1.0);
 
-    let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+    let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
     let a = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
 
@@ -202,7 +202,7 @@ fn test_factorial() {
 
         let entry = proc.add_block(1.0);
 
-        let mut builder = b3::BasicBlockBuilder::new(entry, &mut proc);
+        let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
         let number = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
 

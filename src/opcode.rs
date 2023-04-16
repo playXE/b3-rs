@@ -268,6 +268,10 @@ pub enum Opcode {
     /// that the arguments are passed using the right types. The first argument is the callee.
     CCall,
 
+    /// This is a regular ordinary tail C function call, using the system C calling convention. Make
+    /// sure that the arguments are passed using the right types. The first argument is the callee.
+    TailCCall,
+
     /// This is a patchpoint. Use the PatchpointValue class. This is viewed as behaving like a call,
     /// but only emits code via a code generation callback. That callback gets to emit code inline.
     /// You can pass a stackmap along with constraints on how each stackmap argument must be passed.

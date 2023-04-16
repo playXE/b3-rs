@@ -428,8 +428,12 @@ pub struct BasicBlockBuilder<'a> {
 }
 
 impl<'a> BasicBlockBuilder<'a> {
-    pub fn new(block: BlockId, procedure: &'a mut Procedure) -> Self {
+    pub fn new(procedure: &'a mut Procedure, block: BlockId) -> Self {
         Self { block, procedure }
+    }
+
+    pub fn switch_to_block(&mut self, block: BlockId) {
+        self.block = block;
     }
 
     pub fn add_value(&mut self, value: ValueId) {

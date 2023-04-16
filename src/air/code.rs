@@ -285,7 +285,7 @@ impl<'a> Code<'a> {
     }
 
     pub fn block(&self, id: BasicBlockId) -> &BasicBlock {
-        self.blocks.get(id.0).unwrap()
+        self.blocks.get(id.0).expect(&format!("no block with id {:?}", id))
     }
 
     pub fn block_mut(&mut self, id: BasicBlockId) -> &mut BasicBlock {
@@ -340,6 +340,7 @@ impl<'a> Code<'a> {
         } else {
             for i in 0..self.entrypoints.len() {
                 let id = self.entrypoints[i].0;
+                
                 update_predecessors_after(id, self);
             }
         }

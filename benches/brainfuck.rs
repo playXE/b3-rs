@@ -278,7 +278,7 @@ impl BfJIT {
         let mut jumps_to_end = vec![];
         let tape = proc.add_variable(b3::Type::Int64);
 
-        let mut builder = BasicBlockBuilder::new(entry, &mut proc);
+        let mut builder = BasicBlockBuilder::new(&mut proc, entry);
         let callee_getchr = builder.const64(getchr as i64);
         let callee_putchar = builder.const64(putchar as i64);
         let arg = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int64);
@@ -366,7 +366,7 @@ impl BfJIT {
                     let end = builder.procedure.add_block(1.0);
 
                     builder.jump(Some(start));
-                    builder = BasicBlockBuilder::new(start, &mut proc);
+                    builder = BasicBlockBuilder::new(&mut proc, start);
                     let vtape = builder.var_get(tape);
                     let load = builder.load8z(vtape, 0, None, None);
                     let zero = builder.const32(0);
@@ -374,13 +374,13 @@ impl BfJIT {
                     builder.branch(cond, body, (end, Frequency::Normal));
                     jumps_to_end.push((start, end));
 
-                    builder = BasicBlockBuilder::new(body, &mut proc);
+                    builder = BasicBlockBuilder::new(&mut proc, body);
                 }
 
                 Token::LoopEnd => {
                     let (start, end) = jumps_to_end.pop().unwrap();
                     builder.jump(Some(start));
-                    builder = BasicBlockBuilder::new(end, &mut proc);
+                    builder = BasicBlockBuilder::new(&mut proc, end);
                 }
 
                 Token::LoopToZero => {
@@ -392,7 +392,7 @@ impl BfJIT {
 
         let zero = builder.const64(0);
         builder.return_(Some(zero));
-        let start = std::time::Instant::now();
+        
         let r = b3::compile(proc);
         r
     }
@@ -472,7 +472,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Brainfuck Mandelbrot Set Runtime");
 
 
-    let no_opt_lsra = {
+    /*let no_opt_lsra = {
         bf.ctx.opt_level = OptLevel::None;
         bf.ctx.regalloc = RegAlloc::LinearScan;
 
@@ -484,7 +484,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         bf.ctx.regalloc = RegAlloc::IRC;
 
         bf.translate_b3(false, &tokens)
-    };
+    };*/
 
     let opt_lsra = {
         bf.ctx.opt_level = OptLevel::O2;

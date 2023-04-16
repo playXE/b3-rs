@@ -4,6 +4,9 @@ use macroassembler::assembler::TargetMacroAssembler;
 
 use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep, stackmap_generation_params::StackmapGenerationParams};
 
+/// A stackmap value. Tells to our codegen backend how to generate a stackmap and 
+/// what values are used in the stackmap. You can specify what registers to clobber.
+/// 
 #[derive(Clone)]
 pub struct StackMapValue {
     pub reps: Vec<ValueRep>,

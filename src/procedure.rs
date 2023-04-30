@@ -150,6 +150,13 @@ impl Procedure {
         self.values.add(val)
     }
 
+    pub fn upsilon_set_phi(&mut self, upsilon: ValueId, phi: ValueId) -> Option<ValueId> {
+        match self.value_mut(phi).data {
+            ValueData::Upsilon(ref mut phi) => phi.replace(upsilon),
+            _ => panic!("not a phi"),
+        }
+    }
+
     pub fn value(&self, id: ValueId) -> &Value {
         self.values.at(id).expect(&format!("{:?} not found", id))
     }

@@ -21,12 +21,12 @@ cfg-if = "1.0"
 [dev-dependencies]
 criterion = "0.4"
 target-lexicon = "0.12"
-cranelift = "0.94"
-cranelift-module = "0.94"
-cranelift-jit = "0.94"
+cranelift = "0.95"
+cranelift-module = "0.95"
+cranelift-jit = "0.95"
 pico-args = "0.5"
 mimalloc = "0.1"
-
+r7rs-parser = { git = "https://github.com/playxe/r7rs-parser" }
 [[bench]]
 name = "brainfuck"
 harness = false

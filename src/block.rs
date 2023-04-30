@@ -440,6 +440,30 @@ impl<'a> BasicBlockBuilder<'a> {
         self.procedure.add_to_block(self.block, value);
     }
 
+    pub fn phi(&mut self, typ: Type) -> ValueId {
+        let value = self.procedure.add(Value::new(
+            Opcode::Phi,
+            typ,
+            NumChildren::Zero,
+            &[],
+            ValueData::None,
+        ));
+
+        value 
+    }
+
+    pub fn upsilon(&mut self, input: ValueId, phi: Option<ValueId>) -> ValueId {
+        let value = self.procedure.add(Value::new(
+            Opcode::Upsilon,
+            Type::Void,
+            NumChildren::One,
+            &[input],
+            ValueData::Upsilon(phi),
+        ));
+
+        value 
+    }
+
     pub fn entry_switch(&mut self, blocks: &[(BlockId, Frequency)]) {
         assert!(
             self.procedure.num_entrypoints <= 1,

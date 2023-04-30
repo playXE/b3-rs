@@ -448,7 +448,7 @@ impl<'a> BasicBlockBuilder<'a> {
             &[],
             ValueData::None,
         ));
-
+        self.add_value(value);
         value 
     }
 
@@ -460,7 +460,7 @@ impl<'a> BasicBlockBuilder<'a> {
             &[input],
             ValueData::Upsilon(phi),
         ));
-
+        self.add_value(value);
         value 
     }
 
@@ -473,6 +473,7 @@ impl<'a> BasicBlockBuilder<'a> {
             ValueData::None,
         ));
 
+        self.add_value(value);
         value 
     }
 

@@ -464,6 +464,18 @@ impl<'a> BasicBlockBuilder<'a> {
         value 
     }
 
+    pub fn frame_pointer(&mut self) -> ValueId {
+        let value = self.procedure.add(Value::new(
+            Opcode::FramePointer,
+            Type::Void,
+            NumChildren::Zero,
+            &[],
+            ValueData::None,
+        ));
+
+        value 
+    }
+
     pub fn entry_switch(&mut self, blocks: &[(BlockId, Frequency)]) {
         assert!(
             self.procedure.num_entrypoints <= 1,

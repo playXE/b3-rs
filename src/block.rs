@@ -467,7 +467,7 @@ impl<'a> BasicBlockBuilder<'a> {
     pub fn frame_pointer(&mut self) -> ValueId {
         let value = self.procedure.add(Value::new(
             Opcode::FramePointer,
-            Type::Void,
+            Type::Int64,
             NumChildren::Zero,
             &[],
             ValueData::None,

@@ -2617,6 +2617,7 @@ impl<'a> ReduceStrength<'a> {
                 }
 
                 if comparison.opcode != self.value.opcode(self.proc) {
+                    println!("replace: {:?} {:?} {:?}", comparison.opcode, comparison.operands, self.proc.value(self.value).children);
                     let new_value = Value::new(
                         comparison.opcode,
                         Type::Int32,
@@ -3762,14 +3763,15 @@ fn should_swap_binary_operands(proc: &Procedure, value: ValueId) -> bool {
     }
 
     if proc.value(value.child(proc, 0)).is_constant() {
+        println!("swap!");
         return true;
     }
 
-    // Sort the operands. This is an important canonicalization. We use the index instead of
+    /*// Sort the operands. This is an important canonicalization. We use the index instead of
     // the address to make this at least slightly deterministic.
     if value.child(proc, 0) > value.child(proc, 1) {
         return true;
-    }
+    }*/
 
     false
 }

@@ -78,6 +78,8 @@ pub fn break_critical_edges(proc: &mut Procedure) {
                 .replace_predecessor(bid, split_bid));
         }
 
+        proc.reset_reachability();
+        println!("{}", proc.display_());
         rpo_sort(proc);
     }
 }

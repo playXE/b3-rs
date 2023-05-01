@@ -31,12 +31,12 @@ pub fn move_constants(proc: &mut Procedure) {
 
         move_constants.lower_materialization_cost_heavy_constants();
 
-        /*move_constants.hoist_constants(|value| {
+        move_constants.hoist_constants(|value| {
             matches!(
                 value.kind.opcode(),
                 Opcode::Const32 | Opcode::Const64 | Opcode::ArgumentReg
             )
-        });*/
+        });
     });
 }
 

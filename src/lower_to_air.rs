@@ -1584,7 +1584,7 @@ impl<'a> LowerToAir<'a> {
              can_commit_internal: &mut bool| {
                 let rel_cond = Arg::new_rel_cond(relational_condition).inverted(inverted);
                 let double_cond = Arg::new_double_cond(double_condition).inverted(inverted);
-
+                
                 let left = this.child_id(value, 0);
                 let right = this.child_id(value, 1);
 
@@ -1603,6 +1603,7 @@ impl<'a> LowerToAir<'a> {
                         if let Some(result) =
                             compare(this, width, rel_cond.flipped(true).unwrap(), right, left)
                         {
+                            
                             return Some(result);
                         }
 

@@ -41,6 +41,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         reduce_strength(proc);
     }
 
+    
     lower_macros(proc);
 
     legalize_memory_offsets(proc);
@@ -61,7 +62,10 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     }
 
     let code = lower_to_air(proc);
-
+    if code.proc.options.dump_air_at_each_phase {
+        println!("AIR after lowering to AIR:");
+        println!("{}", code);
+    }
     code
 }
 

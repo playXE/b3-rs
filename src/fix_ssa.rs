@@ -164,6 +164,7 @@ pub fn fix_ssa(proc: &mut Procedure) -> bool {
         if proc.variables.is_empty() {
             return false;
         }
+        
 
         break_critical_edges(proc);
         fix_ssa_globally(proc);

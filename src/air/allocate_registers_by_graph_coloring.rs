@@ -2366,7 +2366,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             } else {
                 AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp as usize)
             };
-            println!("spilling {}", tmp);
+           
 
             let index = if BANK == Bank::GP {
                 AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)

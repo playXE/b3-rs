@@ -2291,7 +2291,6 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
     >(
         allocator: &mut ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>,
     ) {
-        let code_ptr = (&mut *allocator.allocator).code as *mut Code;
         for i in 0..allocator.allocator.code.blocks.len() {
             let block = BasicBlockId(i);
 
@@ -2302,22 +2301,54 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                 // complete register allocation. So, we record this before starting.
                 let may_be_coalescable = allocator.may_be_coalescable(&inst);
 
-                inst.for_each_tmp_fast_mut(unsafe { &mut *code_ptr }, |tmp| {
+                // Does not allocate- the empty vec (default) does not allocate
+                let coalesced_tmps = std::mem::take(&mut allocator.allocator.coalesced_tmps);
+                let colored_tmp = std::mem::take(&mut allocator.allocator.colored_tmp);
+                let code = &mut allocator.allocator.code;
+
+                let get_alias = |tmp| {
+                    let ix =
+                        <ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>>::tmp_to_index(
+                            tmp,
+                        );
+
+                    let mut alias = ix as _;
+
+                    while coalesced_tmps[alias as usize] != 0 {
+                        alias = coalesced_tmps[alias as usize];
+                    }
+
+                    <ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>>::tmp_for_absolute_index(alias as _)
+                };
+
+                let allocated_reg = |tmp| {
+                    let reg = colored_tmp
+                        [<ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>>::tmp_to_index(
+                            tmp,
+                        )];
+                    debug_assert!(reg.is_set());
+                    reg
+                };
+
+                inst.for_each_tmp_fast_mut(code, |tmp| {
                     if tmp.is_reg() || tmp.bank() != BANK {
                         return;
                     }
 
-                    let alias_tmp = allocator.get_alias(*tmp);
+                    let alias_tmp = get_alias(*tmp);
                     let assigned_tmp = if alias_tmp.is_reg() {
                         Tmp::from_reg(alias_tmp.reg())
                     } else {
-                        let reg = allocator.allocated_reg(alias_tmp);
+                        let reg = allocated_reg(alias_tmp);
 
                         Tmp::from_reg(reg)
                     };
 
                     *tmp = assigned_tmp;
                 });
+
+                allocator.allocator.coalesced_tmps = coalesced_tmps;
+                allocator.allocator.colored_tmp = colored_tmp;
 
                 if may_be_coalescable
                     && inst.args[0].is_tmp()
@@ -2366,7 +2397,6 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             } else {
                 AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp as usize)
             };
-           
 
             let index = if BANK == Bank::GP {
                 AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
@@ -2429,9 +2459,14 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                                     | Opcode::MoveFloat
                                     | Opcode::Move32 => {
                                         let other_arg_index = arg as *mut Arg as usize - args;
-                                        let other_arg_index = other_arg_index / std::mem::size_of::<Arg>();
+                                        let other_arg_index =
+                                            other_arg_index / std::mem::size_of::<Arg>();
                                         let other_arg_index = other_arg_index ^ 1;
-                                        if other_arg_index >= allocator.allocator.code.block(block)[inst_index].args.len() {
+                                        if other_arg_index
+                                            >= allocator.allocator.code.block(block)[inst_index]
+                                                .args
+                                                .len()
+                                        {
                                             return;
                                         }
                                         let other_arg = allocator.allocator.code.block(block)

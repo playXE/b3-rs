@@ -294,7 +294,7 @@ pub fn optimize_block_order(code: &mut Code) {
                     inst.args[0] = arg.inverted(true);
                     code.block_mut(block).insts.push(inst);
                     code.block_mut(block).successors.swap(0, 1);
-                    println!("inverted?");
+                   
                 } 
             }
 

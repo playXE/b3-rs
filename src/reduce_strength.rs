@@ -2617,7 +2617,7 @@ impl<'a> ReduceStrength<'a> {
                 }
 
                 if comparison.opcode != self.value.opcode(self.proc) {
-                    println!("replace: {:?} {:?} {:?}", comparison.opcode, comparison.operands, self.proc.value(self.value).children);
+                    
                     let new_value = Value::new(
                         comparison.opcode,
                         Type::Int32,
@@ -3763,7 +3763,7 @@ fn should_swap_binary_operands(proc: &Procedure, value: ValueId) -> bool {
     }
 
     if proc.value(value.child(proc, 0)).is_constant() {
-        println!("swap!");
+       
         return true;
     }
 

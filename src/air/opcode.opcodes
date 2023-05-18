@@ -344,18 +344,18 @@ x86: MulFloat U:F:32, UD:F:32
     Addr, Tmp as mul_float_rr
 
 arm x86_64_avx: DivDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp as div_double_rrr
+    Tmp, Tmp, Tmp as div_double
 
 x86: DivDouble U:F:64, UD:F:64
-    Tmp, Tmp as div_double 
-    Addr, Tmp as div_double
+    Tmp, Tmp as div_double_rr
+    Addr, Tmp as div_double_rr
 
 arm x86_64_avx: DivFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp as div_float_rrr
+    Tmp, Tmp, Tmp as div_float
 
 x86: DivFloat U:F:32, UD:F:32
-    Tmp, Tmp as div_float
-    Addr, Tmp as div_float
+    Tmp, Tmp as div_float_rr
+    Addr, Tmp as div_float_rr
 
 x86: X86ConvertToDoubleWord32 U:G:32, ZD:G:32
     Tmp*, Tmp* as x86_convert_to_double_word32_rr

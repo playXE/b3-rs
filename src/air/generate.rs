@@ -82,6 +82,9 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
         // best order for blocks but aids in optimizations.
         optimize_block_order(code);
+        if code.proc.options.dump_air_at_each_phase {
+            println!("AIR after prepare_for_generation:\n{}", code);
+        }
     });
 }
 

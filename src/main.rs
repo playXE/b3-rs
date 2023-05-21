@@ -12,47 +12,20 @@ fn main() {
 
     let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
-    let number = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
+    let n = builder.argument(b3::Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
 
-    let i = builder.procedure.add_variable(b3::Type::Int32);
-    let factorial = builder.procedure.add_variable(b3::Type::Int32);
+    let switch = builder.switch(n);
 
-    let for_header = builder.procedure.add_block(1.0);
-    let for_body = builder.procedure.add_block(1.0);
-    let for_exit = builder.procedure.add_block(1.0);
+    for i in 0..120 {
+        let handler = builder.procedure.add_block(1.0);
+        builder.switch_to_block(handler);
+        let val = builder.const32(i);
+        builder.return_(Some(val));
 
-    let one = builder.const32(1);
-    builder.var_set(factorial, one);
-    builder.var_set(i, one);
-
-    builder.jump(Some(for_header));
-
-    builder.block = for_header;
-
-    let i_value = builder.var_get(i);
-    let cmp = builder.binary(b3::Opcode::LessEqual, i_value, number);
-
-    builder.branch(cmp, for_body, (for_exit, b3::Frequency::Normal));
-
-    builder.block = for_body;
-
-    let i_value = builder.var_get(i);
-    let factorial_value = builder.var_get(factorial);
-    let mul = builder.binary(b3::Opcode::Mul, i_value, factorial_value);
-    builder.var_set(factorial, mul);
-
-    let i_value = builder.var_get(i);
-    let one = builder.const32(1);
-    let add = builder.binary(b3::Opcode::Add, i_value, one);
-
-    builder.var_set(i, add);
-
-    builder.jump(Some(for_header));
-
-    builder.block = for_exit;
-
-    let factorial_value = builder.var_get(factorial);
-    builder.return_(Some(factorial_value));
-
+        builder.procedure.switch_append_case(switch, (i as i64, (handler, b3::Frequency::Normal)));
+    }
+    println!("{}", proc.display_());
     let compilation = b3::compile(proc);
+
+    println!("{}", compilation.disassembly());
 }

@@ -67,6 +67,7 @@ impl<'a> MoveConstants<'a> {
     /// as it segfaults only in large IR inputs and debugging those is painful.
     #[allow(dead_code)]
     fn hoist_constants(&mut self, filter: impl Fn(&Value) -> bool) {
+        self.proc.dominators_or_compute();
         let dominators = self.proc.dominators().clone();
         let mut value_for_constant = HashMap::new();
         let mut materializations =

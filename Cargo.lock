@@ -563,6 +563,7 @@ dependencies = [
 [[package]]
 name = "macroassembler"
 version = "0.1.0"
+source = "git+https://github.com/playxe/masm-rs#0259e8a6718b1cba4248da5db57f505065415918"
 dependencies = [
  "cfg-if",
  "errno",
@@ -575,6 +576,7 @@ dependencies = [
  "paste",
  "tinyvec",
  "vm-allocator",
+ "winapi",
 ]
 
 [[package]]

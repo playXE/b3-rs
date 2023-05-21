@@ -16,8 +16,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install Rubyu
+    - name: Install Ruby
       run: sudo apt-get install -y ruby
+    - name: Setup | Rust
+      uses: ATiltedTree/setup-rust@v1
+      with:
+          rust-version: nightly 
     - name: Build
       run: cargo build --verbose
     - name: Run tests

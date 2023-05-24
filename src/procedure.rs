@@ -151,8 +151,8 @@ impl Procedure {
     }
 
     pub fn upsilon_set_phi(&mut self, upsilon: ValueId, phi: ValueId) -> Option<ValueId> {
-        match self.value_mut(phi).data {
-            ValueData::Upsilon(ref mut phi) => phi.replace(upsilon),
+        match self.value_mut(upsilon).data {
+            ValueData::Upsilon(ref mut _phi) => _phi.replace(phi),
             _ => panic!("not a phi"),
         }
     }

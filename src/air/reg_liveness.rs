@@ -152,7 +152,7 @@ impl RegLiveness {
             }
         }
 
-        if true {
+        if false {
             println!("Reg Liveness result:");
 
             for block_index in (0..code.blocks.len()).rev() {

@@ -423,7 +423,7 @@ criterion_main!(benches);
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Brainfuck Mandelbrot Set Compilation");
-
+    group.sample_size(10);
     let mut bf = BfJIT::new(CGContext {
         opt_level: OptLevel::None,
         regalloc: RegAlloc::LinearScan,
@@ -471,7 +471,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("Brainfuck Mandelbrot Set Runtime");
 
-
+    group.sample_size(10);
     /*let no_opt_lsra = {
         bf.ctx.opt_level = OptLevel::None;
         bf.ctx.regalloc = RegAlloc::LinearScan;

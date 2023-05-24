@@ -92,7 +92,6 @@ pub fn lower_entry_switch(code: &mut Code) {
     for block in worklist.seen().indices().map(BasicBlockId) {
         fix_entry_switch(code, block, 0);
     }
-    println!("{}", code);
     code.entrypoints = entrypoints;
     code.reset_reachability();
 }

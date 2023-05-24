@@ -11,7 +11,7 @@ use crate::{
     move_constants::move_constants,
     procedure::Procedure,
     reduce_strength::reduce_strength,
-    OptLevel,
+    OptLevel, 
 };
 
 pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
@@ -24,6 +24,13 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     proc.reset_reachability();
     proc.dominators_or_compute();
     if proc.options.opt_level >= OptLevel::O2 {
+        // Convert to SSA form.
+        fix_ssa(proc);
+        // SCCP is quite expensive and untested pass. We do not run it by default.
+        if proc.options.enable_sccp {
+            crate::sccp::sccp(proc);
+        }
+        //sparse_conditional_constant_propagation(proc);
         // TODO: Should we run `fix_ssa` after or before `reduce_strength`?
         // Seems like running it before is better since `reduce_strength` can
         // work out better because it knows how to work with Phi's
@@ -34,8 +41,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         // convet sequence of branches to switches when possible
         infer_switches(proc);
 
-        // Convert to SSA form.
-        fix_ssa(proc);
+        
     } else if proc.options.opt_level >= OptLevel::O1 {
         // Reduces strength in one pass.
         reduce_strength(proc);

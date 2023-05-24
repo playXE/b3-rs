@@ -708,6 +708,86 @@ impl Value {
         })
     }
 
+    pub fn floor_constant(&self) -> Option<Value> {
+        Some(if self.has_float() {
+            Self::make_const_float(self.as_float().unwrap().floor())
+        } else if self.has_double() {
+            Self::make_const_double(self.as_double().unwrap().floor())
+        } else {
+            return None;
+        })
+    }
+
+    pub fn ceil_constant(&self) -> Option<Value> {
+        Some(if self.has_float() {
+            Self::make_const_float(self.as_float().unwrap().ceil())
+        } else if self.has_double() {
+            Self::make_const_double(self.as_double().unwrap().ceil())
+        } else {
+            return None;
+        })
+    }
+
+    pub fn trunc_constant(&self) -> Option<Value> {
+        Some(if self.has_float() {
+            Self::make_const_float(self.as_float().unwrap().trunc())
+        } else if self.has_double() {
+            Self::make_const_double(self.as_double().unwrap().trunc())
+        } else if self.has_int64() {
+            Self::make_const32(self.as_int64().unwrap() as i32)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn zext32_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const64(self.as_int32().unwrap() as i64)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn sext16_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const32(self.as_int32().unwrap() as u16 as i16 as i32)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn sext8_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const32(self.as_int32().unwrap() as u32 as u8 as i8 as i32)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn sext32_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const64(self.as_int32().unwrap() as i64)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn sext16to64_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const64(self.as_int32().unwrap() as i64)
+        } else {
+            return None;
+        })
+    }
+
+    pub fn sext8to64_constant(&self) -> Option<Value> {
+        Some(if self.has_int32() {
+            Self::make_const64(self.as_int32().unwrap() as i64)
+        } else {
+            return None;
+        })
+    }
+
     pub fn add_constant_i32(&self, other: i32) -> Option<Value> {
         if self.has_float() {
             Some(Self::make_const_float(

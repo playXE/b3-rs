@@ -10,15 +10,14 @@ pub mod break_critical_edges;
 pub mod check_special;
 pub mod compile;
 pub mod compute_division_magic;
-pub mod fold_path_constants;
 pub mod data_section;
-pub mod lower_macros;
 pub mod dominators;
 pub mod effects;
 pub mod eliminate_dead_code;
 pub mod ensure_loop_pre_headers;
 pub mod estimate_static_exec_counts;
 pub mod fix_ssa;
+pub mod fold_path_constants;
 pub mod generate;
 pub mod hoist_loop_invariant_values;
 pub mod infer_switches;
@@ -27,6 +26,7 @@ pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
 pub mod liveness;
+pub mod lower_macros;
 pub mod lower_to_air;
 pub mod move_constants;
 pub mod natural_loops;
@@ -38,12 +38,14 @@ pub mod procedure;
 pub mod pure_cse;
 pub mod reduce_strength;
 pub mod rpo;
+pub mod sccp;
 pub mod sparse_collection;
 pub mod ssa_calculator;
 pub mod stackmap_generation_params;
 pub mod stackmap_special;
 pub mod stackmap_value;
 pub mod typ;
+pub mod uses;
 pub mod use_counts;
 pub mod utils;
 pub mod value;
@@ -214,6 +216,7 @@ pub struct Options {
     /// Turn this option off if you provide your own frequency estimates. By default
     /// it is set to true.
     pub estimate_static_execution_counts: bool,
+    pub enable_sccp: bool,
 }
 
 impl Default for Options {
@@ -234,6 +237,7 @@ impl Default for Options {
             dump_b3_at_each_phase: false,
             dump_air_at_each_phase: false,
             dump_b3_reduce_strength: false,
+            enable_sccp: false,
         }
     }
 }
@@ -241,13 +245,13 @@ impl Default for Options {
 pub use bank::*;
 pub use block::*;
 pub use compile::*;
+pub use effects::*;
 pub use generate::*;
+pub use jit::compilation::Compilation;
+pub use jit::reg::*;
+pub use macroassembler;
 pub use opcode::*;
 pub use procedure::*;
 pub use typ::*;
 pub use value::*;
 pub use width::*;
-pub use effects::*;
-pub use macroassembler;
-pub use jit::compilation::Compilation;
-pub use jit::reg::*;

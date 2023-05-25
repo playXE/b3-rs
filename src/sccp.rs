@@ -464,6 +464,14 @@ impl<'a> Worklist<'a> {
                         self.def_use.entry(arg).or_insert_with(Vec::new).push(val);
                     }
                 }
+
+                if val.opcode(&self.proc) == Opcode::Phi {
+                    let upsilons = self.phi_children.at(val).iter().collect::<Vec<_>>();
+
+                    for upsilon in upsilons {
+                        self.def_use.entry(upsilon).or_insert_with(Vec::new).push(val);
+                    }
+                }
             }
 
             let control_value = *self.proc.block(block).last().unwrap();
@@ -487,6 +495,19 @@ impl<'a> Worklist<'a> {
                 continue;
             }
             uses.push_front(use_);
+        }
+
+        if val.opcode(self.proc) == Opcode::Phi {
+            let upsilons = self.phi_children.at(val);
+
+            for upsilon in upsilons.iter() {
+                if val == upsilon {
+                    // phi may refer to itself as uses, ignore them to avoid
+                    // re-visiting phi-nodes
+                    continue;
+                }
+                uses.push_front(upsilon);
+            }
         }
 
         self.uses = uses;

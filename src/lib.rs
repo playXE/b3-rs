@@ -26,7 +26,7 @@ pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
 pub mod liveness;
-pub mod loop_unrolling;
+//pub mod loop_unrolling;
 pub mod lower_macros;
 pub mod lower_to_air;
 pub mod move_constants;

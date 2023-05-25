@@ -444,12 +444,12 @@ impl<'a> Worklist<'a> {
 
         cls(self);
     }
+    
     /// build_def_uses builds def-use chain for some values early, because once the
     /// lattice of a value is changed, we need to update lattices of use. But we don't
     /// need all uses of it, only uses that can become constants would be added into
     /// re-visit worklist since no matter how many times they are revisited, uses which
     /// can't become constants lattice remains unchanged, i.e. Bottom.
-
     fn build_def_uses(&mut self) {
         for i in 0..self.proc.blocks.len() {
             let block = BlockId(i);

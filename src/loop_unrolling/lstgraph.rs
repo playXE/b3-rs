@@ -4,8 +4,7 @@ use tinyvec::TinyVec;
 
 use crate::{utils::index_set::KeyIndex, BlockId};
 
-/// An analysis to detect strongly connected components.
-pub struct Loops {}
+
 
 /// Represents a single strongly connected component.
 pub struct Node {
@@ -89,4 +88,36 @@ impl KeyIndex for NodeId {
     fn index(&self) -> usize {
         self.0
     }
+}
+
+struct NodeData {
+    node: NodeId,
+    index: usize,
+    low_link: usize,
+    on_stack: bool,
+    is_in_scc: bool,
+    is_header: bool,
+
+}
+
+impl NodeData {
+    fn new(node: NodeId) -> Self {
+        Self {
+            node,
+            index: 0,
+            low_link: 0,
+            on_stack: false,
+            is_in_scc: false,
+            is_header: false,
+        }
+    }
+
+    fn has_index(&self) -> bool {
+        self.index >= 0 && self.index != usize::MAX
+    }
+}
+
+/// An analysis to detect strongly connected components.
+pub struct Loops {
+
 }

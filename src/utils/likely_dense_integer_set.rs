@@ -3,7 +3,7 @@ use std::mem::{size_of, ManuallyDrop};
 
 use super::bitvector::{BitVector, BitVectorIter};
 
-/// This is effectively a std::variant<HashSet, Pair<BitVector, IndexType>>
+/// This is effectively a `Either<HashSet<u32>, (BitVector, u32)>`
 /// If it is in BitVector mode, it keeps track of the minimum value in the set, and has the bitVector shifted by the same amount.
 /// So for example {64000, 64002, 64003} would be represented as the bitVector 1101 with a m_min of 64000.
 /// It shifts between the two modes whenever that would at least halve its memory usage. So it will never use more than twice the optimal amount of memory, and yet should not ping-pong between the two modes too often.

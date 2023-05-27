@@ -1,5 +1,4 @@
-use b3::{self, fix_ssa::fix_ssa, sccp::sccp, Reg};
-use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
+use b3::{self, fix_ssa::fix_ssa, sccp::sccp};
 
 fn main() {
     let mut opts = b3::Options::default();
@@ -55,6 +54,5 @@ fn main() {
     builder.return_(Some(factorial_value));
     fix_ssa(&mut proc);
     sccp(&mut proc);
-
     println!("{}", proc.display_());
 }

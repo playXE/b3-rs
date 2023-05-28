@@ -143,7 +143,9 @@ impl<'a> ReduceStrength<'a> {
                     self.value = self.block.value(self.proc, self.index);
                     Value::perform_substitution(self.value, self.proc);
                     self.reduce_value_strength();
-
+                    if self.proc.options.opt_level >= OptLevel::O2 {
+                        self.replace_if_redundant();
+                    }
                     self.index += 1;
                 }
 

@@ -11,7 +11,7 @@ use crate::{
     move_constants::move_constants,
     procedure::Procedure,
     reduce_strength::reduce_strength,
-    OptLevel, 
+    OptLevel, hoist_loop_invariant_values::hoist_loop_invariant_values, 
 };
 
 pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
@@ -26,6 +26,8 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     if proc.options.opt_level >= OptLevel::O2 {
         // Convert to SSA form.
         fix_ssa(proc);
+
+        hoist_loop_invariant_values(proc);
         // SCCP is quite expensive and untested pass. We do not run it by default.
         if proc.options.enable_sccp {
             
@@ -59,7 +61,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     move_constants(proc);
     legalize_memory_offsets(proc);
     //eliminate_dead_code(proc);
-
+    
     if proc.options.estimate_static_execution_counts {
         // Estimate frequency of each basic block based on loop analysis.
         //
@@ -69,6 +71,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         estimate_static_execution_counts(proc);
     }
 
+    
     let code = lower_to_air(proc);
     if code.proc.options.dump_air_at_each_phase {
         println!("AIR after lowering to AIR:");

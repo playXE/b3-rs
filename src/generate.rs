@@ -28,12 +28,14 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         fix_ssa(proc);
         // SCCP is quite expensive and untested pass. We do not run it by default.
         if proc.options.enable_sccp {
+            
             crate::sccp::sccp(proc);
         }
-        //sparse_conditional_constant_propagation(proc);
+
         // TODO: Should we run `fix_ssa` after or before `reduce_strength`?
-        // Seems like running it before is better since `reduce_strength` can
-        // work out better because it knows how to work with Phi's
+        // 
+        // Running it before seems more beneficial because `reduce_strength`
+        // can simplify SSA form and entirely remove some phi nodes.
 
         // Reduces strength until fixpoint.
         reduce_strength(proc);

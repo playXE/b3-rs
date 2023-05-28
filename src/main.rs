@@ -1,4 +1,5 @@
-use b3::{self, fix_ssa::fix_ssa, sccp::sccp};
+use b3::{self, fix_ssa::fix_ssa, sccp::sccp, ensure_loop_pre_headers::ensure_loop_pre_headers, Reg};
+use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
 fn main() {
     let mut opts = b3::Options::default();
@@ -11,7 +12,7 @@ fn main() {
 
     let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);
 
-    let number = builder.const32(5); //builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
+    let number = builder.argument(Reg::new_gpr(ARGUMENT_GPR0), b3::Type::Int32);
 
     let i = builder.procedure.add_variable(b3::Type::Int32);
     let factorial = builder.procedure.add_variable(b3::Type::Int32);
@@ -54,5 +55,6 @@ fn main() {
     builder.return_(Some(factorial_value));
     fix_ssa(&mut proc);
     sccp(&mut proc);
+    //ensure_loop_pre_headers(&mut proc);
     println!("{}", proc.display_());
 }

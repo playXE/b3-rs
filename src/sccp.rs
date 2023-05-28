@@ -1,3 +1,33 @@
+//! # Sparse Conditional Constant Propagation
+//!
+//! Described in
+//! Mark N. Wegman, F. Kenneth Zadeck: Constant Propagation with Conditional Branches.
+//! TOPLAS 1991.
+//!
+//! This algorithm uses three level lattice for SSA value
+//! ```
+//!      Top        undefined
+//!     / | \
+//! .. 1  2  3 ..   constant
+//!     \ | /
+//!     Bottom      not constant
+//! ```
+//! It starts with optimistically assuming that all SSA values are initially Top
+//! and then propagates constant facts only along reachable control flow paths.
+//! Since some basic blocks are not visited yet, corresponding inputs of phi become
+//! Top, we use the [`meet(phi)`](Worklist::meet) to compute its lattice.
+//! ```
+//! 	  Top ∩ any = any
+//! 	  Bottom ∩ any = Bottom
+//! 	  ConstantA ∩ ConstantA = ConstantA
+//! 	  ConstantA ∩ ConstantB = Bottom
+//! ```
+//! Each lattice value is lowered most twice(Top to Constant, Constant to Bottom)
+//! due to lattice depth, resulting in a fast convergence speed of the algorithm.
+//! In this way, sccp can discover optimization opportunities that cannot be found
+//! by just combining constant folding and constant propagation and dead code
+//! elimination separately.
+
 
 
 use std::collections::{HashMap, VecDeque};
@@ -5,7 +35,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     analysis::phi_children::PhiChildren,
     utils::{bitvector::BitVector, index_set::IndexMap},
-    BlockId,  Opcode, Procedure, TriState,Value,  ValueId,
+    BlockId,  Opcode, Procedure, TriState,Value,  ValueId, Frequency,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,7 +74,8 @@ impl Lattice {
     }
 }
 
-struct Worklist<'a> {
+/// SCCP worklist
+pub struct Worklist<'a> {
     proc: &'a mut Procedure,
     phi_children: PhiChildren,
     edges: VecDeque<BlockId>,
@@ -73,7 +104,7 @@ pub fn sccp<'a>(proc: &'a mut Procedure) {
         def_block: HashMap::new(),
         visited_block,
     };
-    t.edges.push_front(BlockId(0));
+    t.edges.push_back(BlockId(0));
 
     for i in 0..t.proc.values.size() {
         t.def_use.insert(ValueId(i), vec![]);
@@ -85,7 +116,7 @@ pub fn sccp<'a>(proc: &'a mut Procedure) {
 
     loop {
         if let Some(edge) = t.edges.pop_front() {
-            if !t.visited.get(edge.0) {
+            if true || !t.visited.get(edge.0) {
                 let dest_visited = t.visited_block.get(edge.0);
                 t.visited.set(edge.0, true);
                 t.visited_block.set(edge.0, true);
@@ -114,7 +145,11 @@ pub fn sccp<'a>(proc: &'a mut Procedure) {
         break;
     }
 
-    let _ = t.replace_consts();
+    let (replace_cnt, rewire_cnt) = t.replace_consts();
+
+    if proc.options.dump_b3_at_each_phase {
+        eprintln!("SCCP: replaced {} constants, rewired {} blocks", replace_cnt, rewire_cnt);
+    }
 }
 
 impl<'a> Worklist<'a> {
@@ -285,6 +320,7 @@ impl<'a> Worklist<'a> {
 
     /// Meets all of phi arguments and computes result lattice
     fn meet(&mut self, val: ValueId) -> Lattice {
+       
         let mut optimistic_lt = Lattice {
             level: LatticeLevel::Top,
             val: None,
@@ -330,12 +366,12 @@ impl<'a> Worklist<'a> {
                 } else {
                     // Top ∩ any = any
                     // Revisit this phi node later
-                    self.uses.push_back(val);
+                    //self.uses.push_back(val);
                 }
             } else {
                 // Top ∩ any = any
                 // Revisit this phi node later
-                self.uses.push_back(val);
+                //self.uses.push_back(val);
             }
         }
 
@@ -474,9 +510,12 @@ impl<'a> Worklist<'a> {
                 }
             }
 
-            let control_value = *self.proc.block(block).last().unwrap();
-
-            if possible_const(self.proc, control_value) {
+            let terminator = *self.proc.block(block).last().unwrap();
+            let control_value = match terminator.opcode(self.proc) {
+                Opcode::Branch | Opcode::Switch => Some(self.proc.value(terminator).children[0]),
+                _ => None 
+            };
+            if let Some(control_value) = control_value.filter(|&control_value| possible_const(self.proc, control_value)) {
                 self.def_block
                     .entry(control_value)
                     .or_insert_with(Vec::new)
@@ -494,7 +533,7 @@ impl<'a> Worklist<'a> {
                 // re-visiting phi-nodes
                 continue;
             }
-            uses.push_front(use_);
+            uses.push_back(use_);
         }
 
         if val.opcode(self.proc) == Opcode::Phi {
@@ -506,7 +545,7 @@ impl<'a> Worklist<'a> {
                     // re-visiting phi-nodes
                     continue;
                 }
-                uses.push_front(upsilon);
+                uses.push_back(upsilon);
             }
         }
 
@@ -521,7 +560,7 @@ impl<'a> Worklist<'a> {
         match self.proc.value(control_value).kind.opcode() {
             Opcode::Jump => {
                 self.edges
-                    .push_front(self.proc.block(block).successor_list[0].0);
+                    .push_back(self.proc.block(block).successor_list[0].0);
             }
 
             Opcode::Branch | Opcode::Switch => {
@@ -529,9 +568,10 @@ impl<'a> Worklist<'a> {
                 let cond_lattice = self.get_lattice_cell(cond);
 
                 if cond_lattice.level == LatticeLevel::Bottom {
+              
                     for i in 0..self.proc.block(block).successor_list.len() {
                         self.edges
-                            .push_front(self.proc.block(block).successor_list[i].0);
+                            .push_back(self.proc.block(block).successor_list[i].0);
                     }
                 } else if cond_lattice.level == LatticeLevel::Constant {
                     let val = cond_lattice.val.unwrap();
@@ -539,10 +579,10 @@ impl<'a> Worklist<'a> {
                         let constant = self.proc.value(val).as_int().unwrap();
                         if constant != 0 {
                             self.edges
-                                .push_front(self.proc.block(block).successor_list[0].0);
+                                .push_back(self.proc.block(block).successor_list[0].0);
                         } else {
                             self.edges
-                                .push_front(self.proc.block(block).successor_list[1].0);
+                                .push_back(self.proc.block(block).successor_list[1].0);
                         }
                     } else {
                         let branch_idx = self
@@ -553,7 +593,7 @@ impl<'a> Worklist<'a> {
                             .abs()
                             .rem_euclid(self.proc.block(block).successor_list.len() as i64);
 
-                        self.edges.push_front(
+                        self.edges.push_back(
                             self.proc.block(block).successor_list[branch_idx as usize].0,
                         );
                     }
@@ -582,7 +622,7 @@ impl<'a> Worklist<'a> {
 
     fn replace_consts(&mut self) -> (usize, usize) {
         let mut const_cnt = 0;
-        let rewire_cnt = 0;
+        let mut rewire_cnt = 0;
 
         let cells = std::mem::take(&mut self.lattice);
 
@@ -601,11 +641,59 @@ impl<'a> Worklist<'a> {
                     const_cnt += 1;
                 }
 
-                // TODO: Rewire blocks if this value is a control value
+                
+                
+                if let Some(ctrl_block) = self.def_block.remove(&val) {
+                    for block in ctrl_block {
+                        if self.rewire_successor(block, val) {
+                            rewire_cnt += 1;
+                        }
+                    }
+                }   
+            
             }
         }
 
         (const_cnt, rewire_cnt)
+    }
+
+    fn rewire_successor(&mut self, block: BlockId, val: ValueId) -> bool {
+        let terminator = self.proc.block(block).last().copied().unwrap();
+
+        match terminator.opcode(self.proc) {
+            Opcode::Branch => {
+                let value = self.proc.value(val).as_int().unwrap();
+                let succ = if value != 0 {
+                    self.proc.block(block).successor_list[0].0
+                } else {
+                    self.proc.block(block).successor_list[1].0
+                };
+
+                self.proc.value_mut(terminator).replace_with_jump(block, (succ, Frequency::Normal));
+                self.proc.block_mut(block).successor_list.clear();
+                self.proc.block_mut(block).successor_list.push((succ, Frequency::Normal));
+                true 
+            }
+
+            Opcode::Switch => {
+                let value = self.proc.value(val).as_int().unwrap();
+                if value < 0 {
+                    return false;
+                }
+                if value >= self.proc.block(block).successor_list.len() as i64 {
+                    return false;
+                }
+                let succ = self.proc.block(block).successor_list[value as usize].0;
+
+               
+                self.proc.value_mut(terminator).replace_with_jump(block, (succ, Frequency::Normal));
+                self.proc.block_mut(block).successor_list.clear();
+                self.proc.block_mut(block).successor_list.push((succ, Frequency::Normal));
+                true
+            }
+
+            _ => false
+        }
     }
 }
 

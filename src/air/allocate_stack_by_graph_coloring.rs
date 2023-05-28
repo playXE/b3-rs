@@ -1,7 +1,7 @@
 use crate::utils::interference_graph::Iterable;
 
 use crate::{
-    liveness::{IndexSparseSetEntry, LocalCalc},
+    analysis::liveness::{IndexSparseSetEntry, LocalCalc},
     utils::interference_graph::{
         InterferenceBitVector, InterferenceGraph, InterferenceVector, LargeInterferenceGraph,
         SmallInterferenceGraph, MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH,

@@ -4,7 +4,7 @@ use tinyvec::TinyVec;
 
 use super::{basic_block::*, code::*};
 
-use crate::{block::Frequency, dominators::GraphNodeWorklist, sparse_collection::SparseElement, air::opcode::Opcode};
+use crate::{block::Frequency, analysis::dominators::GraphNodeWorklist, sparse_collection::SparseElement, air::opcode::Opcode};
 
 /// Compute the Block post-order for a Code. In the returned Vec a BasicBlockId will
 /// appear after all of its successors.

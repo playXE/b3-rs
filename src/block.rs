@@ -2,7 +2,7 @@ use tinyvec::tiny_vec;
 
 use crate::{
     air::stack_slot::StackSlotId,
-    dominators::{GraphNodeWorklist, GraphVisitOrder, PostOrderGraphNodeWorklist},
+    analysis::dominators::{GraphNodeWorklist, GraphVisitOrder, PostOrderGraphNodeWorklist},
     effects::Effects,
     jit::reg::Reg,
     opcode::Opcode,

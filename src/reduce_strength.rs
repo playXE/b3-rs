@@ -3,9 +3,9 @@ use num_integer::*;
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingShr, WrappingSub};
 
 use crate::{
-    blocks_in_pre_order, compute_division_magic::compute_division_magic, dominators::Dominators,
+    blocks_in_pre_order, compute_division_magic::compute_division_magic, analysis::dominators::Dominators,
     eliminate_dead_code::eliminate_dead_code, insertion_set::InsertionSet, kind::Kind,
-    phi_children::PhiChildren, procedure::Procedure, pure_cse::PureCSE, size_of_type, BlockId,
+    analysis::phi_children::PhiChildren, procedure::Procedure, pure_cse::PureCSE, size_of_type, BlockId,
     Frequency, NumChildren, Opcode, OptLevel, TriState, Type, TypeKind, Value, ValueData, ValueId,
 };
 

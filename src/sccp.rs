@@ -3,7 +3,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
-    phi_children::PhiChildren,
+    analysis::phi_children::PhiChildren,
     utils::{bitvector::BitVector, index_set::IndexMap},
     BlockId,  Opcode, Procedure, TriState,Value,  ValueId,
 };

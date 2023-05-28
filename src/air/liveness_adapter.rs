@@ -1,6 +1,6 @@
 use tinyvec::TinyVec;
 
-use crate::{liveness::{LivenessAdapter as Adapter, Liveness}, bank::Bank};
+use crate::{analysis::liveness::{LivenessAdapter as Adapter, Liveness}, bank::Bank};
 
 use super::{code::Code, basic_block::BasicBlockId, arg::{ArgTemperature, ArgRole}, tmp::{Tmp, AbsoluteIndexed}, stack_slot::StackSlotId};
 
@@ -82,13 +82,13 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Ad
         }
     }
 
-    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node) -> usize {
+    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node) -> usize {
         self.code.block(block).insts.len()
     }
 
     fn for_each_def<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where
@@ -101,7 +101,7 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Ad
 
     fn for_each_use<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where
@@ -213,7 +213,7 @@ impl<'a> Adapter for UnifiedTmpLivenessAdapter<'a> {
             + AbsoluteIndexed::<{Bank::FP}>::absolute_index(&Tmp::fp_tmp_for_index(self.code.num_fp_tmps))
     }
 
-    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node) -> usize {
+    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node) -> usize {
         self.code.block(block).insts.len()
     }
 
@@ -227,7 +227,7 @@ impl<'a> Adapter for UnifiedTmpLivenessAdapter<'a> {
 
     fn for_each_def<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where
@@ -240,7 +240,7 @@ impl<'a> Adapter for UnifiedTmpLivenessAdapter<'a> {
 
     fn for_each_use<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where
@@ -365,13 +365,13 @@ impl<'a, 'b> Adapter for StackSlotLivenessAdapter<'a, 'b> {
         StackSlotId(index)
     }
 
-    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node) -> usize {
+    fn block_size(&self, block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node) -> usize {
         self.code.block(block).insts.len()
     }
 
     fn for_each_def<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where
@@ -384,7 +384,7 @@ impl<'a, 'b> Adapter for StackSlotLivenessAdapter<'a, 'b> {
 
     fn for_each_use<F>(
             &self,
-            block: <<Self as Adapter>::CFG as crate::dominators::Graph>::Node,
+            block: <<Self as Adapter>::CFG as crate::analysis::dominators::Graph>::Node,
             value_boundary_index: usize,
             mut func: F,
         ) where

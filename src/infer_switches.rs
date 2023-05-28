@@ -1,5 +1,5 @@
 use crate::{
-    insertion_set::InsertionSet, rpo::rpo_sort, use_counts::UseCounts, BlockId, 
+    insertion_set::InsertionSet, rpo::rpo_sort, analysis::use_counts::UseCounts, BlockId, 
     FrequentBlock, Opcode, Procedure, Type, Value, ValueData, ValueId,
 };
 

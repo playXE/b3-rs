@@ -4,7 +4,7 @@ use crate::{
         reg::Reg,
         register_set::{RegisterSet, },
     },
-    liveness::Liveness,
+    analysis::liveness::Liveness,
     utils::{index_set::IndexMap, bitvector::BitVector},
 };
 

@@ -1,6 +1,6 @@
 use crate::{
     block::BlockId,
-    liveness::{Liveness, LivenessAdapter},
+    analysis::liveness::{Liveness, LivenessAdapter},
     opcode::Opcode,
     procedure::Procedure,
     variable::VariableId,
@@ -23,7 +23,7 @@ impl<'a> LivenessAdapter for VariableLivenessAdapter<'a> {
 
     fn for_each_def<F>(
         &self,
-        block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
+        block: <<Self as LivenessAdapter>::CFG as crate::analysis::dominators::Graph>::Node,
         value_boundary_index: usize,
         mut func: F,
     ) where
@@ -46,7 +46,7 @@ impl<'a> LivenessAdapter for VariableLivenessAdapter<'a> {
 
     fn for_each_use<F>(
         &self,
-        block: <<Self as LivenessAdapter>::CFG as crate::dominators::Graph>::Node,
+        block: <<Self as LivenessAdapter>::CFG as crate::analysis::dominators::Graph>::Node,
         value_boundary_index: usize,
         mut func: F,
     ) where

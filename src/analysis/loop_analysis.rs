@@ -242,7 +242,7 @@ impl LoopAnalysis {
 
     /// interface to reverse `blocks[from, end of loop]` in this loop
     pub fn reverse_block(&mut self, l: LoopId, from: usize) {
-        let mut blocks = self.get_blocks_mut(l);
+        let blocks = self.get_blocks_mut(l);
         blocks[from..].reverse();
     }
 

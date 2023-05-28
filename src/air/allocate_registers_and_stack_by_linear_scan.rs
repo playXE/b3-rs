@@ -10,7 +10,7 @@ use crate::{
         reg::Reg,
         register_set::{RegisterSet, RegisterSetBuilder, ScalarRegisterSet},
     },
-    liveness::Liveness,
+    analysis::liveness::Liveness,
     utils::{
         bitvector::BitVector, deque::VecDequeExt, index_set::IndexMap, phase_scope::phase_scope,
     },

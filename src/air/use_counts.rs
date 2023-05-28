@@ -1,6 +1,6 @@
 
 
-use crate::{bank::Bank, block::Frequency, dominators::GraphNodeWorklist, utils::bitvector::BitVector};
+use crate::{bank::Bank, block::Frequency, analysis::dominators::GraphNodeWorklist, utils::bitvector::BitVector};
 
 use super::{
     basic_block::BasicBlockId,

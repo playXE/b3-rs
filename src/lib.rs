@@ -1,6 +1,7 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
 
+pub mod analysis;
 pub mod air;
 pub mod alloca_to_reg;
 pub mod bank;
@@ -9,11 +10,9 @@ pub mod block_insertion_set;
 pub mod break_critical_edges;
 //pub mod sccp_v2;
 pub mod check_special;
-pub mod loop_analysis;
 pub mod compile;
 pub mod compute_division_magic;
 pub mod data_section;
-pub mod dominators;
 pub mod effects;
 pub mod eliminate_dead_code;
 pub mod ensure_loop_pre_headers;
@@ -27,16 +26,13 @@ pub mod insertion_set;
 pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
-pub mod liveness;
 //pub mod loop_unrolling;
 pub mod lower_macros;
 pub mod lower_to_air;
 pub mod move_constants;
-pub mod natural_loops;
 pub mod opcode;
 pub mod patchpoint_special;
 pub mod patchpoint_value;
-pub mod phi_children;
 pub mod procedure;
 pub mod pure_cse;
 pub mod reduce_strength;
@@ -48,12 +44,10 @@ pub mod stackmap_generation_params;
 pub mod stackmap_special;
 pub mod stackmap_value;
 pub mod typ;
-pub mod use_counts;
 pub mod uses;
 pub mod utils;
 pub mod value;
 pub mod variable;
-pub mod variable_liveness;
 pub mod width;
 
 #[cfg(test)]

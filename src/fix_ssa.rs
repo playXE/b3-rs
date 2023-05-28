@@ -4,7 +4,7 @@ use crate::{
     block::{blocks_in_pre_order, BlockId},
     break_critical_edges::break_critical_edges,
     insertion_set::InsertionSet,
-    liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
+    analysis::liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
     opcode::Opcode,
     procedure::Procedure,
     ssa_calculator::SSACalculator,
@@ -15,7 +15,7 @@ use crate::{
     },
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
-    variable_liveness::{VariableLiveness, VariableLivenessAdapter},
+    analysis::variable_liveness::{VariableLiveness, VariableLivenessAdapter},
 };
 
 /// Turns all mentions of the given values into accesses to variables. This is meant to be used

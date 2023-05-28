@@ -2,7 +2,7 @@ use std::ops::{Deref, DerefMut};
 
 use tinyvec::TinyVec;
 
-use crate::{block::Frequency, sparse_collection::SparseElement, dominators::{PostOrderGraphNodeWorklist, GraphVisitOrder}, utils::index_set::KeyIndex};
+use crate::{block::Frequency, sparse_collection::SparseElement, analysis::dominators::{PostOrderGraphNodeWorklist, GraphVisitOrder}, utils::index_set::KeyIndex};
 
 use super::{inst::Inst, code::Code};
 

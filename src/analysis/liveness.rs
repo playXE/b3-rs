@@ -6,7 +6,7 @@ use std::{
 
 use crate::utils::{index_set::*, bitvector::BitVector};
 
-use crate::dominators::Graph;
+use crate::analysis::dominators::Graph;
 
 pub trait LivenessAdapter {
     type Thing: Copy + Clone + PartialEq + Eq + PartialOrd + Hash + Debug + Ord + PartialOrd;

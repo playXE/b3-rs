@@ -8,7 +8,7 @@ use tinyvec::TinyVec;
 use crate::{
     bank::{for_each_bank, Bank},
     block::Frequency,
-    dominators::Graph,
+    analysis::dominators::Graph,
     jit::{
         reg::Reg,
         register_at_offset::{round_up_to_multiple_of, RegisterAtOffsetList},

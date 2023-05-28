@@ -1,4 +1,4 @@
-use crate::{dominators::GraphNodeWorklist, Frequency, utils::index_set::IndexMap};
+use crate::{analysis::dominators::GraphNodeWorklist, Frequency, utils::index_set::IndexMap};
 use super::{basic_block::BasicBlockId, code::Code, opcode::Opcode};
 
 /// Converts code that seems to have one entrypoint and emulates multiple entrypoints with

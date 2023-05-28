@@ -4,7 +4,7 @@ use tinyvec::TinyVec;
 
 use crate::{
     block::{blocks_in_pre_order, BlockId},
-    dominators::Dominators,
+    analysis::dominators::Dominators,
     opcode::Opcode,
     procedure::Procedure,
     value::{Value, ValueId}, ValueKey,

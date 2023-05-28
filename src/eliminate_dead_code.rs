@@ -1,7 +1,7 @@
 use tinyvec::TinyVec;
 
 use crate::{
-    dominators::GraphNodeWorklist, effects::Effects, utils::index_set::IndexSet, BlockId, Opcode,
+    analysis::dominators::GraphNodeWorklist, effects::Effects, utils::index_set::IndexSet, BlockId, Opcode,
     Procedure, ValueId, variable::VariableId,
 };
 

@@ -12,7 +12,7 @@ use crate::{
     insertion_set::InsertionSet,
     jit::{reg::Reg, register_set::RegisterSetBuilder},
     update_predecessors_after,
-    use_counts::UseCounts,
+    analysis::use_counts::UseCounts,
     utils::bitvector::BitVector,
     BlockId, Frequency, FrequentBlock, NumChildren, Opcode, Procedure, Type, Value, ValueData,
     ValueId, Width,

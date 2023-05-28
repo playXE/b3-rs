@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     blocks_in_pre_order,
-    dominators::{BackwardsGraph, Dominators, SingleGraphNode},
+    analysis::dominators::{BackwardsGraph, Dominators, SingleGraphNode},
     ensure_loop_pre_headers::ensure_loop_pre_headers,
     utils::RangeExt,
     BlockId, Procedure,

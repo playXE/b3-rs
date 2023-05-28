@@ -6,7 +6,7 @@ use std::{
 
 use crate::utils::index_set::IndexMap;
 
-use crate::{block::BlockId, dominators::Dominators, procedure::Procedure, value::ValueId};
+use crate::{block::BlockId, analysis::dominators::Dominators, procedure::Procedure, value::ValueId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SSAVariableId(pub usize);

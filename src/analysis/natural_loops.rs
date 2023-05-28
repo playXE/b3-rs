@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::dominators::{Dominators, Graph};
+use crate::analysis::dominators::{Dominators, Graph};
 use crate::utils::index_set::IndexMap;
 
 #[derive(Debug)]

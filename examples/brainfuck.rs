@@ -126,6 +126,8 @@ impl BfJIT {
         options.air_force_linear_scan_allocator = self.ctx.regalloc == RegAlloc::LinearScan;
         options.air_force_irc_allocator = self.ctx.regalloc == RegAlloc::IRC;
         options.air_force_briggs_allocator = self.ctx.regalloc == RegAlloc::Briggs;
+        options.enable_sccp = true;
+        options.dump_b3_at_each_phase = true;
         let mut proc = b3::Procedure::new(options);
 
         let entry = proc.add_block(1.0);

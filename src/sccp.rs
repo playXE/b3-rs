@@ -5,7 +5,7 @@
 //! TOPLAS 1991.
 //!
 //! This algorithm uses three level lattice for SSA value
-//! ```
+//! ```text
 //!      Top        undefined
 //!     / | \
 //! .. 1  2  3 ..   constant
@@ -16,7 +16,7 @@
 //! and then propagates constant facts only along reachable control flow paths.
 //! Since some basic blocks are not visited yet, corresponding inputs of phi become
 //! Top, we use the [`meet(phi)`](Worklist::meet) to compute its lattice.
-//! ```
+//! ```text
 //! 	  Top ∩ any = any
 //! 	  Bottom ∩ any = Bottom
 //! 	  ConstantA ∩ ConstantA = ConstantA

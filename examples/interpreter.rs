@@ -1,7 +1,6 @@
 use std::{cell::RefCell, rc::Rc, mem::size_of};
 
 use b3::{BasicBlockBuilder, BlockId, Reg, ValueRep};
-use cranelift::codegen::gimli::Value;
 use macroassembler::{
     assembler::abstract_macro_assembler::{BaseIndex, DataLabelPtr, Extend, Scale},
     jit::gpr_info::{ARGUMENT_GPR0, ARGUMENT_GPR1, ARGUMENT_GPR2, T0, T1, T2, T4, T5},

@@ -1,14 +1,13 @@
 use macroassembler::{
     assembler::{
         abstract_macro_assembler::{Address, BaseIndex, Extend, PreIndexAddress, Scale},
-        macro_assembler_x86_common::{
-            DoubleCondition, RelationalCondition, ResultCondition, StatusCondition,
-        },
+        DoubleCondition, RelationalCondition, ResultCondition, 
         TargetMacroAssembler,
     },
     jit::gpr_info::CALL_FRAME_REGISTER,
 };
-
+#[cfg(target_arch="x86_64")]
+use macroassembler::assembler::macro_assembler_x86_common::StatusCondition;
 use crate::{
     bank::{bank_for_type, Bank},
     jit::reg::Reg,
@@ -752,7 +751,7 @@ impl Arg {
             ..Default::default()
         }
     }
-
+    #[cfg(target_arch="x86_64")]
     pub fn new_status_cond(cond: StatusCondition) -> Self {
         Self {
             kind: ArgKind::StatusCond,
@@ -1318,7 +1317,7 @@ impl Arg {
     pub fn as_double_condition(&self) -> DoubleCondition {
         unsafe { std::mem::transmute::<u8, DoubleCondition>(self.offset as _) }
     }
-
+    #[cfg(target_arch = "x86_64")]
     pub fn as_status_condition(&self) -> StatusCondition {
         unsafe { std::mem::transmute::<u8, StatusCondition>(self.offset as _) }
     }
@@ -1346,6 +1345,7 @@ impl Arg {
             ArgKind::DoubleCond => {
                 Self::new_double_cond(TargetMacroAssembler::invert_fp(self.as_double_condition()))
             }
+            #[cfg(target_arch = "x86_64")]
             ArgKind::StatusCond => Self::new_status_cond(match self.as_status_condition() {
                 StatusCondition::Failure => StatusCondition::Success,
                 StatusCondition::Success => StatusCondition::Failure,
@@ -1489,6 +1489,7 @@ impl std::fmt::Display for Arg {
             ArgKind::RelCond => write!(f, "{:?}", self.as_relational_condition()),
             ArgKind::ResCond => write!(f, "{:?}", self.as_result_condition()),
             ArgKind::DoubleCond => write!(f, "{:?}", self.as_double_condition()),
+            #[cfg(target_arch="x86_64")]
             ArgKind::StatusCond => write!(f, "{:?}", self.as_status_condition()),
             ArgKind::Special => write!(f, "$special{}", self.special().0),
             ArgKind::WidthArg => write!(f, "{}", self.width()),

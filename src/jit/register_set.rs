@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use macroassembler::assembler::{TargetAssembler, x86assembler::{ebx, r15, r14, r13, ebp}, TargetMacroAssembler};
+use macroassembler::assembler::{TargetAssembler,TargetMacroAssembler};
 
 use crate::{width::Width, bitmap};
 
@@ -176,13 +176,37 @@ impl RegisterSetBuilder {
 
     pub fn callee_saved_registers() -> RegisterSet {
         let mut result = RegisterSet::default();
-        use macroassembler::assembler::x86assembler::r12;
-        result.add(Reg::new_gpr(ebx), Width::W64);
-        result.add(Reg::new_gpr(ebp), Width::W64);
-        result.add(Reg::new_gpr(r12), Width::W64);
-        result.add(Reg::new_gpr(r13), Width::W64);
-        result.add(Reg::new_gpr(r14), Width::W64);
-        result.add(Reg::new_gpr(r15), Width::W64);
+
+        #[cfg(target_arch="x86_64")]
+        {
+            use macroassembler::assembler::x86assembler::r12;
+            use macroassembler::assembler::x86assembler::{ebx, r15, r14, r13, ebp};
+            result.add(Reg::new_gpr(ebx), Width::W64);
+            result.add(Reg::new_gpr(ebp), Width::W64);
+            result.add(Reg::new_gpr(r12), Width::W64);
+            result.add(Reg::new_gpr(r13), Width::W64);
+            result.add(Reg::new_gpr(r14), Width::W64);
+            result.add(Reg::new_gpr(r15), Width::W64);
+        }
+
+        #[cfg(target_arch="riscv64gc")]
+        {
+            use macroassembler::assembler::riscv64assembler::*;
+
+            result.add(Reg::new_gpr(x2), Width::W64);
+            result.add(Reg::new_gpr(x8), Width::W64);
+            result.add(Reg::new_gpr(x9), Width::W64);
+            result.add(Reg::new_gpr(x18), Width::W64);
+            result.add(Reg::new_gpr(x19), Width::W64);
+            result.add(Reg::new_gpr(x20), Width::W64);
+            result.add(Reg::new_gpr(x21), Width::W64);
+            result.add(Reg::new_gpr(x22), Width::W64);
+            result.add(Reg::new_gpr(x23), Width::W64);
+            result.add(Reg::new_gpr(x24), Width::W64);
+            result.add(Reg::new_gpr(x25), Width::W64);
+            result.add(Reg::new_gpr(x26), Width::W64);
+            result.add(Reg::new_gpr(x27), Width::W64);
+        }
 
         result
     }

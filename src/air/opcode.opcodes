@@ -430,16 +430,16 @@ x86: AndFloat U:F:32, UD:F:32
     Tmp, Tmp as and_float_rr
 
 OrDouble U:F:64, U:F:64, D:F:64
-    Tmp, Tmp, Tmp as or_double_rrr
+    Tmp, Tmp, Tmp as or_double
 
 x86: OrDouble U:F:64, UD:F:64
-    Tmp, Tmp as or_double
+    Tmp, Tmp as or_double_rr
 
 OrFloat U:F:32, U:F:32, D:F:32
-    Tmp, Tmp, Tmp as or_float_rrr
+    Tmp, Tmp, Tmp as or_float
 
 x86: OrFloat U:F:32, UD:F:32
-    Tmp, Tmp as or_float
+    Tmp, Tmp as or_float_rr
 
 x86: XorDouble U:F:64, U:F:64, D:F:64
     Tmp, Tmp, Tmp as xor_double

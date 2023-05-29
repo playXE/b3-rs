@@ -25,21 +25,20 @@ use crate::{
         inst::Inst,
         tmp::Tmp,
     },
+    analysis::dominators::{Dominators, GraphNodeWorklist},
+    analysis::phi_children::PhiChildren,
+    analysis::use_counts::UseCounts,
     bank::bank_for_type,
     block::BlockId,
-    analysis::dominators::{Dominators, GraphNodeWorklist},
     jit::reg::Reg,
     opcode::Opcode,
-    analysis::phi_children::PhiChildren,
     procedure::Procedure,
     typ::Type,
-    analysis::use_counts::UseCounts,
     value::ValueId,
     variable::VariableId,
 };
-use macroassembler::assembler::macro_assembler_x86_common::{
-    DoubleCondition, RelationalCondition, ResultCondition,
-};
+use macroassembler::assembler::{DoubleCondition, RelationalCondition, ResultCondition};
+use macroassembler::jit::fpr_info::RETURN_VALUE_FPR;
 use macroassembler::jit::gpr_info::RETURN_VALUE_GPR;
 use macroassembler::{
     assembler::abstract_macro_assembler::Extend, jit::gpr_info::CALL_FRAME_REGISTER,
@@ -102,12 +101,14 @@ struct LowerToAir<'a> {
     is_rare: bool,
     index: usize,
     value: ValueId,
-
+    #[cfg(target_arch = "x86_64")]
     eax: Tmp,
+    #[cfg(target_arch = "x86_64")]
     ecx: Tmp,
+    #[cfg(target_arch = "x86_64")]
     edx: Tmp,
 }
-
+#[cfg(target_arch = "x86_64")]
 use macroassembler::assembler::x86assembler::*;
 
 #[allow(dead_code)]
@@ -131,8 +132,11 @@ impl<'a> LowerToAir<'a> {
             is_rare: false,
             index: 0,
             value: ValueId(usize::MAX),
+            #[cfg(target_arch = "x86_64")]
             eax: Tmp::from_reg(Reg::new_gpr(eax)),
+            #[cfg(target_arch = "x86_64")]
             ecx: Tmp::from_reg(Reg::new_gpr(ecx)),
+            #[cfg(target_arch = "x86_64")]
             edx: Tmp::from_reg(Reg::new_gpr(edx)),
             locked: vec![],
         }
@@ -823,7 +827,6 @@ impl<'a> LowerToAir<'a> {
         let result = self.tmp(self.value);
 
         if is_valid_form(opcode, &[ArgKind::Imm, ArgKind::Tmp, ArgKind::Tmp]) {
-            
             if !NOT_COMMUTATIVE {
                 if let Some(arg) = self.imm_from_value(right) {
                     let left_tmp = self.tmp(left);
@@ -843,7 +846,6 @@ impl<'a> LowerToAir<'a> {
         }
 
         if is_valid_form(opcode, &[ArgKind::BitImm, ArgKind::Tmp, ArgKind::Tmp]) {
-            
             if !NOT_COMMUTATIVE {
                 if let Some(right_arg) = self.bit_imm(right) {
                     let left_tmp = self.tmp(left);
@@ -866,7 +868,6 @@ impl<'a> LowerToAir<'a> {
         }
 
         if is_valid_form(opcode, &[ArgKind::BitImm64, ArgKind::Tmp, ArgKind::Tmp]) {
-            
             if !NOT_COMMUTATIVE {
                 if let Some(right_arg) = self.bit_imm64(right) {
                     let left_tmp = self.tmp(left);
@@ -1097,16 +1098,23 @@ impl<'a> LowerToAir<'a> {
         let value = self.tmp(value);
         let amount = self.tmp(amount);
         let result = self.tmp(self.value);
+        #[cfg(target_arch = "x86_64")]
+        {
+            self.append(
+                AirOpcode::Move,
+                &[Arg::new_tmp(value), Arg::new_tmp(result)],
+            );
+            self.append(opcode, &[Arg::new_tmp(amount), Arg::new_tmp(self.ecx)]);
+            self.append(
+                AirOpcode::Move,
+                &[Arg::new_tmp(self.ecx), Arg::new_tmp(result)],
+            );
+        }
 
-        self.append(
-            AirOpcode::Move,
-            &[Arg::new_tmp(value), Arg::new_tmp(result)],
-        );
-        self.append(opcode, &[Arg::new_tmp(amount), Arg::new_tmp(self.ecx)]);
-        self.append(
-            AirOpcode::Move,
-            &[Arg::new_tmp(self.ecx), Arg::new_tmp(result)],
-        );
+        #[cfg(not(target_arch="x86_64"))]
+        {
+            unreachable!("Complex shift not supported on non-x86_64 architectures")
+        }
     }
 
     fn trapping_inst(&mut self, traps: bool, opcode: AirOpcode, args: &[Arg]) -> Inst {
@@ -1584,7 +1592,7 @@ impl<'a> LowerToAir<'a> {
              can_commit_internal: &mut bool| {
                 let rel_cond = Arg::new_rel_cond(relational_condition).inverted(inverted);
                 let double_cond = Arg::new_double_cond(double_condition).inverted(inverted);
-                
+
                 let left = this.child_id(value, 0);
                 let right = this.child_id(value, 1);
 
@@ -1603,7 +1611,6 @@ impl<'a> LowerToAir<'a> {
                         if let Some(result) =
                             compare(this, width, rel_cond.flipped(true).unwrap(), right, left)
                         {
-                            
                             return Some(result);
                         }
 
@@ -1731,7 +1738,7 @@ impl<'a> LowerToAir<'a> {
             };
 
         let width = self.value(value).result_width();
-        let res_cond = Arg::new_res_cond(ResultCondition::NotZero).inverted(inverted);
+        let res_cond = Arg::new_res_cond(ResultCondition::NonZero).inverted(inverted);
 
         let mut try_test =
             |this: &mut Self, width: Width, left: &mut ArgPromise, right: &mut ArgPromise| {
@@ -2633,7 +2640,7 @@ impl<'a> LowerToAir<'a> {
         self.commit_internal(inner_add);
         true
     }
-
+    #[cfg(target_arch = "x86_64")]
     fn append_x86_div(&mut self, op: Opcode) {
         let convert_to_double_word;
         let div;
@@ -2686,6 +2693,7 @@ impl<'a> LowerToAir<'a> {
         );
     }
 
+    #[cfg(target_arch = "x86_64")]
     fn append_x86_udiv(&mut self, op: Opcode) {
         let div = match self.value(self.value).typ.kind() {
             TypeKind::Int32 => AirOpcode::X86UDiv32,
@@ -2934,6 +2942,7 @@ impl<'a> LowerToAir<'a> {
             }
 
             Opcode::Div => {
+                #[cfg(target_arch = "x86_64")]
                 if self.value(self.value).typ().is_int() && is_x86() {
                     self.append_x86_div(Opcode::Div);
                     return;
@@ -2946,8 +2955,9 @@ impl<'a> LowerToAir<'a> {
             }
 
             Opcode::UDiv => {
+                #[cfg(target_arch = "x86_64")]
                 if self.value(self.value).typ().is_int() && is_x86() {
-                    self.append_x86_div(Opcode::UDiv);
+                    self.append_x86_udiv(Opcode::UDiv);
                     return;
                 }
 
@@ -2959,11 +2969,13 @@ impl<'a> LowerToAir<'a> {
 
             Opcode::Mod => {
                 assert!(is_x86());
+                #[cfg(target_arch = "x86_64")]
                 self.append_x86_div(Opcode::Mod);
             }
 
             Opcode::UMod => {
                 assert!(is_x86());
+                #[cfg(target_arch = "x86_64")]
                 self.append_x86_udiv(Opcode::UMod);
             }
 
@@ -3398,7 +3410,7 @@ impl<'a> LowerToAir<'a> {
                     self.append(AirOpcode::RetVoid, &[]);
                 } else {
                     let return_value_gpr = Tmp::from_reg(Reg::new_gpr(RETURN_VALUE_GPR));
-                    let return_value_fpr = Tmp::from_reg(Reg::new_fpr(xmm0));
+                    let return_value_fpr = Tmp::from_reg(Reg::new_fpr(RETURN_VALUE_FPR));
 
                     let value = self.child_id(self.value, 0);
 
@@ -3613,9 +3625,14 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 0);
 
-                if self.value.opcode(self.code.proc) == Opcode::CheckSub && self.value(left).is_int_of(0) {
+                if self.value.opcode(self.code.proc) == Opcode::CheckSub
+                    && self.value(left).is_int_of(0)
+                {
                     let right = self.tmp(right);
-                    self.append(AirOpcode::Move, &[Arg::new_tmp(right), Arg::new_tmp(result)]);
+                    self.append(
+                        AirOpcode::Move,
+                        &[Arg::new_tmp(right), Arg::new_tmp(result)],
+                    );
 
                     let opcode = self.try_opcode_for_type(
                         AirOpcode::BranchNeg32,
@@ -3625,9 +3642,14 @@ impl<'a> LowerToAir<'a> {
                         self.value(self.value).typ(),
                     );
 
-                    let check_special = self.ensure_check_special(opcode.into(), 2, RoleMode::SameAsRep);
+                    let check_special =
+                        self.ensure_check_special(opcode.into(), 2, RoleMode::SameAsRep);
 
-                    let mut inst = Inst::new(AirOpcode::Patch.into(), self.value, &[Arg::new_special(check_special)]);
+                    let mut inst = Inst::new(
+                        AirOpcode::Patch.into(),
+                        self.value,
+                        &[Arg::new_special(check_special)],
+                    );
                     inst.args.push(Arg::new_res_cond(ResultCondition::Overflow));
                     inst.args.push(Arg::new_tmp(result));
 
@@ -3639,11 +3661,18 @@ impl<'a> LowerToAir<'a> {
             }
 
             Opcode::Check => {
-                let branch = self.create_branch(self.value.child(self.code.proc, 0), false).unwrap();
+                let branch = self
+                    .create_branch(self.value.child(self.code.proc, 0), false)
+                    .unwrap();
 
-                let special = self.ensure_check_special(branch.kind, branch.args.len(), RoleMode::SameAsRep);
+                let special =
+                    self.ensure_check_special(branch.kind, branch.args.len(), RoleMode::SameAsRep);
 
-                let mut inst = Inst::new(AirOpcode::Patch.into(), self.value, &[Arg::new_special(special)]);
+                let mut inst = Inst::new(
+                    AirOpcode::Patch.into(),
+                    self.value,
+                    &[Arg::new_special(special)],
+                );
                 inst.args.extend_from_slice(&branch.args);
 
                 self.fill_stackmap(&mut inst, self.value, 1);
@@ -3740,11 +3769,16 @@ impl<'a> LowerToAir<'a> {
         }
     }
 
-    fn ensure_check_special(&mut self, kind: air::kind::Kind, num_args: usize, stackmap_role: RoleMode) -> SpecialId {
+    fn ensure_check_special(
+        &mut self,
+        kind: air::kind::Kind,
+        num_args: usize,
+        stackmap_role: RoleMode,
+    ) -> SpecialId {
         let check = CheckSpecial::new(kind, num_args, stackmap_role);
         self.code.proc.add_special(Special {
             index: 0,
-            kind: SpecialKind::Check(check)
+            kind: SpecialKind::Check(check),
         })
     }
 

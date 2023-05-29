@@ -1,0 +1,2 @@
+[target.riscv64gc-unknown-linux-gnu]
+pre-build = ["dpkg --add-architecture riscv64 && apt-get update && apt-get install --assume-yes ruby:riscv64"]

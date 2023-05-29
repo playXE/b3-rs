@@ -560,7 +560,7 @@ dependencies = [
 [[package]]
 name = "macroassembler"
 version = "0.1.0"
-source = "git+https://github.com/playxe/masm-rs#56b9ec2c4597550dc5c7e66cf945e6382c3576f6"
+source = "git+https://github.com/playxe/masm-rs#2dace452729006abc4bbd5d45e2a24a2c93c21e4"
 dependencies = [
  "cfg-if",
  "errno",

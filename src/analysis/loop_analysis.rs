@@ -4,7 +4,7 @@ use tinyvec::TinyVec;
 
 use crate::{
     utils::{
-        bitvector::BitVector, index_set::KeyIndex, likely_dense_integer_set::LikelyDenseIntegerSet,
+        index_set::KeyIndex
     },
     BlockId, Procedure, ValueId,
 };

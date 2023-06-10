@@ -634,8 +634,8 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
                 }
 
                 // TODO: How do I make this safe?
-                let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
-                let code3 = unsafe { &mut *(code2 as *const Code as *mut Code) };
+                let code2 = unsafe { &mut *(self.code as *mut Code) };
+                let code3 = unsafe { &mut *(code2 as *mut Code) };
                 code2.block_mut(block_id).insts[inst_index].for_each_tmp_mut(
                     code3,
                     |tmp, role, bank, _| {
@@ -742,7 +742,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     fn assign_registers(&mut self) {
         for block_id in 0..self.code.blocks.len() {
             let block_id = BasicBlockId(block_id);
-            let code2 = unsafe { &mut *(self.code as *const Code as *mut Code) };
+            let code2 = unsafe { &mut *(self.code as *mut Code) };
             self.code
                 .block_mut(block_id)
                 .insts

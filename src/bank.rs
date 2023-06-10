@@ -6,7 +6,7 @@ use crate::width::{width_for_bytes, Width};
 
 use super::typ::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, std::marker::ConstParamTy)]
 #[repr(i8)]
 pub enum Bank {
     GP,

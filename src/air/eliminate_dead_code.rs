@@ -18,6 +18,8 @@ pub fn eliminate_dead_code(code: &mut Code<'_>) -> bool {
         let mut live_stack_slots = IndexSet::<StackSlotId>::new();
 
         let mut changed = false;
+        // FIXME: Make this safe. To do so we need to assign index to each instruction, create worklist of dead instructions and remove them in the end.
+        let code2 = unsafe { &mut *(code as *mut Code) };
 
         let is_arg_live =
             |arg: &Arg, live_tmps: &TmpSet, live_stack_slots: &IndexSet<StackSlotId>| -> bool {
@@ -182,8 +184,7 @@ pub fn eliminate_dead_code(code: &mut Code<'_>) -> bool {
 
         let mut removed_insts = 0;
 
-        // FIXME: Make this safe. To do so we need to assign index to each instruction, create worklist of dead instructions and remove them in the end.
-        let code2 = unsafe { &mut *(code as *const Code as *mut Code) };
+        
 
         for block in code2.blocks.iter_mut() {
             block.insts.retain(|inst| {

@@ -538,8 +538,7 @@ end
 
 writeH("opcode") {
     | outp |
-    outp.puts "#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]"
-    outp.puts "#[repr(i16)] pub enum Opcode {"
+    outp.puts "#[repr(i16)] #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)] #[derive(std::marker::ConstParamTy)] pub enum Opcode {"
     $opcodes.keys.each {
         | opcode |
         outp.puts "    #{opcode},"

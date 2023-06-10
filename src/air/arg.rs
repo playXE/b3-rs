@@ -62,7 +62,7 @@ pub enum ArgKind {
     SIMDInfo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, std::marker::ConstParamTy)]
 #[repr(u8)]
 pub enum ArgTemperature {
     Cold,

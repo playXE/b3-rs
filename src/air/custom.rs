@@ -41,7 +41,7 @@ impl PatchCustom {
 
         let special = inst.args[0].special();
 
-        let code2 = unsafe { &mut *(code as *const _ as *mut _) };
+        let code2 = unsafe { &mut *(code as *mut _) };
         code.special_mut(special)
             .for_each_arg_mut(code2, inst, lambda);
     }
@@ -131,7 +131,7 @@ impl PatchCustom {
         context: &mut GenerationContext,
     ) -> Jump {
         let special = inst.args[0].special();
-        let context2 = unsafe { &mut *(context as *const _ as *mut _) };
+        let context2 = unsafe { &mut *(context as *mut _) };
 
         context.code.special(special).generate(inst, jit, context2)
     }

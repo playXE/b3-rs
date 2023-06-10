@@ -117,6 +117,7 @@ pub enum ValueData {
     SlotBase(StackSlotId),
     Switch(Vec<i64>),
     Alloca(Type),
+    Procedure
 }
 
 impl Value {

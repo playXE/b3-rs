@@ -1,5 +1,5 @@
-const TUPLE_FLAG: u32 = 1 << 31;
-const TUPLE_INDEX_MASK: u32 = TUPLE_FLAG - 1;
+const AGGREGATE_FLAG: u32 = 1 << 31;
+const AGGREGATE_INDEX_MASK: u32 = AGGREGATE_FLAG - 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u32)]
@@ -11,7 +11,7 @@ pub enum TypeKind {
     Double,
     V128,
 
-    Tuple = 1 << 31,
+    Aggregate = 1 << 31,
 }
 
 impl Default for TypeKind {
@@ -39,15 +39,15 @@ impl Type {
     }
 
     pub const fn kind(&self) -> TypeKind {
-        if (self.kind & TUPLE_FLAG) != 0 {
-            TypeKind::Tuple
+        if (self.kind & AGGREGATE_FLAG) != 0 {
+            TypeKind::Aggregate
         } else {
             unsafe { std::mem::transmute(self.kind) }
         }
     }
 
-    pub const fn tuple_index(&self) -> u32 {
-        self.kind & TUPLE_INDEX_MASK
+    pub const fn aggregate_index(&self) -> u32 {
+        self.kind & AGGREGATE_INDEX_MASK
     }
 
     pub const fn hash(&self) -> u32 {
@@ -68,25 +68,25 @@ impl Type {
         }
     }
 
-    pub fn is_numeric(&self) -> bool {
+    pub const fn is_numeric(&self) -> bool {
         self.is_int() || self.is_float() || self.is_vector()
     }
 
-    pub fn is_vector(&self) -> bool {
+    pub const fn is_vector(&self) -> bool {
         match self.kind() {
             TypeKind::V128 => true,
             _ => false,
         }
     }
 
-    pub fn is_tuple(&self) -> bool {
+    pub const fn is_aggregate(&self) -> bool {
         match self.kind() {
-            TypeKind::Tuple => true,
+            TypeKind::Aggregate => true,
             _ => false,
         }
     }
 
-    pub fn size(&self) -> u32 {
+    pub const fn size(&self) -> u32 {
         size_of_type(*self)
     }
 }
@@ -111,7 +111,7 @@ pub const fn size_of_type(ty: Type) -> u32 {
         TypeKind::Float => 4,
         TypeKind::Double => 8,
         TypeKind::V128 => 16,
-        TypeKind::Tuple => 0,
+        TypeKind::Aggregate => 0,
     }
 }
 
@@ -124,7 +124,7 @@ impl std::fmt::Display for Type {
             TypeKind::Float => write!(f, "Float"),
             TypeKind::Double => write!(f, "Double"),
             TypeKind::V128 => write!(f, "V128"),
-            TypeKind::Tuple => write!(f, "Tuple"),
+            TypeKind::Aggregate => write!(f, "Tuple"),
         }
     }
 }

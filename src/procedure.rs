@@ -12,7 +12,7 @@ use crate::{
     data_section::DataSection,
     analysis::dominators::{Dominators, Graph},
     effects::Effects,
-    jit::{reg::Reg, register_set::RegisterSetBuilder},
+    jit::{reg::Reg, register_set::{RegisterSetBuilder, ScalarRegisterSet}},
     kind::Kind,
     analysis::natural_loops::NaturalLoops,
     opcode::Opcode,
@@ -22,7 +22,7 @@ use crate::{
     typ::{Type, TypeKind},
     value::{NumChildren, Value, ValueData, ValueId},
     variable::{Variable, VariableId},
-    ConstrainedValue, ValueRep, ValueRepKind, patchpoint_value::PatchpointValue, stackmap_value::StackMapValue,
+    ConstrainedValue, ValueRep, ValueRepKind, patchpoint_value::PatchpointValue, stackmap_value::StackMapValue, utils::index_set::KeyIndex,
 };
 use crate::{Frequency, Options};
 pub struct Procedure {
@@ -36,6 +36,7 @@ pub struct Procedure {
     pub(crate) specials: SparseCollection<Special>,
     pub(crate) data_sections: Vec<DataSection>,
     pub(crate) num_entrypoints: usize,
+    pub(crate) pinned_regs: ScalarRegisterSet,
 }
 
 impl Graph for Procedure {
@@ -85,7 +86,12 @@ impl Procedure {
             specials: SparseCollection::new(),
             options,
             data_sections: vec![],
+            pinned_regs: ScalarRegisterSet::default(),
         }
+    }
+
+    pub fn pin_register(&mut self, reg: Reg) {
+        self.pinned_regs.add(reg);
     }
 
     /// Add a new successor to a block.
@@ -810,5 +816,26 @@ impl std::fmt::Display for ProcedureDisplay<'_> {
 
         writeln!(f, "}}")?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ProcedureId(pub usize);
+
+impl KeyIndex for ProcedureId {
+    fn index(&self) -> usize {
+        self.0
+    }
+}
+
+impl From<ProcedureId> for usize {
+    fn from(id: ProcedureId) -> Self {
+        id.0
+    }
+}
+
+impl From<usize> for ProcedureId {
+    fn from(id: usize) -> Self {
+        ProcedureId(id)
     }
 }

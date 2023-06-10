@@ -1,14 +1,13 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
 
-pub mod analysis;
 pub mod air;
 pub mod alloca_to_reg;
+pub mod analysis;
 pub mod bank;
 pub mod block;
 pub mod block_insertion_set;
 pub mod break_critical_edges;
-//pub mod sccp_v2;
 pub mod check_special;
 pub mod compile;
 pub mod compute_division_magic;
@@ -26,9 +25,9 @@ pub mod insertion_set;
 pub mod jit;
 pub mod kind;
 pub mod legalize_memory_offsets;
-//pub mod loop_unrolling;
 pub mod lower_macros;
 pub mod lower_to_air;
+pub mod module;
 pub mod move_constants;
 pub mod opcode;
 pub mod patchpoint_special;

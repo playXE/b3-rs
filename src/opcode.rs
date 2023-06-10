@@ -34,8 +34,6 @@ pub enum Opcode {
 
     /// Gets the base address of a StackSlot.
     SlotBase,
-    
-    Alloca,
 
     /// The magical argument register. This is viewed as executing at the top of the program
     /// regardless of where in control flow you put it, and the compiler takes care to ensure that we
@@ -268,10 +266,6 @@ pub enum Opcode {
     /// that the arguments are passed using the right types. The first argument is the callee.
     CCall,
 
-    /// This is a regular ordinary tail C function call, using the system C calling convention. Make
-    /// sure that the arguments are passed using the right types. The first argument is the callee.
-    TailCCall,
-
     /// This is a patchpoint. Use the PatchpointValue class. This is viewed as behaving like a call,
     /// but only emits code via a code generation callback. That callback gets to emit code inline.
     /// You can pass a stackmap along with constraints on how each stackmap argument must be passed.
@@ -418,6 +412,38 @@ pub enum Opcode {
 
     /// This is a terminal that indicates that we will never get here.
     Oops,
+
+
+    // Higher-level operations that are lowered to the above operations.
+    // They are used in `b3::module` pipeline for aggregate types & 
+    // connecting procedures.
+
+    /// Get procedure address. This is usually lowered to `Patchpoint`. 
+    /// Might be lowered to `Const64` if the procedure address is known already and linkage is `ImportStatic`.
+    ProcedureAddr,
+        
+    /// Get global address. This is lowered to `Patchpoint`.
+    /// 
+    /// Globals are stored in data-section. 
+    GlobalAddr,
+
+    /// Allocates `N` bytes on the stack. This is eliminated when lowering, instead stack slots are allocated.
+    /// 
+    /// Should be used for variables and aggregate types.
+    Alloca, 
+
+    /// Used to get the address of sub-fields of an aggregate type.
+    /// 
+    /// It performs address calculation only and does not access memory.
+    GetElementPtr,
+
+    /// This is a regular tail C-call. It is lowered to patchpoint. Can be used to optimize recursive calls into loops.
+    TailCCall,
+
+    /// Get parameter value. This is lowered to `Argument` or to `FramePointer` with `Load` if the parameter is passed on stack.
+    /// 
+    /// Exist to simplify emitting high-level code and to simplify inlining.
+    Parameter,
 }
 
 impl Opcode {

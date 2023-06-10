@@ -73,13 +73,14 @@ pub struct Code<'a> {
 impl<'a> Code<'a> {
     pub fn new(proc: &'a mut Procedure) -> Self {
         let mut this = Self {
+            pinned_regs: proc.pinned_regs,
             proc,
             prologue_generators: vec![],
             default_prologue_generator: Some(Rc::new(default_prologue_generator)),
             gp_regs_in_priority_order: vec![],
             fp_regs_in_priority_order: vec![],
             mutable_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
-            pinned_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
+            
             num_gp_tmps: 0,
             num_fp_tmps: 0,
             blocks: Vec::new(),
@@ -126,6 +127,8 @@ impl<'a> Code<'a> {
 
             this.set_regs_in_priority_order(bank, &result);
         });
+
+        this.pinned_regs.add(Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER));
 
         this
     }

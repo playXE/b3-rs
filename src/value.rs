@@ -117,7 +117,7 @@ pub enum ValueData {
     SlotBase(StackSlotId),
     Switch(Vec<i64>),
     Alloca(Type),
-    Procedure
+    Procedure,
 }
 
 impl Value {
@@ -2002,16 +2002,16 @@ impl ValueRep {
     pub fn value(&self) -> i64 {
         assert!(self.is_constant());
         match self {
-            Self::Constant(value) => value,
-            _ => false,
+            Self::Constant(value) => *value,
+            _ => unreachable!(),
         }
     }
 
     pub fn with_offset(&self, offset: isize) -> ValueRep {
         match self {
-            ValueRep::Stack(offset_from_fp) => ValueRep::stack(offset_from_fp + offset),
+            ValueRep::Stack(offset_from_fp) => ValueRep::Stack(offset_from_fp + offset),
             ValueRep::StackArgument(offset_from_sp) => {
-                ValueRep::stack_argument(offset_from_sp + offset)
+                ValueRep::StackArgument(offset_from_sp + offset)
             }
             _ => *self,
         }
@@ -2020,16 +2020,16 @@ impl ValueRep {
     pub fn offset_from_fp(&self) -> isize {
         assert!(self.is_stack());
         match self {
-            Self::Stack(offset) => offset,
-            _ => false,
+            Self::Stack(offset) => *offset,
+            _ => unreachable!(),
         }
     }
 
     pub fn offset_from_sp(&self) -> isize {
         assert!(self.is_stack_argument());
         match self {
-            Self::StackArgument(offset) => offset,
-            _ => false,
+            Self::StackArgument(offset) => *offset,
+            _ => unreachable!(),
         }
     }
 }
@@ -2116,6 +2116,7 @@ impl KeyIndex for ValueId {
 /// that they return a non-empty ValueKey. Operations that have effects, or that can have their
 /// behavior affected by other operations' effects, will return an empty ValueKey. You have to use
 /// other mechanisms for doing CSE for impure operations.
+#[derive(Hash, PartialEq, Eq)]
 pub struct ValueKey {
     pub kind: Kind,
     pub typ: Type,
@@ -2392,29 +2393,24 @@ impl ValueKey {
     }
 }
 
-impl PartialEq for ValueKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
-            && self.typ == other.typ
-            && unsafe { self.indices.indices == other.indices.indices }
-    }
-}
-
-impl Eq for ValueKey {}
-
-impl Hash for ValueKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.kind.hash(state);
-        self.typ.hash().hash(state);
-        unsafe {
-            self.indices.indices.hash(state);
-        }
-    }
-}
-
+#[repr(C)]
 pub union ValueIndices {
     pub indices: [usize; 4],
     pub value: i64,
     pub double_value: f64,
     pub float_value: f32,
 }
+
+impl Hash for ValueIndices {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.indices.hash(state)
+    }
+}
+
+impl PartialEq for ValueIndices {
+    fn eq(&self, other: &Self) -> bool {
+        self.indices == other.indices
+    }
+}
+
+impl Eq for ValueIndices {}

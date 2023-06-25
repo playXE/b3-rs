@@ -1,6 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(adt_const_params)]
-#![deny(unsafe_code)]
+// #![deny(unsafe_code)]
 
 pub mod air;
 pub mod alloca_to_reg;

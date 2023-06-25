@@ -11,7 +11,7 @@ use crate::{
     bank::{bank_for_type, Bank},
     jit::{reg::Reg, register_set::RegisterSetBuilder},
     typ::Type,
-    value::{ValueRep, ValueRepKind},
+    value::ValueRep,
     width::{width_for_type, Width},
 };
 
@@ -78,13 +78,12 @@ impl StackMapSpecial {
                 .constrained_child(i + num_ignored_b3_args);
             let mut role = ArgRole::LateColdUse;
             let mut found = false;
-            if role_mode == RoleMode::ForceLateUseRecoverable {
-                if arg != inst.args[first_recoverable_index.unwrap()]
-                    && arg != inst.args[first_recoverable_index.unwrap() + 1]
-                {
-                    role = ArgRole::LateColdUse;
-                    found = true;
-                }
+            if role_mode == RoleMode::ForceLateUseRecoverable
+                && arg != inst.args[first_recoverable_index.unwrap()]
+                && arg != inst.args[first_recoverable_index.unwrap() + 1]
+            {
+                role = ArgRole::LateColdUse;
+                found = true;
             }
 
             if !found {
@@ -92,29 +91,29 @@ impl StackMapSpecial {
 
                 match role_mode {
                     RoleMode::SameAsRep => {
-                        match child.rep.kind() {
-                            ValueRepKind::WarmAny
-                            | ValueRepKind::SomeRegister
-                            | ValueRepKind::Register
-                            | ValueRepKind::Stack
-                            | ValueRepKind::StackArgument
-                            | ValueRepKind::Constant => {
+                        match child.rep {
+                            ValueRep::WarmAny
+                            | ValueRep::SomeRegister
+                            | ValueRep::Register(_)
+                            | ValueRep::Stack(_)
+                            | ValueRep::StackArgument(_)
+                            | ValueRep::Constant(_) => {
                                 role = ArgRole::Use;
                             }
 
-                            ValueRepKind::SomeRegisterWithClobber => {
+                            ValueRep::SomeRegisterWithClobber => {
                                 role = ArgRole::UseDef;
                             }
 
-                            ValueRepKind::SomeLateRegister | ValueRepKind::LateRegister => {
+                            ValueRep::SomeLateRegister(_) | ValueRep::LateRegister(_) => {
                                 role = ArgRole::LateUse;
                             }
 
-                            ValueRepKind::ColdAny => {
+                            ValueRep::ColdAny => {
                                 role = ArgRole::ColdUse;
                             }
 
-                            ValueRepKind::LateColdAny => {
+                            ValueRep::LateColdAny => {
                                 role = ArgRole::LateColdUse;
                             }
 
@@ -180,13 +179,12 @@ impl StackMapSpecial {
                 .constrained_child(i + num_ignored_b3_args);
             let mut role = ArgRole::LateColdUse;
             let mut found = false;
-            if role_mode == RoleMode::ForceLateUseRecoverable {
-                if arg != inst.args[first_recoverable_index.unwrap()]
-                    && arg != inst.args[first_recoverable_index.unwrap() + 1]
-                {
-                    role = ArgRole::LateColdUse;
-                    found = true;
-                }
+            if role_mode == RoleMode::ForceLateUseRecoverable
+                && arg != inst.args[first_recoverable_index.unwrap()]
+                && arg != inst.args[first_recoverable_index.unwrap() + 1]
+            {
+                role = ArgRole::LateColdUse;
+                found = true;
             }
 
             if !found {
@@ -194,29 +192,29 @@ impl StackMapSpecial {
 
                 match role_mode {
                     RoleMode::SameAsRep => {
-                        match child.rep.kind() {
-                            ValueRepKind::WarmAny
-                            | ValueRepKind::SomeRegister
-                            | ValueRepKind::Register
-                            | ValueRepKind::Stack
-                            | ValueRepKind::StackArgument
-                            | ValueRepKind::Constant => {
+                        match child.rep {
+                            ValueRep::WarmAny
+                            | ValueRep::SomeRegister
+                            | ValueRep::Register(_)
+                            | ValueRep::Stack(_)
+                            | ValueRep::StackArgument(_)
+                            | ValueRep::Constant(_) => {
                                 role = ArgRole::Use;
                             }
 
-                            ValueRepKind::SomeRegisterWithClobber => {
+                            ValueRep::SomeRegisterWithClobber => {
                                 role = ArgRole::UseDef;
                             }
 
-                            ValueRepKind::SomeLateRegister | ValueRepKind::LateRegister => {
+                            ValueRep::SomeLateRegister(_) | ValueRep::LateRegister(_) => {
                                 role = ArgRole::LateUse;
                             }
 
-                            ValueRepKind::ColdAny => {
+                            ValueRep::ColdAny => {
                                 role = ArgRole::ColdUse;
                             }
 
-                            ValueRepKind::LateColdAny => {
+                            ValueRep::LateColdAny => {
                                 role = ArgRole::LateColdUse;
                             }
 
@@ -341,14 +339,14 @@ impl StackMapSpecial {
 
     pub fn rep_for_arg(code: &Code<'_>, arg: &Arg) -> ValueRep {
         match arg.kind() {
-            ArgKind::Tmp => ValueRep::reg(arg.reg()),
-            ArgKind::Imm | ArgKind::BigImm => ValueRep::constant(arg.value()),
+            ArgKind::Tmp => ValueRep::Register(arg.reg()),
+            ArgKind::Imm | ArgKind::BigImm => ValueRep::Constant(arg.value()),
             ArgKind::ExtendedOffsetAddr | ArgKind::Addr => {
                 if arg.base() == Tmp::from_reg(Reg::new_gpr(CALL_FRAME_REGISTER)) {
-                    return ValueRep::stack(arg.offset() as _);
+                    return ValueRep::Stack(arg.offset() as _);
                 }
 
-                ValueRep::stack(arg.offset() as isize - code.frame_size as isize)
+                ValueRep::Stack(arg.offset() as isize - code.frame_size as isize)
             }
             _ => unreachable!("{}", arg),
         }
@@ -369,20 +367,20 @@ impl StackMapSpecial {
     }
 
     pub fn is_arg_valid_for_rep(code: &Code<'_>, arg: &Arg, rep: &ValueRep) -> bool {
-        match rep.kind() {
-            ValueRepKind::WarmAny | ValueRepKind::ColdAny | ValueRepKind::LateColdAny => {
+        match rep {
+            ValueRep::WarmAny | ValueRep::ColdAny | ValueRep::LateColdAny => {
                 return true;
             }
 
-            ValueRepKind::SomeRegister
-            | ValueRepKind::SomeRegisterWithClobber
-            | ValueRepKind::SomeEarlyRegister
-            | ValueRepKind::SomeLateRegister => arg.is_tmp(),
-            ValueRepKind::LateRegister | ValueRepKind::Register => {
+            ValueRep::SomeRegister
+            | ValueRep::SomeRegisterWithClobber
+            | ValueRep::SomeEarlyRegister
+            | ValueRep::SomeLateRegister(_) => arg.is_tmp(),
+            ValueRep::LateRegister(_) | ValueRep::Register(_) => {
                 arg == &Arg::new_tmp(Tmp::from_reg(rep.get_reg()))
             }
 
-            ValueRepKind::StackArgument => {
+            ValueRep::StackArgument(_) => {
                 if arg == &Arg::new_call_arg(rep.offset_from_fp() as _) && code.frame_size != 0 {
                     if arg.base() == Tmp::from_reg(Reg::new_gpr(CALL_FRAME_REGISTER))
                         && arg.offset() == rep.offset_from_fp() as i64 - code.frame_size as i64

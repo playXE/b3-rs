@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, ptr::NonNull};
 
-/// Collection of sparse elements. Each element has an ID that is used to 
-/// index into the collection. You can add and remove elements from the 
+/// Collection of sparse elements. Each element has an ID that is used to
+/// index into the collection. You can add and remove elements from the
 /// collection. The collection will reuse the IDs of removed elements.
 pub struct SparseCollection<T: SparseElement> {
     vector: Vec<Option<T>>,
@@ -109,6 +109,7 @@ impl<T: SparseElement> SparseCollection<T> {
     pub fn iter_mut(&mut self) -> SparseCollectionIterMut<T> {
         SparseCollectionIterMut {
             ptr: NonNull::new(&mut self.vector[0]).unwrap(),
+            #[allow(unsafe_code)]
             end: unsafe { self.vector.as_mut_ptr().add(self.vector.len()) },
             _marker: PhantomData,
         }

@@ -361,20 +361,20 @@ impl<'a> MoveConstants<'a> {
             .add_data_section(double_size * size_of::<f64>() + float_size * size_of::<f32>());
 
         for (key, value) in const_table.iter() {
-            let pointer = data_section as usize + get_offset(key.opcode(), *value);
+            let pointer = data_section.add(get_offset(key.opcode(), *value));
 
             match key.opcode() {
                 Opcode::ConstDouble => {
                     let val = key.double_value();
                     unsafe {
-                        *(pointer as *mut f64) = val;
+                        *pointer.cast::<f64>() = val;
                     }
                 }
 
                 Opcode::ConstFloat => {
                     let val = key.float_value();
                     unsafe {
-                        *(pointer as *mut f32) = val;
+                        *pointer.cast::<f32>() = val;
                     }
                 }
 

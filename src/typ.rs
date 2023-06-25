@@ -33,7 +33,6 @@ impl Type {
     pub const V128: Self = Self::new(TypeKind::V128);
     pub const Void: Self = Self::new(TypeKind::Void);
 
-
     pub const fn new(kind: TypeKind) -> Self {
         Self { kind: kind as _ }
     }
@@ -42,7 +41,7 @@ impl Type {
         if (self.kind & AGGREGATE_FLAG) != 0 {
             TypeKind::Aggregate
         } else {
-            unsafe { std::mem::transmute(self.kind) }
+            unsafe { std::mem::transmute::<u32, TypeKind>(self.kind) }
         }
     }
 
@@ -90,7 +89,6 @@ impl Type {
         size_of_type(*self)
     }
 }
-
 
 pub const fn pointer_type() -> Type {
     #[cfg(target_pointer_width = "64")]

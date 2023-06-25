@@ -121,7 +121,6 @@ pub enum ValueData {
 }
 
 impl Value {
-
     pub fn alloca(&self) -> Option<Type> {
         match self.data {
             ValueData::Alloca(ty) => Some(ty),
@@ -186,8 +185,7 @@ impl Value {
         if !proc.value(this).has_falltrhough(proc) {
             proc.block_mut(block).successor_list_mut().push(target);
         } else {
-            proc
-                .block_mut(block)
+            proc.block_mut(block)
                 .successor_list_mut()
                 .last_mut()
                 .unwrap()
@@ -551,8 +549,6 @@ impl Value {
             children: TinyVec::new(),
         }
     }
-
-  
 
     pub fn typ(&self) -> Type {
         self.typ
@@ -1686,7 +1682,7 @@ impl Value {
 
     pub fn stackmap_append_with_rep(&mut self, value: ValueId, rep: ValueRep) {
         assert!(self.stackmap().is_some());
-        if rep.kind == ValueRepKind::ColdAny {
+        if matches!(rep, ValueRep::ColdAny) {
             self.children.push(value);
             return;
         }
@@ -1694,18 +1690,18 @@ impl Value {
         let stackmap = self.stackmap_mut().unwrap();
 
         while stackmap.reps.len() < nchild {
-            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+            stackmap.reps.push(ValueRep::ColdAny);
         }
         stackmap.reps.push(rep);
         self.children.push(value);
     }
 
     pub fn stackmap_append_some_register(&mut self, value: ValueId) {
-        self.stackmap_append_with_rep(value, ValueRep::new(ValueRepKind::SomeRegister))
+        self.stackmap_append_with_rep(value, ValueRep::SomeRegister)
     }
 
     pub fn stackmap_append_some_register_with_clobber(&mut self, value: ValueId) {
-        self.stackmap_append_with_rep(value, ValueRep::new(ValueRepKind::SomeRegisterWithClobber))
+        self.stackmap_append_with_rep(value, ValueRep::SomeRegisterWithClobber)
     }
 
     pub fn constrained_child(&self, index: usize) -> ConstrainedValue {
@@ -1716,7 +1712,7 @@ impl Value {
         let rep = if index < stackmap.reps.len() {
             stackmap.reps[index]
         } else {
-            ValueRep::new(ValueRepKind::ColdAny)
+            ValueRep::ColdAny
         };
 
         ConstrainedValue::new(self.children[index], rep)
@@ -1725,14 +1721,14 @@ impl Value {
     pub fn set_constraint(&mut self, index: usize, rep: ValueRep) {
         assert!(self.stackmap().is_some());
 
-        if rep == ValueRep::new(ValueRepKind::ColdAny) {
+        if rep == ValueRep::ColdAny {
             return;
         }
 
         let stackmap = self.stackmap_mut().unwrap();
 
         while stackmap.reps.len() <= index {
-            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+            stackmap.reps.push(ValueRep::ColdAny);
         }
 
         stackmap.reps[index] = rep;
@@ -1871,187 +1867,8 @@ impl Value {
 /// representation and to get the representation. When the B3 client forces a representation, we say
 /// that it's an input. When B3 tells the client what representation it picked, we say that it's an
 /// output.
-#[derive(Clone, Copy)]
-pub struct ValueRep {
-    u: ValueRepU,
-    kind: ValueRepKind,
-}
-
-impl std::fmt::Debug for ValueRep {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.kind)?;
-        match self.kind() {
-            ValueRepKind::Register => write!(f, "({})", self.get_reg()),
-            ValueRepKind::Stack => write!(f, "({})", self.offset_from_fp()),
-            ValueRepKind::StackArgument => write!(f, "({})", self.offset_from_sp()),
-            ValueRepKind::Constant => write!(f, "({})", self.value()),
-            _ => Ok(()),
-        }
-    }
-}
-
-impl std::fmt::Display for ValueRep {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl Hash for ValueRep {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        unsafe {
-            self.u.value.hash(state);
-        }
-        self.kind.hash(state);
-    }
-}
-
-impl Default for ValueRep {
-    fn default() -> Self {
-        Self::new(ValueRepKind::ColdAny)
-    }
-}
-
-impl ValueRep {
-    pub fn new(kind: ValueRepKind) -> Self {
-        Self {
-            u: ValueRepU { value: 0 },
-            kind,
-        }
-    }
-
-    pub fn from_reg(reg: Reg) -> Self {
-        Self {
-            u: ValueRepU { reg },
-            kind: ValueRepKind::Register,
-        }
-    }
-
-    pub fn reg(reg: Reg) -> Self {
-        Self::from_reg(reg)
-    }
-
-    pub fn late_reg(reg: Reg) -> Self {
-        Self {
-            u: ValueRepU { reg },
-            kind: ValueRepKind::LateRegister,
-        }
-    }
-
-    pub fn stack(offset_from_fp: isize) -> Self {
-        Self {
-            u: ValueRepU { offset_from_fp },
-            kind: ValueRepKind::Stack,
-        }
-    }
-
-    pub fn stack_argument(offset_from_sp: isize) -> Self {
-        Self {
-            u: ValueRepU { offset_from_sp },
-            kind: ValueRepKind::StackArgument,
-        }
-    }
-
-    pub fn constant(value: i64) -> Self {
-        Self {
-            u: ValueRepU { value },
-            kind: ValueRepKind::Constant,
-        }
-    }
-
-    pub fn kind(&self) -> ValueRepKind {
-        self.kind
-    }
-
-    pub fn is_any(&self) -> bool {
-        self.kind == ValueRepKind::WarmAny
-            || self.kind == ValueRepKind::ColdAny
-            || self.kind == ValueRepKind::LateColdAny
-    }
-
-    pub fn is_reg(&self) -> bool {
-        self.kind == ValueRepKind::Register
-            || self.kind == ValueRepKind::LateRegister
-            || self.kind == ValueRepKind::SomeLateRegister
-    }
-
-    pub fn get_reg(&self) -> Reg {
-        assert!(self.is_reg());
-        unsafe { self.u.reg }
-    }
-
-    pub fn is_gpr(&self) -> bool {
-        self.is_reg() && self.get_reg().is_gpr()
-    }
-
-    pub fn is_fpr(&self) -> bool {
-        self.is_reg() && self.get_reg().is_fpr()
-    }
-
-    pub fn gpr(&self) -> u8 {
-        assert!(self.is_gpr());
-        self.get_reg().gpr()
-    }
-
-    pub fn fpr(&self) -> u8 {
-        assert!(self.is_fpr());
-        self.get_reg().fpr()
-    }
-
-    pub fn is_stack(&self) -> bool {
-        self.kind == ValueRepKind::Stack
-    }
-    pub fn is_stack_argument(&self) -> bool {
-        self.kind == ValueRepKind::StackArgument
-    }
-
-    pub fn is_constant(&self) -> bool {
-        self.kind == ValueRepKind::Constant
-    }
-
-    pub fn value(&self) -> i64 {
-        assert!(self.is_constant());
-        unsafe { self.u.value }
-    }
-
-    pub fn with_offset(&self, offset: isize) -> ValueRep {
-        match self.kind {
-            ValueRepKind::Stack => ValueRep::stack(unsafe { self.u.offset_from_fp + offset }),
-            ValueRepKind::StackArgument => {
-                ValueRep::stack_argument(unsafe { self.u.offset_from_sp + offset })
-            }
-            _ => *self,
-        }
-    }
-
-    pub fn offset_from_fp(&self) -> isize {
-        assert!(self.is_stack());
-        unsafe { self.u.offset_from_fp }
-    }
-
-    pub fn offset_from_sp(&self) -> isize {
-        assert!(self.is_stack_argument());
-        unsafe { self.u.offset_from_sp }
-    }
-}
-
-impl PartialEq for ValueRep {
-    fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && unsafe { self.u.value == other.u.value }
-    }
-}
-
-impl Eq for ValueRep {}
-
-#[derive(Clone, Copy)]
-union ValueRepU {
-    reg: Reg,
-    offset_from_fp: isize,
-    offset_from_sp: isize,
-    value: i64,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-pub enum ValueRepKind {
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+pub enum ValueRep {
     /// As an input representation, this means that B3 can pick any representation. As an output
     /// representation, this means that we don't know. This will only arise as an output
     /// representation for the active arguments of Check/CheckAdd/CheckSub/CheckMul.
@@ -2059,6 +1876,7 @@ pub enum ValueRepKind {
 
     /// Same as WarmAny, but implies that the use is cold. A cold use is not counted as a use for
     /// computing the priority of the used temporary.
+    #[default]
     ColdAny,
 
     /// Same as ColdAny, but also implies that the use occurs after all other effects of the stackmap
@@ -2080,29 +1898,195 @@ pub enum ValueRepKind {
 
     /// As an input representation, this tells us that B3 should pick some register, but implies
     /// the use happens after any defs. This is only works for patchpoints.
-    SomeLateRegister,
+    SomeLateRegister(Reg),
 
     /// As an input representation, this forces a particular register. As an output
     /// representation, this tells us what register B3 picked.
-    Register,
+    Register(Reg),
 
     /// As an input representation, this forces a particular register and states that
     /// the register is used late. This means that the register is used after the result
     /// is defined (i.e, the result will interfere with this as an input).
     /// It's not a valid output representation.
-    LateRegister,
+    LateRegister(Reg),
 
     /// As an output representation, this tells us what stack slot B3 picked. It's not a valid
     /// input representation.
-    Stack,
+    Stack(isize),
 
     /// As an input representation, this forces the value to end up in the argument area at some
     /// offset. As an output representation this tells us what offset from SP B3 picked.
-    StackArgument,
+    StackArgument(isize),
 
     /// As an output representation, this tells us that B3 constant-folded the value.
-    Constant,
+    Constant(i64),
 }
+
+// type ValueRepKind = std::mem::Discriminant<ValueRep>;
+
+impl std::fmt::Display for ValueRep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl ValueRep {
+    // pub fn kind(&self) -> ValueRepKind {
+    //     std::mem::discriminant(self)
+    // }
+
+    pub fn is_any(&self) -> bool {
+        match self {
+            ValueRep::WarmAny | ValueRep::ColdAny | ValueRep::LateColdAny => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_reg(&self) -> bool {
+        match self {
+            ValueRep::Register(_) | ValueRep::LateRegister(_) | ValueRep::SomeLateRegister(_) => {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn get_reg(&self) -> Reg {
+        assert!(self.is_reg());
+        match self {
+            ValueRep::SomeLateRegister(reg)
+            | ValueRep::Register(reg)
+            | ValueRep::LateRegister(reg) => *reg,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn is_gpr(&self) -> bool {
+        self.is_reg() && self.get_reg().is_gpr()
+    }
+
+    pub fn is_fpr(&self) -> bool {
+        self.is_reg() && self.get_reg().is_fpr()
+    }
+
+    pub fn gpr(&self) -> u8 {
+        assert!(self.is_gpr());
+        self.get_reg().gpr()
+    }
+
+    pub fn fpr(&self) -> u8 {
+        assert!(self.is_fpr());
+        self.get_reg().fpr()
+    }
+
+    pub fn is_stack(&self) -> bool {
+        match self {
+            Self::Stack(_) => true,
+            _ => false,
+        }
+    }
+    pub fn is_stack_argument(&self) -> bool {
+        match self {
+            Self::StackArgument(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        match self {
+            Self::Constant(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn value(&self) -> i64 {
+        assert!(self.is_constant());
+        match self {
+            Self::Constant(value) => value,
+            _ => false,
+        }
+    }
+
+    pub fn with_offset(&self, offset: isize) -> ValueRep {
+        match self {
+            ValueRep::Stack(offset_from_fp) => ValueRep::stack(offset_from_fp + offset),
+            ValueRep::StackArgument(offset_from_sp) => {
+                ValueRep::stack_argument(offset_from_sp + offset)
+            }
+            _ => *self,
+        }
+    }
+
+    pub fn offset_from_fp(&self) -> isize {
+        assert!(self.is_stack());
+        match self {
+            Self::Stack(offset) => offset,
+            _ => false,
+        }
+    }
+
+    pub fn offset_from_sp(&self) -> isize {
+        assert!(self.is_stack_argument());
+        match self {
+            Self::StackArgument(offset) => offset,
+            _ => false,
+        }
+    }
+}
+
+// #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+// pub enum ValueRepKind {
+//     /// As an input representation, this means that B3 can pick any representation. As an output
+//     /// representation, this means that we don't know. This will only arise as an output
+//     /// representation for the active arguments of Check/CheckAdd/CheckSub/CheckMul.
+//     WarmAny,
+
+//     /// Same as WarmAny, but implies that the use is cold. A cold use is not counted as a use for
+//     /// computing the priority of the used temporary.
+//     ColdAny,
+
+//     /// Same as ColdAny, but also implies that the use occurs after all other effects of the stackmap
+//     /// value.
+//     LateColdAny,
+
+//     /// As an input representation, this means that B3 should pick some register. It could be a
+//     /// register that this claims to clobber!
+//     SomeRegister,
+
+//     /// As an input representation, this means that B3 should pick some register but that this
+//     /// register is then cobbered with garbage. This only works for patchpoints.
+//     SomeRegisterWithClobber,
+
+//     /// As an input representation, this tells us that B3 should pick some register, but implies
+//     /// that the def happens before any of the effects of the stackmap. This is only valid for
+//     /// the result constraint of a Patchpoint.
+//     SomeEarlyRegister,
+
+//     /// As an input representation, this tells us that B3 should pick some register, but implies
+//     /// the use happens after any defs. This is only works for patchpoints.
+//     SomeLateRegister,
+
+//     /// As an input representation, this forces a particular register. As an output
+//     /// representation, this tells us what register B3 picked.
+//     Register,
+
+//     /// As an input representation, this forces a particular register and states that
+//     /// the register is used late. This means that the register is used after the result
+//     /// is defined (i.e, the result will interfere with this as an input).
+//     /// It's not a valid output representation.
+//     LateRegister,
+
+//     /// As an output representation, this tells us what stack slot B3 picked. It's not a valid
+//     /// input representation.
+//     Stack,
+
+//     /// As an input representation, this forces the value to end up in the argument area at some
+//     /// offset. As an output representation this tells us what offset from SP B3 picked.
+//     StackArgument,
+
+//     /// As an output representation, this tells us that B3 constant-folded the value.
+//     Constant,
+// }
 
 pub struct ConstrainedValue {
     pub value: ValueId,

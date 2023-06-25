@@ -356,7 +356,17 @@ impl Interpreter for TracingInterpreter {
         
         
         if new_pc < old_pc {
-            if self.loops.contains_key(&(new_pc, old_pc)) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.loops.entry((new_pc, old_pc)) {
+                e.insert(LoopInfo {
+                        executable_trace: None,
+                        trace: vec![],
+                        trace_id: 0,
+                        hotness: 1,
+                        blacklisted: false,
+                        fails: 0,
+                    });
+                self.recording = false;
+            } else {
                 let info = self.loops.get_mut(&(new_pc, old_pc)).unwrap();
                 if info.blacklisted {
                     self.pc = new_pc;
@@ -382,56 +392,40 @@ impl Interpreter for TracingInterpreter {
                         }
                         return;
                     }
-                } else if info.hotness > 1000 && info.executable_trace.is_none() {
-                    
-                    if !self.recording {
-                        self.recording = true;
+                } else if info.hotness > 1000 && info.executable_trace.is_none() && !self.recording {
+                    self.recording = true;
+                    self.pc = new_pc;
+                    let mut trace = vec![];
+                    let mut recording = RecordingInterpreter {
+                        stack: &mut self.stack,
+                        pc: &mut self.pc,
+                        done: false,
+                        trace: &mut trace,
+                        code: &self.code,
+                        end_of_trace: old_pc,
+                        trace_is_too_big: false,
+                    };
+
+                    recording.interpret();
+                    if recording.done {
+                        self.recording = false;
+                        info.trace = trace;
+                        info.trace_id = self.trace_id;
+                        let f = self.translate_trace((new_pc, old_pc));
+                        self.trace_id += 1;
+                        let info = self.loops.get_mut(&(new_pc, old_pc)).unwrap();
+                        info.executable_trace = Some(f);
                         self.pc = new_pc;
-                        let mut trace = vec![];
-                        let mut recording = RecordingInterpreter {
-                            stack: &mut self.stack,
-                            pc: &mut self.pc,
-                            done: false,
-                            trace: &mut trace,
-                            code: &self.code,
-                            end_of_trace: old_pc,
-                            trace_is_too_big: false,
-                        };
+                        
+                        return;
+                    } else if recording.trace_is_too_big {
+                        info.fails += 1;
 
-                        recording.interpret();
-                        if recording.done {
-                            self.recording = false;
-                            info.trace = trace;
-                            info.trace_id = self.trace_id;
-                            let f = self.translate_trace((new_pc, old_pc));
-                            self.trace_id += 1;
-                            let info = self.loops.get_mut(&(new_pc, old_pc)).unwrap();
-                            info.executable_trace = Some(f);
-                            self.pc = new_pc;
-                            
-                            return;
-                        } else if recording.trace_is_too_big {
-                            info.fails += 1;
-
-                            if info.fails == 10 {
-                                info.blacklisted = true;
-                            }
+                        if info.fails == 10 {
+                            info.blacklisted = true;
                         }
                     }
                 }
-            } else {
-                self.loops.insert(
-                    (new_pc, old_pc),
-                    LoopInfo {
-                        executable_trace: None,
-                        trace: vec![],
-                        trace_id: 0,
-                        hotness: 1,
-                        blacklisted: false,
-                        fails: 0,
-                    },
-                );
-                self.recording = false;
             }
         }
         self.pc = new_pc;
@@ -450,11 +444,11 @@ pub struct RecordingInterpreter<'a> {
 
 impl Interpreter for RecordingInterpreter<'_> {
     fn stack(&self) -> &[i32] {
-        &self.stack
+        self.stack
     }
 
     fn stack_mut(&mut self) -> &mut Vec<i32> {
-        &mut self.stack
+        self.stack
     }
 
     fn pc(&self) -> usize {
@@ -462,11 +456,11 @@ impl Interpreter for RecordingInterpreter<'_> {
     }
 
     fn pc_mut(&mut self) -> &mut usize {
-        &mut self.pc
+        self.pc
     }
 
     fn code(&self) -> &[Op] {
-        &self.code
+        self.code
     }
 
     fn run_movi(&mut self) {
@@ -599,7 +593,7 @@ fn main() {
     tracing.interpret();
     println!("{:?}", tracing.stack());
 
-    let mut simple = SimpleInterpreter::new(code.clone());
+    let mut simple = SimpleInterpreter::new(code);
     simple.interpret();
     println!("{:?}", simple.stack());
     

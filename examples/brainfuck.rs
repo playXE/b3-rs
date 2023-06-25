@@ -314,7 +314,7 @@ fn main() {
             })
         })
         .unwrap()
-        .unwrap_or_else(|| RegAlloc::LinearScan);
+        .unwrap_or(RegAlloc::LinearScan);
     let opt_level = args.opt_value_from_str::<_, u8>("--optLevel").unwrap();
 
     let opt_level = match opt_level {

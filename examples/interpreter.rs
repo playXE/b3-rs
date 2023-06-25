@@ -160,7 +160,7 @@ impl InterpreterGenerator {
                 // jump to the opcode handler
                 asm.far_jump(BaseIndex::new(T4, T5, Scale::TimesEight, 0, Extend::None));
 
-                let labels = params.successor_labels().clone();
+                let labels = params.successor_labels();
                 let table_loads = table_loads.clone();
                 asm.add_late_link_task(Box::new(move |link_buffer| {
 
@@ -488,9 +488,9 @@ impl InterpreterGenerator {
         builder.store(value, sp, 0,None, None);
         // decrement SP
         let offset = builder.const64(-(size_of::<i32>() as i64));
-        let new_sp = builder.binary(b3::Opcode::Add, sp, offset);
+        
 
-        new_sp
+        builder.binary(b3::Opcode::Add, sp, offset)
     }
 
     fn new() -> Self {

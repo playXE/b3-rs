@@ -71,8 +71,9 @@ pub mod opcode {
     include!(concat!(env!("OUT_DIR"), "/opcode.rs"));
 }
 
+#[allow(clippy::all)] 
 pub mod opcode_utils {
-    #![allow(unused_imports, unused_braces, unreachable_patterns)]
+    #![allow(unused_imports, unused_braces, unreachable_patterns, clippy::all)]
     use super::arg::*;
     use super::code::*;
     use super::custom::*;
@@ -88,9 +89,9 @@ pub mod opcode_utils {
 }
 
 pub use opcode_utils::is_valid_form;
-
+#[allow(clippy::all)] 
 pub mod opcode_generated {
-    #![allow(unused_imports, unused_braces, unreachable_code, unreachable_patterns)]
+    #![allow(unused_imports, unused_braces, unreachable_code, unreachable_patterns, clippy::all)]
     use super::arg::*;
     use super::code::*;
     use super::custom::*;

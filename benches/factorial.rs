@@ -136,7 +136,7 @@ fn clif_factorial(optimize: bool) {
     let factorial_value = builder.use_var(factorial);
     builder.ins().return_(&[factorial_value]);
     builder.seal_all_blocks();
-    let _ = builder.finalize();
+    builder.finalize();
     use cranelift::codegen::settings::{self};
     let mut shared_builder = settings::builder();
     if optimize {

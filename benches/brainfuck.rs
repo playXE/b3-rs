@@ -1,4 +1,4 @@
-const SOURCE: &'static str = r#"
+const SOURCE: &str = r#"
 A mandelbrot set fractal viewer in brainf*** written by Erik Bosman
 +++++++++++++[->++>>>+++++>++>+<<<<<<]>>>>>++++++>--->>>>>>>>>>+++++++++++++++[[
 >>>>>>>>>]+[<<<<<<<<<]>>>>>>>>>-]+[>>>>>>>>[-]>]<<<<<<<<<[<<<<<<<<<]>>>>>>>>[-]+
@@ -393,8 +393,8 @@ impl BfJIT {
         let zero = builder.const64(0);
         builder.return_(Some(zero));
         
-        let r = b3::compile(proc);
-        r
+        
+        b3::compile(proc)
     }
 }
 

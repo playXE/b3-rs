@@ -109,7 +109,6 @@ impl<T: SparseElement> SparseCollection<T> {
     pub fn iter_mut(&mut self) -> SparseCollectionIterMut<T> {
         SparseCollectionIterMut {
             ptr: NonNull::new(&mut self.vector[0]).unwrap(),
-            #[allow(unsafe_code)]
             end: unsafe { self.vector.as_mut_ptr().add(self.vector.len()) },
             _marker: PhantomData,
         }

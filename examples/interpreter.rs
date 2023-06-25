@@ -167,9 +167,9 @@ impl InterpreterGenerator {
                     // fill in the jumptable
                     for (i, label) in labels.iter().enumerate() {
                         let label = *label.borrow();
-                        let ptr = link_buffer.location_of(label);
+                        let ptr = link_buffer.rx_location_of(label);
                         unsafe {
-                            jumptable.cast::<*mut u8>().add(i).write(ptr);
+                            jumptable.cast::<*const u8>().add(i).write(ptr);
                         }
                     }
 

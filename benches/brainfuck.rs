@@ -172,7 +172,7 @@ pub struct CGContext {
 use b3::jit::compilation::Compilation;
 use b3::jit::reg::Reg;
 use b3::{self, BasicBlockBuilder, Frequency, OptLevel};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
 impl BfJIT {
@@ -180,7 +180,7 @@ impl BfJIT {
         Self { ctx }
     }
 
-    pub fn translate(&self, disasm: bool, input: &str) -> Vec<Token> {
+    pub fn translate(&self, _disasm: bool, input: &str) -> Vec<Token> {
         let mut tokens: Vec<Token> = vec![];
         let mut chars = input.chars().peekable();
         loop {

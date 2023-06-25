@@ -21,12 +21,12 @@ pub fn compile(mut proc: Procedure) -> Compilation {
         super::generate::generate(&mut air, &mut jit);
         let entrypoint_labels = std::mem::take(&mut air.entrypoint_labels);
 
-        let mut link_buffer = LinkBuffer::from_macro_assembler(&mut jit);
+        let mut link_buffer = LinkBuffer::from_macro_assembler(&mut jit).expect("failed to create link buffer");
 
-        entrypoints.resize(entrypoint_labels.len(), std::ptr::null_mut());
+        entrypoints.resize(entrypoint_labels.len(), std::ptr::null());
 
         for i in 0..entrypoint_labels.len() {
-            entrypoints[i] = link_buffer.location_of(entrypoint_labels[i]);
+            entrypoints[i] = link_buffer.rx_location_of(entrypoint_labels[i]);
         }
 
         link_buffer.finalize_without_disassembly()

@@ -229,18 +229,18 @@ impl<'a> LowerMacros<'a> {
                         jit.add_link_task(Box::new(move |link_buffer| unsafe {
                             if has_unhandled_indices {
                                 let fallthrough =
-                                    link_buffer.location_of(*successors.last().unwrap().borrow());
+                                    link_buffer.rx_location_of(*successors.last().unwrap().borrow());
 
                                 for i in (0..table_size).rev() {
-                                    jump_table.cast::<*mut u8>().add(i).write(fallthrough);
+                                    jump_table.cast::<*const u8>().add(i).write(fallthrough);
                                 }
                             }
 
                             let mut label_index = 0;
                             for table_index in bvec.iter() {
-                                let loc = link_buffer.location_of(*successors[label_index].borrow());
+                                let loc = link_buffer.rx_location_of(*successors[label_index].borrow());
                                
-                                jump_table.cast::<*mut u8>().add(table_index).write(loc);
+                                jump_table.cast::<*const u8>().add(table_index).write(loc);
                                 label_index += 1;
                             }
                         }));

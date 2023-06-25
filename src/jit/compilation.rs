@@ -10,11 +10,11 @@ use crate::data_section::DataSection;
 pub struct Compilation {
     code_ref: CodeRef,
     byproducts: Vec<Arc<DataSection>>,
-    entrypoints: Vec<*mut u8>,
+    entrypoints: Vec<*const u8>,
 }
 
 impl Compilation {
-    pub fn new(code_ref: CodeRef, byproducts: Vec<DataSection>, entrypoints: Vec<*mut u8>) -> Self {
+    pub fn new(code_ref: CodeRef, byproducts: Vec<DataSection>, entrypoints: Vec<*const u8>) -> Self {
         Compilation {
             code_ref,
             byproducts: byproducts.into_iter().map(Arc::new).collect(),
@@ -22,7 +22,7 @@ impl Compilation {
         }
     }
 
-    pub fn entrypoint(&self, at: usize) -> *mut u8 {
+    pub fn entrypoint(&self, at: usize) -> *const u8 {
         self.entrypoints[at]
     }
 

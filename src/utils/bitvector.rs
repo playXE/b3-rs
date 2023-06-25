@@ -418,13 +418,13 @@ impl BitVector {
     }
 
     const fn bits_in_pointer() -> usize {
-        std::mem::size_of::<usize>() << 3
+        std::mem::size_of::<usize>() * 8
     }
 
     const fn max_inline_bits() -> usize {
         Self::bits_in_pointer() - 1
     }
-    #[allow(dead_code)]
+
     const fn byte_count(bits: usize) -> usize {
         (bits + 7) >> 3
     }
@@ -438,6 +438,7 @@ impl BitVector {
     }
 
     const fn is_inline(&self) -> bool {
+        // if the highest bit is set, it's inline
         (self.bits_or_pointer >> Self::max_inline_bits()) != 0
     }
 

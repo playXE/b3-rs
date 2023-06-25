@@ -16,7 +16,6 @@ pub struct LikelyDenseIntegerSet {
     min: u32,
 }
 
-
 impl Drop for LikelyDenseIntegerSet {
     fn drop(&mut self) {
         if self.is_bitvector() {
@@ -217,22 +216,28 @@ impl LikelyDenseIntegerSet {
     }
 
     fn bitvector(&self) -> &BitVector {
+        assert!(self.is_bitvector());
         unsafe { &*self.u.bitvector }
     }
 
     fn bitvector_mut(&mut self) -> &mut BitVector {
+        assert!(self.is_bitvector());
         unsafe { &mut *self.u.bitvector }
     }
 
     fn hashset(&self) -> &IndexSet<u32> {
+        assert!(!self.is_bitvector());
         unsafe { &*self.u.hashset }
     }
 
     fn hashset_mut(&mut self) -> &mut IndexSet<u32> {
+        assert!(!self.is_bitvector());
         unsafe { &mut *self.u.hashset }
     }
 
-    fn transition_to_hash_set(&mut self) {
+    /// # SAFETY:
+    /// - `is_bitvector()` must be true
+    unsafe fn transition_to_hash_set(&mut self) {
         debug_assert!(self.is_bitvector());
         let mut new_set = IndexSet::with_capacity(self.size + 1);
 
@@ -250,7 +255,9 @@ impl LikelyDenseIntegerSet {
         debug_assert!(!self.is_bitvector());
     }
 
-    fn transition_to_bitvector(&mut self) {
+    /// # SAFETY:
+    /// - `is_bitvector()` must be false
+    unsafe fn transition_to_bitvector(&mut self) {
         debug_assert!(!self.is_bitvector());
 
         let mut new_bitvector = BitVector::new();

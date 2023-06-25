@@ -9,7 +9,7 @@ use crate::{
     self as b3,
     air::{generate::emit_function_epilogue, stack_slot::StackSlotKind},
     jit::reg::Reg,
-    ValueRep, ValueRepKind,
+    ValueRep,
 };
 
 #[test]
@@ -115,10 +115,10 @@ fn test_patchpoint() {
 
     builder
         .procedure
-        .stackmap_append(patchpoint, a, ValueRep::new(ValueRepKind::SomeRegister));
+        .stackmap_append(patchpoint, a, ValueRep::SomeRegister);
     builder
         .procedure
-        .patchpoint_set_result_constraints(patchpoint, ValueRep::new(ValueRepKind::StackArgument));
+        .patchpoint_set_result_constraints(patchpoint, ValueRep::StackArgument(0));
 
     builder.procedure.stackmap_set_generator(
         patchpoint,
@@ -165,7 +165,7 @@ fn test_check() {
 
     builder
         .procedure
-        .stackmap_append(check, a, ValueRep::new(ValueRepKind::SomeRegister));
+        .stackmap_append(check, a, ValueRep::SomeRegister);
     builder.procedure.stackmap_set_generator(
         check,
         Rc::new(|jit, params| {

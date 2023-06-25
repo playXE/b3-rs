@@ -14,7 +14,7 @@ use crate::{
     utils::index_set::KeyIndex,
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
-    ConstrainedValue, ValueRep, ValueRepKind,
+    ConstrainedValue, ValueRep,
 };
 use std::ops::{Deref, DerefMut, Range};
 
@@ -449,7 +449,7 @@ impl<'a> BasicBlockBuilder<'a> {
             ValueData::None,
         ));
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn upsilon(&mut self, input: ValueId, phi: Option<ValueId>) -> ValueId {
@@ -461,7 +461,7 @@ impl<'a> BasicBlockBuilder<'a> {
             ValueData::Upsilon(phi),
         ));
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn frame_pointer(&mut self) -> ValueId {
@@ -474,7 +474,7 @@ impl<'a> BasicBlockBuilder<'a> {
         ));
 
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn entry_switch(&mut self, blocks: &[(BlockId, Frequency)]) {
@@ -1277,9 +1277,9 @@ impl<'a> BasicBlockBuilder<'a> {
                 result_constraints: tiny_vec!([ValueRep; 1] =>
                     if typ == Type::Void
                     {
-                         ValueRep::new(ValueRepKind::WarmAny)
+                         ValueRep::WarmAny
                     } else {
-                        ValueRep::new(ValueRepKind::SomeRegister)
+                        ValueRep::SomeRegister
                 }),
                 num_fp_scratch_registers: 0,
                 num_gp_scratch_registers: 0,
@@ -1312,7 +1312,7 @@ impl<'a> BasicBlockBuilder<'a> {
         let value = self.procedure.add(value);
         self.procedure.stackmap_append_constrained(
             value,
-            ConstrainedValue::new(predicate, ValueRep::new(ValueRepKind::WarmAny)),
+            ConstrainedValue::new(predicate, ValueRep::WarmAny),
         );
         self.add_value(value);
         value

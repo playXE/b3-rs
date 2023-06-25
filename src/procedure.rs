@@ -8,21 +8,27 @@ use crate::{
         special::{Special, SpecialId},
         stack_slot::{StackSlot, StackSlotId, StackSlotKind},
     },
+    analysis::dominators::{Dominators, Graph},
+    analysis::natural_loops::NaturalLoops,
     block::{is_block_dead, recompute_predecessors, BasicBlock, BlockId, FrequentBlock},
     data_section::DataSection,
-    analysis::dominators::{Dominators, Graph},
     effects::Effects,
-    jit::{reg::Reg, register_set::{RegisterSetBuilder, ScalarRegisterSet}},
+    jit::{
+        reg::Reg,
+        register_set::{RegisterSetBuilder, ScalarRegisterSet},
+    },
     kind::Kind,
-    analysis::natural_loops::NaturalLoops,
     opcode::Opcode,
+    patchpoint_value::PatchpointValue,
     rpo::rpo_sort,
     sparse_collection::SparseCollection,
     stackmap_generation_params::StackmapGenerationParams,
+    stackmap_value::StackMapValue,
     typ::{Type, TypeKind},
+    utils::index_set::KeyIndex,
     value::{NumChildren, Value, ValueData, ValueId},
     variable::{Variable, VariableId},
-    ConstrainedValue, ValueRep, ValueRepKind, patchpoint_value::PatchpointValue, stackmap_value::StackMapValue, utils::index_set::KeyIndex,
+    ConstrainedValue, ValueRep,
 };
 use crate::{Frequency, Options};
 pub struct Procedure {
@@ -604,7 +610,7 @@ impl Procedure {
 
     /// Append value with specified representation to stackmap
     pub fn stackmap_append(&mut self, stackmap: ValueId, value: ValueId, rep: ValueRep) {
-        if rep.kind() == ValueRepKind::ColdAny {
+        if matches!(rep, ValueRep::ColdAny) {
             self.value_mut(stackmap).children.push(value);
             return;
         }
@@ -614,7 +620,7 @@ impl Procedure {
         let stackmap = self.value_mut(stackmap).stackmap_mut().unwrap();
 
         while stackmap.reps.len() < num_children {
-            stackmap.reps.push(ValueRep::new(ValueRepKind::ColdAny));
+            stackmap.reps.push(ValueRep::ColdAny);
         }
 
         stackmap.reps.push(rep);
@@ -623,7 +629,7 @@ impl Procedure {
 
     /// Append value with some register representation to stackmap
     pub fn stackmap_append_some_register(&mut self, stackmap: ValueId, value: ValueId) {
-        self.stackmap_append(stackmap, value, ValueRep::new(ValueRepKind::SomeRegister));
+        self.stackmap_append(stackmap, value, ValueRep::SomeRegister);
     }
 
     /// Append value with some register with clobber representation to stackmap
@@ -632,11 +638,7 @@ impl Procedure {
         stackmap: ValueId,
         value: ValueId,
     ) {
-        self.stackmap_append(
-            stackmap,
-            value,
-            ValueRep::new(ValueRepKind::SomeRegisterWithClobber),
-        );
+        self.stackmap_append(stackmap, value, ValueRep::SomeRegisterWithClobber);
     }
 
     /// Set constrained child of stackmap
@@ -780,9 +782,9 @@ impl Procedure {
                 result_constraints: tiny_vec!([ValueRep; 1] =>
                     if typ == Type::Void
                     {
-                         ValueRep::new(ValueRepKind::WarmAny)
+                         ValueRep::WarmAny
                     } else {
-                        ValueRep::new(ValueRepKind::SomeRegister)
+                        ValueRep::SomeRegister
                 }),
                 num_fp_scratch_registers: 0,
                 num_gp_scratch_registers: 0,
@@ -790,7 +792,7 @@ impl Procedure {
         );
 
         let value = self.add(value);
-        
+
         value
     }
 }

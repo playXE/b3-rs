@@ -15,7 +15,7 @@ use crate::patchpoint_special::PatchpointSpecial;
 use crate::stackmap_special::RoleMode;
 use crate::typ::TypeKind;
 use crate::utils::phase_scope;
-use crate::value::{Value, ValueData, ValueRep, ValueRepKind};
+use crate::value::{Value, ValueData, ValueRep};
 use crate::width::Width;
 use crate::{
     air::{
@@ -480,13 +480,11 @@ impl<'a> LowerToAir<'a> {
 
             let width = self.value(memory_value).access_width(self.code.proc);
 
-            if mode == AddrRequestMode::PreferSimpleAddr {
-                if offset == 0 {
-                    return Some(Arg::new_simple_addr(
-                        self.tmp(self.value(memory_value).children.last().copied().unwrap()),
-                        0,
-                    ));
-                }
+            if mode == AddrRequestMode::PreferSimpleAddr && offset == 0 {
+                return Some(Arg::new_simple_addr(
+                    self.tmp(self.value(memory_value).children.last().copied().unwrap()),
+                    0,
+                ));
             }
 
             Some(self.effective_addr(
@@ -833,15 +831,13 @@ impl<'a> LowerToAir<'a> {
                     self.append(opcode, &[arg, Arg::new_tmp(left_tmp), Arg::new_tmp(result)]);
                     return;
                 }
-            } else {
-                if let Some(arg) = self.imm_from_value(left) {
-                    let right_tmp = self.tmp(right);
-                    self.append(
-                        opcode,
-                        &[arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
-                    );
-                    return;
-                }
+            } else if let Some(arg) = self.imm_from_value(left) {
+                let right_tmp = self.tmp(right);
+                self.append(
+                    opcode,
+                    &[arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
+                );
+                return;
             }
         }
 
@@ -855,15 +851,13 @@ impl<'a> LowerToAir<'a> {
                     );
                     return;
                 }
-            } else {
-                if let Some(left_arg) = self.bit_imm(left) {
-                    let right_tmp = self.tmp(right);
-                    self.append(
-                        opcode,
-                        &[left_arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
-                    );
-                    return;
-                }
+            } else if let Some(left_arg) = self.bit_imm(left) {
+                let right_tmp = self.tmp(right);
+                self.append(
+                    opcode,
+                    &[left_arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
+                );
+                return;
             }
         }
 
@@ -877,15 +871,13 @@ impl<'a> LowerToAir<'a> {
                     );
                     return;
                 }
-            } else {
-                if let Some(left_arg) = self.bit_imm64(left) {
-                    let right_tmp = self.tmp(right);
-                    self.append(
-                        opcode,
-                        &[left_arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
-                    );
-                    return;
-                }
+            } else if let Some(left_arg) = self.bit_imm64(left) {
+                let right_tmp = self.tmp(right);
+                self.append(
+                    opcode,
+                    &[left_arg, Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
+                );
+                return;
             }
         }
 
@@ -926,19 +918,17 @@ impl<'a> LowerToAir<'a> {
                 return;
             }
 
-            if !NOT_COMMUTATIVE {
-                if is_valid_form(opcode, &[left_addr.kind(), ArgKind::Tmp]) {
-                    let right_tmp = self.tmp(right);
-                    self.append(
-                        relaxed_move_for_type(self.value(self.value).typ()),
-                        &[Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
-                    );
-                    let left = left_addr.consume(self);
-                    let inst = left_addr.inst(opcode, self.value, &[left, Arg::new_tmp(result)]);
-                    self.append_inst(inst);
+            if !NOT_COMMUTATIVE && is_valid_form(opcode, &[left_addr.kind(), ArgKind::Tmp]) {
+                let right_tmp = self.tmp(right);
+                self.append(
+                    relaxed_move_for_type(self.value(self.value).typ()),
+                    &[Arg::new_tmp(right_tmp), Arg::new_tmp(result)],
+                );
+                let left = left_addr.consume(self);
+                let inst = left_addr.inst(opcode, self.value, &[left, Arg::new_tmp(result)]);
+                self.append_inst(inst);
 
-                    return;
-                }
+                return;
             }
 
             let mut right_addr = self.load_promise_default(right);
@@ -955,18 +945,18 @@ impl<'a> LowerToAir<'a> {
                 return;
             }
 
-            if !NOT_COMMUTATIVE {
-                if is_valid_form(opcode, &[right_addr.kind(), ArgKind::Tmp, ArgKind::Tmp]) {
-                    let left_tmp = self.tmp(left);
-                    let right = right_addr.consume(self);
-                    let inst = right_addr.inst(
-                        opcode,
-                        self.value,
-                        &[right, Arg::new_tmp(left_tmp), Arg::new_tmp(result)],
-                    );
-                    self.append_inst(inst);
-                    return;
-                }
+            if !NOT_COMMUTATIVE
+                && is_valid_form(opcode, &[right_addr.kind(), ArgKind::Tmp, ArgKind::Tmp])
+            {
+                let left_tmp = self.tmp(left);
+                let right = right_addr.consume(self);
+                let inst = right_addr.inst(
+                    opcode,
+                    self.value,
+                    &[right, Arg::new_tmp(left_tmp), Arg::new_tmp(result)],
+                );
+                self.append_inst(inst);
+                return;
             }
 
             if is_valid_form(opcode, &[right_addr.kind(), ArgKind::Tmp]) {
@@ -1111,7 +1101,7 @@ impl<'a> LowerToAir<'a> {
             );
         }
 
-        #[cfg(not(target_arch="x86_64"))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             unreachable!("Complex shift not supported on non-x86_64 architectures")
         }
@@ -1231,22 +1221,20 @@ impl<'a> LowerToAir<'a> {
                 if load_promises.arg == store_addr {
                     load_promise = load_promises;
                     other_value = right;
-                } else {
-                    if !NOT_COMMUTATIVE {
-                        let load_promises = get_load_promise(self, right);
-                        if let Some(load_promises) = load_promises {
-                            load_promise = load_promises;
-                            if load_promise.arg == store_addr {
-                                other_value = left;
-                            } else {
-                                return false;
-                            }
+                } else if !NOT_COMMUTATIVE {
+                    let load_promises = get_load_promise(self, right);
+                    if let Some(load_promises) = load_promises {
+                        load_promise = load_promises;
+                        if load_promise.arg == store_addr {
+                            other_value = left;
                         } else {
                             return false;
                         }
                     } else {
                         return false;
                     }
+                } else {
+                    return false;
                 }
             }
             None => {
@@ -3475,14 +3463,14 @@ impl<'a> LowerToAir<'a> {
                 );
 
                 let mut after = vec![];
-                use ValueRepKind::*;
+                use ValueRep::*;
 
                 let mut generate_result_operand =
-                    |this: &mut Self, typ, rep: ValueRep, tmp| match rep.kind() {
+                    |this: &mut Self, typ, rep: ValueRep, tmp| match rep {
                         WarmAny | ColdAny | LateColdAny | SomeRegister | SomeEarlyRegister
-                        | SomeLateRegister => inst.args.push(Arg::new_tmp(tmp)),
+                        | SomeLateRegister(_) => inst.args.push(Arg::new_tmp(tmp)),
 
-                        Register => {
+                        Register(_) => {
                             let reg = Tmp::from_reg(rep.get_reg());
 
                             inst.args.push(Arg::new_tmp(reg));
@@ -3493,7 +3481,7 @@ impl<'a> LowerToAir<'a> {
                             ));
                         }
 
-                        StackArgument => {
+                        StackArgument(_) => {
                             let arg = Arg::new_call_arg(rep.offset_from_sp() as _);
                             inst.args.push(arg);
                             after.push(Inst::new(
@@ -3690,8 +3678,8 @@ impl<'a> LowerToAir<'a> {
             let value = self.code.proc.value(stackmap).constrained_child(i);
 
             let arg;
-            match value.rep.kind() {
-                ValueRepKind::WarmAny | ValueRepKind::ColdAny | ValueRepKind::LateColdAny => {
+            match value.rep {
+                ValueRep::WarmAny | ValueRep::ColdAny | ValueRep::LateColdAny => {
                     if let Some(imm) = self.imm_from_value(value.value) {
                         arg = imm;
                     } else if let Some(imm64) = self.code.proc.value(value.value).as_int64() {
@@ -3719,11 +3707,11 @@ impl<'a> LowerToAir<'a> {
                     }
                 }
 
-                ValueRepKind::SomeRegister | ValueRepKind::SomeLateRegister => {
+                ValueRep::SomeRegister | ValueRep::SomeLateRegister(_) => {
                     arg = Arg::new_tmp(self.tmp(value.value));
                 }
 
-                ValueRepKind::SomeRegisterWithClobber => {
+                ValueRep::SomeRegisterWithClobber => {
                     let typ = self.code.proc.value(value.value).typ();
                     let result_bank = self.code.proc.value(value.value).result_bank();
                     let dst_tmp = self.code.new_tmp(result_bank);
@@ -3732,7 +3720,7 @@ impl<'a> LowerToAir<'a> {
                     arg = Arg::new_tmp(dst_tmp);
                 }
 
-                ValueRepKind::Register | ValueRepKind::LateRegister => {
+                ValueRep::Register(_) | ValueRep::LateRegister(_) => {
                     self.code
                         .proc
                         .value_mut(stackmap)
@@ -3750,7 +3738,7 @@ impl<'a> LowerToAir<'a> {
                     arg = Arg::new_tmp(dst_tmp);
                 }
 
-                ValueRepKind::StackArgument => {
+                ValueRep::StackArgument(_) => {
                     arg = Arg::new_call_arg(value.rep.offset_from_sp() as _);
                     let mut inst = self
                         .create_store(

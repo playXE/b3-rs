@@ -1,5 +1,6 @@
 use macroassembler::assembler::{abstract_macro_assembler::Jump, TargetMacroAssembler};
 
+use crate::ValueRep;
 use crate::{
     air::{
         arg::{Arg, ArgRole},
@@ -10,7 +11,6 @@ use crate::{
     bank::{bank_for_type, Bank},
     stackmap_generation_params::StackmapGenerationParams,
     stackmap_special::{RoleMode, StackMapSpecial},
-    value::ValueRepKind,
     width::{width_for_type, Width},
 };
 
@@ -42,13 +42,12 @@ impl PatchpointSpecial {
 
         let mut arg_index = 1;
         while arg_index <= (typ.is_numeric() as usize) {
-            let role = if patchpoint.result_constraints[arg_index - 1].kind()
-                == ValueRepKind::SomeEarlyRegister
-            {
-                ArgRole::EarlyDef
-            } else {
-                ArgRole::Def
-            };
+            let role =
+                if patchpoint.result_constraints[arg_index - 1] == ValueRep::SomeEarlyRegister {
+                    ArgRole::EarlyDef
+                } else {
+                    ArgRole::Def
+                };
 
             lambda(
                 arg_index,
@@ -112,13 +111,12 @@ impl PatchpointSpecial {
 
         let mut arg_index = 1;
         while arg_index <= (typ.is_numeric() as usize) {
-            let role = if patchpoint.result_constraints[arg_index - 1].kind()
-                == ValueRepKind::SomeEarlyRegister
-            {
-                ArgRole::EarlyDef
-            } else {
-                ArgRole::Def
-            };
+            let role =
+                if patchpoint.result_constraints[arg_index - 1] == ValueRep::SomeEarlyRegister {
+                    ArgRole::EarlyDef
+                } else {
+                    ArgRole::Def
+                };
 
             lambda(
                 arg_index,
@@ -237,8 +235,8 @@ impl PatchpointSpecial {
         if arg_index <= return_count {
             let value = code.proc.value(inst.origin);
             let patchpoint = value.patchpoint().unwrap();
-            match patchpoint.result_constraints[arg_index - 1].kind() {
-                ValueRepKind::WarmAny | ValueRepKind::StackArgument => return true,
+            match patchpoint.result_constraints[arg_index - 1] {
+                ValueRep::WarmAny | ValueRep::StackArgument(_) => return true,
                 _ => return false,
             }
         }

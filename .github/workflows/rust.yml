@@ -32,9 +32,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install | Ruby
+    - name: Install Ruby
       run: winget install RubyInstallerTeam.Ruby
-    - name: Setup | Rust
+    - name: Setup Rust
       uses: ATiltedTree/setup-rust@v1
       with:
         rust-version: stable

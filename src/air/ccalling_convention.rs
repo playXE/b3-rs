@@ -29,21 +29,22 @@ pub fn ccall_argument_register_count(code: &Code<'_>, value: ValueId) -> usize {
     }
 }
 
-fn marshall_ccall_argument_impl<const BANK: Bank>(
+fn marshall_ccall_argument_impl<const BANK: i8>(
     code: &Code,
     result: &mut Vec<Arg>,
     argument_count: &mut usize,
     stack_offset: &mut usize,
     child: ValueId,
 ) {
+    let bank = Bank::from(BANK);
     let register_count = ccall_argument_register_count(code, child);
 
-    if *argument_count < BANK.num_of_argument_registers() {
+    if *argument_count < bank.num_of_argument_registers() {
         for _ in 0..register_count {
             let ix = *argument_count;
-            result.push(Arg::new_tmp(Tmp::from_reg(match BANK {
-                Bank::GP => Reg::new_gpr(BANK.to_argument_register(ix)),
-                Bank::FP => Reg::new_fpr(BANK.to_argument_register(ix)),
+            result.push(Arg::new_tmp(Tmp::from_reg(match bank {
+                Bank::GP => Reg::new_gpr(bank.to_argument_register(ix)),
+                Bank::FP => Reg::new_fpr(bank.to_argument_register(ix)),
             })));
             *argument_count += 1;
         }
@@ -78,14 +79,14 @@ fn marshall_ccall_argument(
     child: ValueId,
 ) {
     match bank_for_type(code.proc.value(child).typ()) {
-        Bank::FP => marshall_ccall_argument_impl::<{ Bank::FP }>(
+        Bank::FP => marshall_ccall_argument_impl::<{ Bank::FP as i8 }>(
             code,
             result,
             fp_argument_count,
             stack_offset,
             child,
         ),
-        Bank::GP => marshall_ccall_argument_impl::<{ Bank::GP }>(
+        Bank::GP => marshall_ccall_argument_impl::<{ Bank::GP as i8 }>(
             code,
             result,
             gp_argument_count,

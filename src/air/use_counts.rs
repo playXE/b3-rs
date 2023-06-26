@@ -33,13 +33,13 @@ impl UseCounts {
             }
         }
 
-        let gp_array_size = AbsoluteIndexed::<{ Bank::GP }>::absolute_index(
+        let gp_array_size = AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(
             &Tmp::gp_tmp_for_index(code.num_tmps(Bank::GP)),
         );
         let mut gp_num_warm_uses_and_defs = vec![0.0; gp_array_size];
         let mut gp_const_defs = BitVector::with_capacity(gp_array_size);
 
-        let fp_array_size = AbsoluteIndexed::<{ Bank::FP }>::absolute_index(
+        let fp_array_size = AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(
             &Tmp::fp_tmp_for_index(code.num_tmps(Bank::FP)),
         );
         let mut fp_num_warm_uses_and_defs = vec![0.0f32; fp_array_size];
@@ -56,11 +56,11 @@ impl UseCounts {
                     if role.is_warm_use() || role.is_any_def() {
                         if bank == Bank::GP {
                             let absolute_index =
-                                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp);
+                                AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp);
                             gp_num_warm_uses_and_defs[absolute_index] += frequency as f32;
                         } else {
                             let absolute_index =
-                                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp);
+                                AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp);
                             fp_num_warm_uses_and_defs[absolute_index] += frequency as f32;
                         }
                     }
@@ -73,11 +73,15 @@ impl UseCounts {
                     let tmp = inst.args[1].tmp();
 
                     if tmp.bank() == Bank::GP {
-                        gp_const_defs
-                            .set(AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp), true);
+                        gp_const_defs.set(
+                            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp),
+                            true,
+                        );
                     } else {
-                        fp_const_defs
-                            .set(AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp), true);
+                        fp_const_defs.set(
+                            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp),
+                            true,
+                        );
                     }
                 }
             }
@@ -91,16 +95,16 @@ impl UseCounts {
         }
     }
 
-    pub fn is_const_def<const BANK: Bank>(&self, absolute_index: usize) -> bool {
-        if BANK == Bank::GP {
+    pub fn is_const_def<const BANK: i8>(&self, absolute_index: usize) -> bool {
+        if BANK == Bank::GP as i8 {
             self.gp_const_defs.get(absolute_index)
         } else {
             self.fp_const_defs.get(absolute_index)
         }
     }
 
-    pub fn num_warm_uses_and_defs<const BANK: Bank>(&self, absolute_index: usize) -> f32 {
-        if BANK == Bank::GP {
+    pub fn num_warm_uses_and_defs<const BANK: i8>(&self, absolute_index: usize) -> f32 {
+        if BANK == Bank::GP as i8 {
             self.gp_num_warm_uses_and_defs[absolute_index]
         } else {
             self.fp_num_warm_uses_and_defs[absolute_index]

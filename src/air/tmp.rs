@@ -215,14 +215,14 @@ impl Tmp {
     }
 
     pub fn tmp_for_linear_index(code: &Code<'_>, index: usize) -> Self {
-        let gp_end = AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+        let gp_end = AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
             code.num_gp_tmps,
         ));
 
         if index < gp_end {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(index)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index - gp_end)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(index - gp_end)
         }
     }
 }
@@ -239,33 +239,33 @@ impl std::fmt::Display for Tmp {
     }
 }
 
-pub struct AbsoluteIndexed<const BANK: Bank>(pub Tmp);
-/*pub trait AbsoluteIndexed<const BANK: Bank> {
+pub struct AbsoluteIndexed<const BANK: i8>(pub Tmp);
+/*pub trait AbsoluteIndexed<const BANK: i8> {
     fn absolute_index(tmp: &Tmp) -> usize;
     fn absolute_index_from_usize(index: usize) -> usize;
     fn last_machine_register_index() -> usize;
     fn tmp_for_absolute_index(index: usize) -> Tmp;
 }*/
 
-impl<const BANK: Bank> Clone for AbsoluteIndexed<{ BANK }> {
+impl<const BANK: i8> Clone for AbsoluteIndexed<{ BANK }> {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<const BANK: Bank> Copy for AbsoluteIndexed<{ BANK }> {}
+impl<const BANK: i8> Copy for AbsoluteIndexed<{ BANK }> {}
 
-impl<const BANK: Bank> KeyIndex for AbsoluteIndexed<BANK> {
+impl<const BANK: i8> KeyIndex for AbsoluteIndexed<BANK> {
     fn index(&self) -> usize {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&self.0)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&self.0)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&self.0)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&self.0)
         }
     }
 }
 
-impl AbsoluteIndexed<{ Bank::GP }> {
+impl AbsoluteIndexed<{ Bank::GP as i8 }> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
         debug_assert!(tmp.is_gp());
         debug_assert!(tmp.internal_value() > 0);
@@ -289,7 +289,7 @@ impl AbsoluteIndexed<{ Bank::GP }> {
     }
 }
 
-impl AbsoluteIndexed<{ Bank::FP }> {
+impl AbsoluteIndexed<{ Bank::FP as i8 }> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
         debug_assert!(tmp.is_fp());
         debug_assert!(tmp.internal_value() < 0);
@@ -339,11 +339,11 @@ impl<'a> LinearlyIndexed<'a> {
 
     pub fn index(&self) -> usize {
         if self.is_gp() {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&self.tmp)
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&self.tmp)
         } else {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
                 self.code.num_gp_tmps,
-            )) + AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&self.tmp)
+            )) + AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&self.tmp)
         }
     }
 }

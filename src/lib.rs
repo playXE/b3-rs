@@ -7,7 +7,6 @@
     clippy::should_implement_trait,
     clippy::too_many_arguments
 )]
-#![feature(adt_const_params)]
 
 pub mod air;
 pub mod alloca_to_reg;

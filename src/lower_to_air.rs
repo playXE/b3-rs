@@ -1111,7 +1111,7 @@ impl<'a> LowerToAir<'a> {
             );
         }
 
-        #[cfg(not(target_arch="x86_64"))]
+        #[cfg(not(target_arch = "x86_64"))]
         {
             unreachable!("Complex shift not supported on non-x86_64 architectures")
         }

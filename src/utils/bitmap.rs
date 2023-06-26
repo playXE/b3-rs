@@ -189,13 +189,11 @@ where
 macro_rules! bitmap {
     ($name: ident, $size: expr) => {
         #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy, Default)]
-        pub struct $name
-        {
+        pub struct $name {
             bits: [u32; ($size + 31) / 32],
         }
 
-        impl $name
-        {
+        impl $name {
             pub const WORD_SIZE: usize = 32;
             pub const WORDS: usize = ($size + Self::WORD_SIZE - 1) / Self::WORD_SIZE;
 
@@ -358,8 +356,7 @@ macro_rules! bitmap {
             }
         }
 
-        impl std::fmt::Display for $name
-        {
+        impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 for i in 0..self.len() {
                     write!(f, "{}", if self.get(i) { "1" } else { "-" })?;
@@ -367,5 +364,5 @@ macro_rules! bitmap {
                 Ok(())
             }
         }
-    }
+    };
 }

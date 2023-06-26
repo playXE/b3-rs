@@ -5,19 +5,19 @@ use std::{
 };
 
 use crate::{
+    analysis::liveness::Liveness,
     bank::Bank,
     jit::{
         reg::Reg,
         register_set::{RegisterSet, RegisterSetBuilder, ScalarRegisterSet},
     },
-    analysis::liveness::Liveness,
     utils::{
         bitvector::BitVector, deque::VecDequeExt, index_set::IndexMap, phase_scope::phase_scope,
     },
     OptLevel,
 };
 
-const VERBOSE: bool = !true;
+const VERBOSE: bool = false;
 
 use super::{
     allocate_stack_by_graph_coloring::allocate_stack_by_graph_coloring,
@@ -111,7 +111,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
     pub fn run(&mut self) {
         phase_scope("air::lsra", || {
             pad_interference(self.code);
-           
+
             self.build_register_set_builder();
             self.build_indices();
             self.build_intervals();
@@ -133,7 +133,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             self.insert_spill_code();
             self.assign_registers();
             fix_spills_after_terminals(self.code);
-            
+
             if self.code.proc.options.opt_level >= OptLevel::O2 {
                 lower_after_regalloc(self.code);
                 fix_obvious_spills(self.code);
@@ -429,7 +429,7 @@ impl<'a, 'b: 'a> LinearScan<'a, 'b> {
             let entry = &self.map[tmp];
             let index = entry.interval.start;
 
-            if false && VERBOSE {
+            if VERBOSE {
                 println!("Index #{}: {}", index, tmp);
                 println!("  {}: {}", tmp, entry);
                 println!("  clobberIndex = {}", clobber_index);

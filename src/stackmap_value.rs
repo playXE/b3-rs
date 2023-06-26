@@ -2,14 +2,18 @@ use std::{hash::Hash, rc::Rc};
 
 use macroassembler::assembler::TargetMacroAssembler;
 
-use crate::{jit::register_set::RegisterSetBuilder, value::ValueRep, stackmap_generation_params::StackmapGenerationParams};
+use crate::{
+    jit::register_set::RegisterSetBuilder, stackmap_generation_params::StackmapGenerationParams,
+    value::ValueRep,
+};
 
-/// A stackmap value. Tells to our codegen backend how to generate a stackmap and 
+/// A stackmap value. Tells to our codegen backend how to generate a stackmap and
 /// what values are used in the stackmap. You can specify what registers to clobber.
-/// 
+///
 #[derive(Clone)]
 pub struct StackMapValue {
     pub reps: Vec<ValueRep>,
+    #[allow(clippy::type_complexity)]
     pub generator: Option<Rc<dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)>>,
     pub early_clobbered: RegisterSetBuilder,
     pub late_clobbered: RegisterSetBuilder,
@@ -17,12 +21,18 @@ pub struct StackMapValue {
 }
 
 impl StackMapValue {
-    pub fn set_generator(&mut self, generator: impl Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams) + 'static) {
+    #[allow(clippy::type_complexity)]
+    pub fn set_generator(
+        &mut self,
+        generator: impl Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams) + 'static,
+    ) {
         self.generator = Some(Rc::new(generator));
     }
-
-    pub fn generator(&self) -> Option<&dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)> {
-        self.generator.as_ref().map(|x| &**x)
+    #[allow(clippy::type_complexity)]
+    pub fn generator(
+        &self,
+    ) -> Option<&dyn Fn(&mut TargetMacroAssembler, &mut StackmapGenerationParams)> {
+        self.generator.as_deref()
     }
 
     // Stackmaps allow you to specify that the operation may clobber some registers. Clobbering a register

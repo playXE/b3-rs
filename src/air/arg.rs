@@ -1,18 +1,17 @@
-use macroassembler::{
-    assembler::{
-        abstract_macro_assembler::{Address, BaseIndex, Extend, PreIndexAddress, Scale},
-        DoubleCondition, RelationalCondition, ResultCondition, 
-        TargetMacroAssembler,
-    },
-    jit::gpr_info::CALL_FRAME_REGISTER,
-};
-#[cfg(target_arch="x86_64")]
-use macroassembler::assembler::macro_assembler_x86_common::StatusCondition;
 use crate::{
     bank::{bank_for_type, Bank},
     jit::reg::Reg,
     typ::Type,
     width::{bytes_for_width, width_for_bytes, Width},
+};
+#[cfg(target_arch = "x86_64")]
+use macroassembler::assembler::macro_assembler_x86_common::StatusCondition;
+use macroassembler::{
+    assembler::{
+        abstract_macro_assembler::{Address, BaseIndex, Extend, PreIndexAddress, Scale},
+        DoubleCondition, RelationalCondition, ResultCondition, TargetMacroAssembler,
+    },
+    jit::gpr_info::CALL_FRAME_REGISTER,
 };
 
 use super::{opcode::Opcode, special::SpecialId, stack_slot::StackSlotId, tmp::Tmp};
@@ -751,7 +750,7 @@ impl Arg {
             ..Default::default()
         }
     }
-    #[cfg(target_arch="x86_64")]
+    #[cfg(target_arch = "x86_64")]
     pub fn new_status_cond(cond: StatusCondition) -> Self {
         Self {
             kind: ArgKind::StatusCond,
@@ -1157,10 +1156,9 @@ impl Arg {
                 | ArgKind::StatusCond
                 | ArgKind::Special
                 | ArgKind::WidthArg
-        ) {
-            return true;
-        } else if self.is_tmp() && self.is_gp_tmp() {
-            return true;
+        ) || (self.is_tmp() && self.is_gp_tmp())
+        {
+            true
         } else {
             false
         }
@@ -1489,7 +1487,7 @@ impl std::fmt::Display for Arg {
             ArgKind::RelCond => write!(f, "{:?}", self.as_relational_condition()),
             ArgKind::ResCond => write!(f, "{:?}", self.as_result_condition()),
             ArgKind::DoubleCond => write!(f, "{:?}", self.as_double_condition()),
-            #[cfg(target_arch="x86_64")]
+            #[cfg(target_arch = "x86_64")]
             ArgKind::StatusCond => write!(f, "{:?}", self.as_status_condition()),
             ArgKind::Special => write!(f, "$special{}", self.special().0),
             ArgKind::WidthArg => write!(f, "{}", self.width()),

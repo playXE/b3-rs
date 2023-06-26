@@ -17,16 +17,14 @@ pub fn report_used_registers(code: &mut Code) {
         let mut local_calc = LocalCalc::new(&liveness, block);
 
         for inst_index in (0..code.block(block).insts.len()).rev() {
-            
             let inst = &code.block(block).insts[inst_index];
             println!("{:?}: {} live {}", block, inst, local_calc.live());
             // Kill dead assignments to registers. For simplicity we say that a store is killable if
             // it has only late defs and those late defs are to registers that are dead right now.
             if !inst.has_non_arg_effects(code) {
                 let mut can_delete = true;
-                
+
                 inst.for_each_arg(code, |_, arg, role, _, _| {
-                    
                     if role.is_early_def() {
                         can_delete = false;
                         return;
@@ -44,7 +42,7 @@ pub fn report_used_registers(code: &mut Code) {
                     if local_calc.is_live(arg.reg()) {
                         can_delete = false;
                         return;
-                    } 
+                    }
                 });
 
                 if can_delete {
@@ -68,6 +66,8 @@ pub fn report_used_registers(code: &mut Code) {
             local_calc.execute(inst_index);
         }
 
-        code.block_mut(block).insts.retain(|inst| inst != &Inst::default());
+        code.block_mut(block)
+            .insts
+            .retain(|inst| inst != &Inst::default());
     }
 }

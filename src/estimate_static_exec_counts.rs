@@ -1,5 +1,4 @@
-use crate::{procedure::Procedure, block::BlockId};
-
+use crate::{block::BlockId, procedure::Procedure};
 
 /// Simple pass that estimates basic block frequencies based on loop analysis.
 pub fn estimate_static_execution_counts(proc: &mut Procedure) {

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, mem::size_of};
+use std::{cell::RefCell, mem::size_of, rc::Rc};
 
 use b3::{BasicBlockBuilder, BlockId, Reg, ValueRep};
 use macroassembler::{
@@ -163,7 +163,6 @@ impl InterpreterGenerator {
                 let labels = params.successor_labels();
                 let table_loads = table_loads.clone();
                 asm.add_late_link_task(Box::new(move |link_buffer| {
-
                     // fill in the jumptable
                     for (i, label) in labels.iter().enumerate() {
                         let label = *label.borrow();
@@ -228,12 +227,10 @@ impl InterpreterGenerator {
         let value = builder.load(b3::Type::Int32, code_ptr, 0, None, None);
 
         // store the value
-        builder.store(value, sp, 0,None, None);
+        builder.store(value, sp, 0, None, None);
         // decrement SP
         let offset = builder.const64(-(size_of::<i32>() as i64));
         let new_sp = builder.binary(b3::Opcode::Add, sp, offset);
-
-        
 
         // increment IP (skip value)
         let one = builder.const64(1);
@@ -245,7 +242,7 @@ impl InterpreterGenerator {
     fn emit_add(&mut self) {
         let block = self.opcode_handlers[Op::Add as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -266,7 +263,7 @@ impl InterpreterGenerator {
     fn emit_sub(&mut self) {
         let block = self.opcode_handlers[Op::Sub as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -371,7 +368,7 @@ impl InterpreterGenerator {
     fn emit_gt(&mut self) {
         let block = self.opcode_handlers[Op::Gt as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -392,7 +389,7 @@ impl InterpreterGenerator {
     fn emit_lt(&mut self) {
         let block = self.opcode_handlers[Op::Lt as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -409,11 +406,11 @@ impl InterpreterGenerator {
 
         self.emit_dispatch(new_ip, sp, code, block);
     }
-    
+
     fn emit_eq(&mut self) {
         let block = self.opcode_handlers[Op::Eq as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -434,7 +431,7 @@ impl InterpreterGenerator {
     fn emit_neq(&mut self) {
         let block = self.opcode_handlers[Op::Neq as usize];
         let (ip, sp, code) = self.emit_dispatch_entry(block);
-         
+
         // pop two values from the stack
         let (value1, sp) = self.pop(block, sp);
         let (value2, sp) = self.pop(block, sp);
@@ -452,20 +449,16 @@ impl InterpreterGenerator {
         self.emit_dispatch(new_ip, sp, code, block);
     }
 
-
     fn emit_ret(&mut self) {
         let block = self.opcode_handlers[Op::Ret as usize];
         let (_ip, sp, _code) = self.emit_dispatch_entry(block);
 
         // pop the return value
         let (value, _sp) = self.pop(block, sp);
-    
+
         let mut builder = BasicBlockBuilder::new(&mut self.proc, block);
         builder.return_(Some(value));
     }
-
-    
-    
 
     /// Pops the value from stack and returns (value, adjusted SP)
     fn pop(&mut self, block: b3::BlockId, sp: b3::ValueId) -> (b3::ValueId, b3::ValueId) {
@@ -480,15 +473,14 @@ impl InterpreterGenerator {
 
         (value, new_sp)
     }
-    
+
     fn push(&mut self, block: b3::BlockId, sp: b3::ValueId, value: b3::ValueId) -> b3::ValueId {
         let mut builder = BasicBlockBuilder::new(&mut self.proc, block);
 
         // store the value
-        builder.store(value, sp, 0,None, None);
+        builder.store(value, sp, 0, None, None);
         // decrement SP
         let offset = builder.const64(-(size_of::<i32>() as i64));
-        
 
         builder.binary(b3::Opcode::Add, sp, offset)
     }
@@ -501,7 +493,6 @@ impl InterpreterGenerator {
             proc: b3::Procedure::new(opts),
             table_loads: Rc::new(RefCell::new(Vec::new())),
             opcode_handlers: Vec::new(),
-
         }
     }
 }
@@ -514,9 +505,8 @@ fn main() {
 
     println!("{}", code.disassembly());
 
-    let func: extern "C" fn(*mut i32, usize, *const i32) -> i32 = unsafe {
-        std::mem::transmute(code.entrypoint(0))
-    };
+    let func: extern "C" fn(*mut i32, usize, *const i32) -> i32 =
+        unsafe { std::mem::transmute(code.entrypoint(0)) };
 
     let bcode = vec![
         Op::Push as i32,
@@ -531,7 +521,6 @@ fn main() {
 
     println!("result: {}", result);
 
-   
     drop(stack);
     drop(bcode);
     drop(code);

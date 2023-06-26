@@ -1,12 +1,19 @@
-#![allow(unused_comparisons, unused_imports, dead_code)]
+#![allow(
+    unused_comparisons,
+    unused_imports,
+    dead_code,
+    clippy::needless_late_init,
+    clippy::needless_return
+)]
 use num_integer::*;
 use num_traits::{PrimInt, WrappingAdd, WrappingShl, WrappingShr, WrappingSub};
 
 use crate::{
-    blocks_in_pre_order, compute_division_magic::compute_division_magic, analysis::dominators::Dominators,
-    eliminate_dead_code::eliminate_dead_code, insertion_set::InsertionSet, kind::Kind,
-    analysis::phi_children::PhiChildren, procedure::Procedure, pure_cse::PureCSE, size_of_type, BlockId,
-    Frequency, NumChildren, Opcode, OptLevel, TriState, Type, TypeKind, Value, ValueData, ValueId,
+    analysis::dominators::Dominators, analysis::phi_children::PhiChildren, blocks_in_pre_order,
+    compute_division_magic::compute_division_magic, eliminate_dead_code::eliminate_dead_code,
+    insertion_set::InsertionSet, kind::Kind, procedure::Procedure, pure_cse::PureCSE, size_of_type,
+    BlockId, Frequency, NumChildren, Opcode, OptLevel, TriState, Type, TypeKind, Value, ValueData,
+    ValueId,
 };
 
 /// Does strength reduction, constant folding, canonicalization, CFG simplification, DCE, and very
@@ -103,7 +110,7 @@ impl<'a> ReduceStrength<'a> {
                 first = false;
             } else if self.proc.options.dump_b3_reduce_strength {
                 println!("B3 after iteration #{} of reduce_strength", index - 1);
-                print!("{}", self.proc.display_());
+                print!("{}", self.proc.display());
             }
 
             self.simplify_cfg();
@@ -292,7 +299,7 @@ impl<'a> ReduceStrength<'a> {
                     if let Some(constant_add) = self
                         .proc
                         .value(self.value.child(self.proc, 0))
-                        .add_constant(&self.proc.value(self.value.child(self.proc, 1)))
+                        .add_constant(self.proc.value(self.value.child(self.proc, 1)))
                     {
                         let constant_add = self.proc.add(constant_add);
                         self.replace_with_new_value(Some(constant_add));
@@ -2235,7 +2242,7 @@ impl<'a> ReduceStrength<'a> {
                 if let Some(int32) = self.proc.value(self.value.child(self.proc, 0)).as_int32() {
                     let int32 = self
                         .proc
-                        .add_int_constant(self.proc.value(self.value).typ(), int32 as i32 as i64);
+                        .add_int_constant(self.proc.value(self.value).typ(), int32 as i64);
                     self.replace_with_new_value(Some(int32));
                     return;
                 }
@@ -2619,7 +2626,6 @@ impl<'a> ReduceStrength<'a> {
                 }
 
                 if comparison.opcode != self.value.opcode(self.proc) {
-                    
                     let new_value = Value::new(
                         comparison.opcode,
                         Type::Int32,
@@ -2722,8 +2728,8 @@ impl<'a> ReduceStrength<'a> {
         let mut x2 = None::<ValueId>;
         let mut x3 = None::<ValueId>;
 
-        if self.value.child(self.proc, 0).opcode(&self.proc) == Opcode::Mul
-            && self.value.child(self.proc, 1).opcode(&self.proc) == Opcode::Mul
+        if self.value.child(self.proc, 0).opcode(self.proc) == Opcode::Mul
+            && self.value.child(self.proc, 1).opcode(self.proc) == Opcode::Mul
         {
             if self.value.child(self.proc, 0).child(self.proc, 0)
                 == self.value.child(self.proc, 1).child(self.proc, 0)
@@ -3066,7 +3072,7 @@ impl<'a> ReduceStrength<'a> {
     fn simplify_cfg(&mut self) {
         for block in blocks_in_pre_order(BlockId(0), self.proc) {
             // We don't care about blocks that don't have successors.
-            if self.proc.block(block).successor_list.len() == 0 {
+            if self.proc.block(block).successor_list.is_empty() {
                 continue;
             }
 
@@ -3185,7 +3191,7 @@ impl<'a> ReduceStrength<'a> {
 
         if self.proc.options.dump_b3_reduce_strength {
             println!("B3 after Simplify CFG:");
-            print!("{}", self.proc.display_());
+            print!("{}", self.proc.display());
         }
     }
 
@@ -3371,13 +3377,13 @@ impl IntRange {
 
             IntRange {
                 min: (i32::min_value() as i64) & mask_i64,
-                max: mask_i64 as i64 & (i32::max_value() as i64),
+                max: mask_i64 & (i32::max_value() as i64),
             }
         } else {
             let mask_i64 = mask.to_i64().unwrap();
             IntRange {
                 min: 0,
-                max: mask_i64 as i64,
+                max: mask_i64,
             }
         }
     }
@@ -3765,7 +3771,6 @@ fn should_swap_binary_operands(proc: &Procedure, value: ValueId) -> bool {
     }
 
     if proc.value(value.child(proc, 0)).is_constant() {
-       
         return true;
     }
 

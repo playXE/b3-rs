@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::utils::{index_set::*, bitvector::BitVector};
+use crate::utils::{bitvector::BitVector, index_set::*};
 
 use crate::analysis::dominators::Graph;
 
@@ -52,10 +52,9 @@ impl<'a, A: LivenessAdapter> Liveness<'a, A> {
             live_at_tail: IndexMap::new(),
         };
 
-       
         for block_index in 0..this.adapter.cfg().num_nodes() {
             let block = this.adapter.cfg().node(block_index);
-            
+
             if let Some(block) = block {
                 this.live_at_head.insert(block, Vec::new());
                 this.live_at_tail.insert(block, Vec::new());
@@ -305,7 +304,12 @@ impl<'a, 'b, A: LivenessAdapter> LocalCalc<'a, 'b, A> {
         block: <<A as LivenessAdapter>::CFG as Graph>::Node,
     ) -> Self {
         let this = LocalCalc { liveness, block };
-        let live_at_tail = this.liveness.live_at_tail.get(&block).expect(&format!("no live at tail for {:?}", block)).clone();
+        let live_at_tail = this
+            .liveness
+            .live_at_tail
+            .get(&block)
+            .expect(&format!("no live at tail for {:?}", block))
+            .clone();
         let workset = &mut this.liveness.workset;
 
         workset.clear();

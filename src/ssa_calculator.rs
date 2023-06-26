@@ -6,7 +6,9 @@ use std::{
 
 use crate::utils::index_set::IndexMap;
 
-use crate::{block::BlockId, analysis::dominators::Dominators, procedure::Procedure, value::ValueId};
+use crate::{
+    analysis::dominators::Dominators, block::BlockId, procedure::Procedure, value::ValueId,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SSAVariableId(pub usize);
@@ -140,7 +142,7 @@ impl SSACalculator {
                     other_block = self.dominators.as_ref().unwrap().idom(other_block.unwrap());
                 }
 
-                return Some(def.clone());
+                return Some(def);
             }
 
             block = proc.dominators().idom(b);
@@ -172,17 +174,17 @@ impl SSACalculator {
         &mut self,
         proc: &mut Procedure,
         mut f: impl FnMut(SSAVariableId, BlockId, &mut Procedure) -> Option<ValueId>,
-    ) { 
+    ) {
         proc.dominators_or_compute();
         for i in 0..self.variables.len() {
             let var = SSAVariableId(i);
             let blocks_with_defs = &self.variables[i].blocks_with_defs;
-            
+
             // this `clone` is cheap, `Dominators` internally uses `Rc` to share the dominator tree
             let dominators = proc.dominators().clone();
 
             dominators.for_all_blocks_in_pruned_iterated_dominance_frontier_of_mut(
-                &blocks_with_defs,
+                blocks_with_defs,
                 proc,
                 |proc, block| {
                     let phi = f(var, block, proc);
@@ -203,7 +205,7 @@ impl SSACalculator {
 
                             true
                         }
-                        None => return false,
+                        None => false,
                     }
                 },
             );

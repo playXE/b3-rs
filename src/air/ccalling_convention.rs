@@ -1,4 +1,7 @@
-use macroassembler::jit::{gpr_info::{RETURN_VALUE_GPR, RETURN_VALUE_GPR2}, fpr_info::RETURN_VALUE_FPR};
+use macroassembler::jit::{
+    fpr_info::RETURN_VALUE_FPR,
+    gpr_info::{RETURN_VALUE_GPR, RETURN_VALUE_GPR2},
+};
 
 use crate::{
     bank::{bank_for_type, Bank},
@@ -8,7 +11,9 @@ use crate::{
     width::{bytes_for_width, width_for_type},
 };
 
-use super::{arg::Arg, ccall_special::CCallSpecial, code::Code, tmp::Tmp, inst::Inst, opcode::Opcode};
+use super::{
+    arg::Arg, ccall_special::CCallSpecial, code::Code, inst::Inst, opcode::Opcode, tmp::Tmp,
+};
 
 pub fn ccall_result_count(code: &Code<'_>, value: ValueId) -> usize {
     match code.proc.value(value).typ().kind() {
@@ -125,7 +130,7 @@ pub fn ccall_result(code: &mut Code, value: ValueId, _index: usize) -> Tmp {
         TypeKind::Int32 | TypeKind::Int64 => Tmp::from_reg(Reg::new_gpr(RETURN_VALUE_GPR)),
         TypeKind::Float | TypeKind::Double => Tmp::from_reg(Reg::new_fpr(RETURN_VALUE_FPR)),
 
-        _ => todo!()
+        _ => todo!(),
     }
 }
 
@@ -134,15 +139,12 @@ pub fn build_ccall(code: &mut Code, origin: ValueId, arguments: &[Arg]) -> Inst 
     let mut inst = Inst::new(Opcode::Patch.into(), origin, &[Arg::new_special(special)]);
 
     inst.args.push(arguments[0]);
-    inst.args.push(Arg::new_tmp(Tmp::from_reg(Reg::new_gpr(
-        RETURN_VALUE_GPR
-    ))));
-    inst.args.push(Arg::new_tmp(Tmp::from_reg(Reg::new_gpr(
-        RETURN_VALUE_GPR2
-    ))));
-    inst.args.push(Arg::new_tmp(Tmp::from_reg(Reg::new_fpr(
-        RETURN_VALUE_FPR
-    ))));
+    inst.args
+        .push(Arg::new_tmp(Tmp::from_reg(Reg::new_gpr(RETURN_VALUE_GPR))));
+    inst.args
+        .push(Arg::new_tmp(Tmp::from_reg(Reg::new_gpr(RETURN_VALUE_GPR2))));
+    inst.args
+        .push(Arg::new_tmp(Tmp::from_reg(Reg::new_fpr(RETURN_VALUE_FPR))));
     for i in 1..arguments.len() {
         if arguments[i].is_tmp() {
             inst.args.push(arguments[i]);

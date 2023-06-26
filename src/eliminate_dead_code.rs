@@ -1,13 +1,12 @@
 use tinyvec::TinyVec;
 
 use crate::{
-    analysis::dominators::GraphNodeWorklist, effects::Effects, utils::index_set::IndexSet, BlockId, Opcode,
-    Procedure, ValueId, variable::VariableId,
+    analysis::dominators::GraphNodeWorklist, effects::Effects, utils::index_set::IndexSet,
+    variable::VariableId, BlockId, Opcode, Procedure, ValueId,
 };
 
 #[allow(dead_code)]
 pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
-   
     let mut changed = false;
     let mut worklist = GraphNodeWorklist::new();
     let mut upsilons = TinyVec::<[ValueId; 64]>::new();
@@ -26,7 +25,7 @@ pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
 
             if effects.must_execute() {
                 worklist.push(value);
-            } 
+            }
 
             if let Some(_) = proc.value(value).phi() {
                 upsilons.push(value);
@@ -45,14 +44,13 @@ pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
 
         let mut upsilon_ix = 0;
         while upsilon_ix < upsilons.len() {
-            
             let upsilon = upsilons[upsilon_ix];
 
             if worklist.saw(proc.value(upsilon).phi().unwrap()) {
                 worklist.push(upsilon);
                 upsilons[upsilon_ix] = upsilons.last().unwrap().clone();
                 upsilons.pop();
-                upsilon_ix  = upsilon_ix.wrapping_sub(1);
+                upsilon_ix = upsilon_ix.wrapping_sub(1);
                 did_push = true;
             }
             upsilon_ix = upsilon_ix.wrapping_add(1);
@@ -84,7 +82,6 @@ pub fn eliminate_dead_code(proc: &mut Procedure) -> bool {
                 {
                     let mut out = String::new();
                     proc.value(value).fmt(&mut out, proc).unwrap();
-                   
                 }
                 proc.values.remove(value);
                 changed = true;

@@ -7,12 +7,12 @@ use macroassembler::assembler::{
 };
 
 use crate::{
+    analysis::use_counts::UseCounts,
     effects::Effects,
     infer_switches::CaseCollection,
     insertion_set::InsertionSet,
     jit::{reg::Reg, register_set::RegisterSetBuilder},
     update_predecessors_after,
-    analysis::use_counts::UseCounts,
     utils::bitvector::BitVector,
     BlockId, Frequency, FrequentBlock, NumChildren, Opcode, Procedure, Type, Value, ValueData,
     ValueId, Width,
@@ -190,7 +190,7 @@ impl<'a> LowerMacros<'a> {
                 }
 
                 let mut has_unhandled_indices = false;
-            
+
                 for i in 0..table_size {
                     if !handled_indices.get(i) {
                         has_unhandled_indices = true;
@@ -228,8 +228,8 @@ impl<'a> LowerMacros<'a> {
 
                         jit.add_link_task(Box::new(move |link_buffer| unsafe {
                             if has_unhandled_indices {
-                                let fallthrough =
-                                    link_buffer.rx_location_of(*successors.last().unwrap().borrow());
+                                let fallthrough = link_buffer
+                                    .rx_location_of(*successors.last().unwrap().borrow());
 
                                 for i in (0..table_size).rev() {
                                     jump_table.cast::<*const u8>().add(i).write(fallthrough);
@@ -238,8 +238,9 @@ impl<'a> LowerMacros<'a> {
 
                             let mut label_index = 0;
                             for table_index in bvec.iter() {
-                                let loc = link_buffer.rx_location_of(*successors[label_index].borrow());
-                               
+                                let loc =
+                                    link_buffer.rx_location_of(*successors[label_index].borrow());
+
                                 jump_table.cast::<*const u8>().add(table_index).write(loc);
                                 label_index += 1;
                             }

@@ -392,8 +392,7 @@ impl BfJIT {
 
         let zero = builder.const64(0);
         builder.return_(Some(zero));
-        
-        
+
         b3::compile(proc)
     }
 }
@@ -435,36 +434,28 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         bf.ctx.opt_level = OptLevel::None;
         bf.ctx.regalloc = RegAlloc::LinearScan;
 
-        b.iter_with_large_drop(|| {
-            bf.translate_b3(false, &tokens)
-        });
+        b.iter_with_large_drop(|| bf.translate_b3(false, &tokens));
     });
 
     group.bench_with_input("-O0, IRC RA", &OptLevel::None, |b, _| {
         bf.ctx.opt_level = OptLevel::None;
         bf.ctx.regalloc = RegAlloc::IRC;
 
-        b.iter_with_large_drop(|| {
-            bf.translate_b3(false, &tokens)
-        });
+        b.iter_with_large_drop(|| bf.translate_b3(false, &tokens));
     });
 
     group.bench_with_input("-O2, Linear Scan RA", &OptLevel::None, |b, _| {
         bf.ctx.opt_level = OptLevel::O2;
         bf.ctx.regalloc = RegAlloc::LinearScan;
 
-        b.iter_with_large_drop(|| {
-             bf.translate_b3(false, &tokens)
-        });
+        b.iter_with_large_drop(|| bf.translate_b3(false, &tokens));
     });
 
     group.bench_with_input("-O2, IRC RA", &OptLevel::None, |b, _| {
         bf.ctx.opt_level = OptLevel::O2;
         bf.ctx.regalloc = RegAlloc::IRC;
 
-        b.iter_with_large_drop(|| {
-            bf.translate_b3(false, &tokens)
-        });
+        b.iter_with_large_drop(|| bf.translate_b3(false, &tokens));
     });
 
     group.finish();
@@ -500,13 +491,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         bf.translate_b3(false, &tokens)
     };
 
-    let opt_lsra_f = unsafe {
-        std::mem::transmute::<_, extern "C" fn(*mut u8)>(opt_lsra.entrypoint(0))
-    };
+    let opt_lsra_f =
+        unsafe { std::mem::transmute::<_, extern "C" fn(*mut u8)>(opt_lsra.entrypoint(0)) };
 
-    let opt_irc_f = unsafe {
-        std::mem::transmute::<_, extern "C" fn(*mut u8)>(opt_irc.entrypoint(0))
-    };
+    let opt_irc_f =
+        unsafe { std::mem::transmute::<_, extern "C" fn(*mut u8)>(opt_irc.entrypoint(0)) };
 
     /*let noopt_lsra_f = unsafe {
         std::mem::transmute::<_, extern "C" fn(*mut u8)>(no_opt_lsra.entrypoint(0))
@@ -556,5 +545,4 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             tape
         })
     });
-
 }

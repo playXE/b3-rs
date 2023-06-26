@@ -1,5 +1,5 @@
-use crate::{analysis::dominators::GraphNodeWorklist, Frequency, utils::index_set::IndexMap};
 use super::{basic_block::BasicBlockId, code::Code, opcode::Opcode};
+use crate::{analysis::dominators::GraphNodeWorklist, utils::index_set::IndexMap, Frequency};
 
 /// Converts code that seems to have one entrypoint and emulates multiple entrypoints with
 /// EntrySwitch into code that really has multiple entrypoints. This is accomplished by duplicating
@@ -24,7 +24,10 @@ pub fn lower_entry_switch(code: &mut Code) {
         worklist.push_all(code.block(block).predecessors.iter().copied());
     }
 
-    debug_assert!(worklist.saw(BasicBlockId(0)), "EntrySwitch must be reachable from the entry block");
+    debug_assert!(
+        worklist.saw(BasicBlockId(0)),
+        "EntrySwitch must be reachable from the entry block"
+    );
 
     let mut entrypoint_frequencies = vec![Frequency::Rare; code.proc.num_entrypoints()];
 
@@ -33,7 +36,7 @@ pub fn lower_entry_switch(code: &mut Code) {
             continue;
         }
 
-        for entrypoint_index in (0.. code.proc.num_entrypoints()).rev() {
+        for entrypoint_index in (0..code.proc.num_entrypoints()).rev() {
             let entrypoint_frequency = std::cmp::max(
                 entrypoint_frequencies[entrypoint_index],
                 code.block(block).successors[entrypoint_index].1,
@@ -60,26 +63,33 @@ pub fn lower_entry_switch(code: &mut Code) {
 
     let mut map = IndexMap::with_capacity(code.blocks.len());
 
-
     for entrypoint_index in 1..code.proc.num_entrypoints() {
         map.clear();
         for block in worklist.seen().indices() {
             let frequency = code.block(BasicBlockId(block)).frequency;
-            map.insert(BasicBlockId(block),code.add_block(frequency));
+            map.insert(BasicBlockId(block), code.add_block(frequency));
         }
 
-        entrypoints.push((map[BasicBlockId(0)], entrypoint_frequencies[entrypoint_index]));
+        entrypoints.push((
+            map[BasicBlockId(0)],
+            entrypoint_frequencies[entrypoint_index],
+        ));
 
         for block in worklist.seen().indices().map(BasicBlockId) {
             let new_block = map[block];
 
-            for inst_index in 0.. code.block(block).len() {
+            for inst_index in 0..code.block(block).len() {
                 let inst = code.block(block)[inst_index].clone();
                 code.block_mut(new_block).push(inst.clone());
             }
 
             code.block_mut(new_block).successors = code.block(block).successors.clone();
-            for successor in code.block_mut(block).successors.iter_mut().map(|(block, _)| block) {
+            for successor in code
+                .block_mut(block)
+                .successors
+                .iter_mut()
+                .map(|(block, _)| block)
+            {
                 if let Some(replacement) = map.get(&successor) {
                     *successor = *replacement;
                 }

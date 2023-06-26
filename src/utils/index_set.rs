@@ -1,4 +1,4 @@
-use std::{marker::PhantomData, fmt::Debug};
+use std::{fmt::Debug, marker::PhantomData};
 
 use super::bitvector::BitVector;
 
@@ -8,7 +8,7 @@ pub trait KeyIndex: Copy {
 
 pub struct IndexSet<T: KeyIndex> {
     set: BitVector,
-    marker: PhantomData<T>
+    marker: PhantomData<T>,
 }
 
 impl<T: KeyIndex + std::fmt::Debug> std::fmt::Debug for IndexSet<T> {
@@ -33,8 +33,7 @@ impl<T: KeyIndex> IndexSet<T> {
 
     pub fn insert(&mut self, value: T) -> bool {
         let index = value.index();
-        
-        
+
         if self.set.get(index) {
             return false;
         }
@@ -45,7 +44,7 @@ impl<T: KeyIndex> IndexSet<T> {
 
     pub fn remove(&mut self, value: &T) -> bool {
         let index = value.index();
-    
+
         if index < self.set.len() {
             if !self.set.get(index) {
                 return false;
@@ -63,11 +62,8 @@ impl<T: KeyIndex> IndexSet<T> {
     }
 
     pub fn iter<'a>(&'a self, collection: &'a [T]) -> impl Iterator<Item = &T> + 'a {
-        self.set.iter().map(move |value| {
-            &collection[value]
-        })
+        self.set.iter().map(move |value| &collection[value])
     }
-
 
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
@@ -88,8 +84,9 @@ impl<T: KeyIndex> IndexSet<T> {
 
 pub struct IndexMap<V, T: KeyIndex> {
     map: Vec<Option<V>>,
-    marker: PhantomData<T>
+    marker: PhantomData<T>,
 }
+
 
 impl<V, T: KeyIndex> IndexMap<V, T> {
     pub fn clear(&mut self) {
@@ -126,13 +123,13 @@ impl<V, T: KeyIndex> IndexMap<V, T> {
         if index >= self.map.len() {
             self.map.resize_with(index + 1, || None);
         }
-        
+
         std::mem::replace(&mut self.map[index], Some(item))
     }
 
     pub fn remove(&mut self, value: &T) -> Option<V> {
         let index = value.index();
-    
+
         if index < self.map.len() {
             self.map[index].take()
         } else {
@@ -164,22 +161,17 @@ impl<V, T: KeyIndex> IndexMap<V, T> {
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = (usize, &V)> + 'a {
-        self.map.iter().enumerate().filter_map(move |(index, value)| {
-            if let Some(value) = value {
-                Some((index, value))
-            } else {
-                None
-            }
-        })
+        self.map
+            .iter()
+            .enumerate()
+            .filter_map(move |(index, value)| {
+                value.as_ref().map(|value| (index, value))
+            })
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = (usize, &'a mut V)> + 'a {
+    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = (usize, &mut V)> + 'a {
         self.map.iter_mut().enumerate().filter_map(|(item, value)| {
-            if let Some(value) = value {
-                Some((item, value))
-            } else {
-                None
-            }
+            value.as_mut().map(|value| (item, value))
         })
     }
 
@@ -211,10 +203,7 @@ impl<V, T: KeyIndex> IndexMap<V, T> {
                 value: &mut self.map[index],
             })
         } else {
-            Entry::Vacant(VacantEntry {
-                key,
-                map: self,
-            })
+            Entry::Vacant(VacantEntry { key, map: self })
         }
     }
 }
@@ -303,7 +292,6 @@ impl<'a, V, T: KeyIndex + Copy> VacantEntry<'a, V, T> {
     }
 }
 
-
 impl<V, T: KeyIndex> Default for IndexMap<V, T> {
     fn default() -> Self {
         Self::new()
@@ -314,7 +302,7 @@ impl<V: Clone, T: KeyIndex> Clone for IndexMap<V, T> {
     fn clone(&self) -> Self {
         Self {
             map: self.map.clone(),
-            marker: self.marker
+            marker: self.marker,
         }
     }
 }

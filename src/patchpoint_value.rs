@@ -1,6 +1,6 @@
 use tinyvec::TinyVec;
 
-use crate::{stackmap_value::StackMapValue, effects::Effects, value::ValueRep};
+use crate::{effects::Effects, stackmap_value::StackMapValue, value::ValueRep};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PatchpointValue {

@@ -2,12 +2,7 @@ use std::collections::HashSet;
 
 use tinyvec::TinyVec;
 
-use crate::{
-    utils::{
-        index_set::KeyIndex
-    },
-    BlockId, Procedure, ValueId,
-};
+use crate::{utils::index_set::KeyIndex, BlockId, Procedure, ValueId};
 
 pub struct LoopAnalysis {
     loops: Vec<Loop>,

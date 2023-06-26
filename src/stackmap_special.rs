@@ -371,7 +371,7 @@ impl StackMapSpecial {
     pub fn is_arg_valid_for_rep(code: &Code<'_>, arg: &Arg, rep: &ValueRep) -> bool {
         match rep.kind() {
             ValueRepKind::WarmAny | ValueRepKind::ColdAny | ValueRepKind::LateColdAny => {
-                return true;
+                true
             }
 
             ValueRepKind::SomeRegister

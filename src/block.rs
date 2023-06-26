@@ -449,7 +449,7 @@ impl<'a> BasicBlockBuilder<'a> {
             ValueData::None,
         ));
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn upsilon(&mut self, input: ValueId, phi: Option<ValueId>) -> ValueId {
@@ -461,7 +461,7 @@ impl<'a> BasicBlockBuilder<'a> {
             ValueData::Upsilon(phi),
         ));
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn frame_pointer(&mut self) -> ValueId {
@@ -474,7 +474,7 @@ impl<'a> BasicBlockBuilder<'a> {
         ));
 
         self.add_value(value);
-        value 
+        value
     }
 
     pub fn entry_switch(&mut self, blocks: &[(BlockId, Frequency)]) {

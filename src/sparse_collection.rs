@@ -1,7 +1,7 @@
 use std::{marker::PhantomData, ptr::NonNull};
 
-/// Collection of sparse elements. Each element has an ID that is used to 
-/// index into the collection. You can add and remove elements from the 
+/// Collection of sparse elements. Each element has an ID that is used to
+/// index into the collection. You can add and remove elements from the
 /// collection. The collection will reuse the IDs of removed elements.
 pub struct SparseCollection<T: SparseElement> {
     vector: Vec<Option<T>>,

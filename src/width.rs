@@ -3,19 +3,14 @@ use crate::{
     typ::{Type, TypeKind},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub enum Width {
     W8,
     W16,
     W32,
+    #[default]
     W64,
     W128,
-}
-
-impl Default for Width {
-    fn default() -> Self {
-        Width::W64
-    }
 }
 
 impl Width {

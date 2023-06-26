@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use tinyvec::TinyVec;
 
 use crate::{
-    block::{blocks_in_pre_order, BlockId},
     analysis::dominators::Dominators,
+    block::{blocks_in_pre_order, BlockId},
     opcode::Opcode,
     procedure::Procedure,
-    value::{Value, ValueId}, ValueKey,
+    value::{Value, ValueId},
+    ValueKey,
 };
 
 //' This is a reusable utility for doing pure CSE. You can use it to do pure CSE on a program by just
@@ -70,7 +71,7 @@ impl PureCSE {
         }
 
         let key = if let Some(key) = value.key(proc) {
-            key 
+            key
         } else {
             return false;
         };

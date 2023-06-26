@@ -88,7 +88,7 @@ impl Tmp {
     const fn decode_fpr(value: i32) -> u8 {
         debug_assert!(Self::is_encoded_fpr(value));
         /*((value as i32 - Self::encode_fpr(TargetAssembler::first_fp_register() as _))
-            + TargetAssembler::first_fp_register() as i32) as _*/
+        + TargetAssembler::first_fp_register() as i32) as _*/
 
         ((Self::encode_fpr(TargetAssembler::first_fp_register() as _) - value)
             + TargetAssembler::first_fp_register() as i32) as _
@@ -215,12 +215,14 @@ impl Tmp {
     }
 
     pub fn tmp_for_linear_index(code: &Code<'_>, index: usize) -> Self {
-        let gp_end = AbsoluteIndexed::<{Bank::GP}>::absolute_index(&Tmp::gp_tmp_for_index(code.num_gp_tmps));
+        let gp_end = AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+            code.num_gp_tmps,
+        ));
 
         if index < gp_end {
-            AbsoluteIndexed::<{Bank::GP}>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
         } else {
-            AbsoluteIndexed::<{Bank::FP}>::tmp_for_absolute_index(index - gp_end)
+            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index - gp_end)
         }
     }
 }
@@ -230,13 +232,12 @@ impl std::fmt::Display for Tmp {
         if self.is_reg() {
             write!(f, "{}", self.reg())
         } else if self.is_gp() {
-            write!(f,"%tmp{}", self.gp_tmp_index())
+            write!(f, "%tmp{}", self.gp_tmp_index())
         } else {
-            write!(f,"%ftmp{}", self.fp_tmp_index())
+            write!(f, "%ftmp{}", self.fp_tmp_index())
         }
     }
 }
-
 
 pub struct AbsoluteIndexed<const BANK: Bank>(pub Tmp);
 /*pub trait AbsoluteIndexed<const BANK: Bank> {
@@ -246,30 +247,29 @@ pub struct AbsoluteIndexed<const BANK: Bank>(pub Tmp);
     fn tmp_for_absolute_index(index: usize) -> Tmp;
 }*/
 
-impl<const BANK: Bank> Clone for AbsoluteIndexed<{BANK}> {
+impl<const BANK: Bank> Clone for AbsoluteIndexed<{ BANK }> {
     fn clone(&self) -> Self {
         Self(self.0)
     }
 }
 
-impl<const BANK: Bank> Copy for AbsoluteIndexed<{BANK}> {}
-
+impl<const BANK: Bank> Copy for AbsoluteIndexed<{ BANK }> {}
 
 impl<const BANK: Bank> KeyIndex for AbsoluteIndexed<BANK> {
     fn index(&self) -> usize {
         if BANK == Bank::GP {
-            AbsoluteIndexed::<{Bank::GP}>::absolute_index(&self.0)
+            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&self.0)
         } else {
-            AbsoluteIndexed::<{Bank::FP}>::absolute_index(&self.0)
+            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&self.0)
         }
     }
 }
 
-impl AbsoluteIndexed<{Bank::GP}> {
+impl AbsoluteIndexed<{ Bank::GP }> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
         debug_assert!(tmp.is_gp());
         debug_assert!(tmp.internal_value() > 0);
-        tmp.internal_value() as _ 
+        tmp.internal_value() as _
     }
 
     pub fn absolute_index_from_usize(index: usize) -> usize {
@@ -277,7 +277,9 @@ impl AbsoluteIndexed<{Bank::GP}> {
     }
 
     pub fn last_machine_register_index() -> usize {
-        Self::absolute_index(&Tmp::from_reg(Reg::new_gpr(TargetAssembler::last_register())))
+        Self::absolute_index(&Tmp::from_reg(Reg::new_gpr(
+            TargetAssembler::last_register(),
+        )))
     }
 
     pub fn tmp_for_absolute_index(index: usize) -> Tmp {
@@ -287,7 +289,7 @@ impl AbsoluteIndexed<{Bank::GP}> {
     }
 }
 
-impl AbsoluteIndexed<{Bank::FP}> {
+impl AbsoluteIndexed<{ Bank::FP }> {
     pub fn absolute_index(tmp: &Tmp) -> usize {
         debug_assert!(tmp.is_fp());
         debug_assert!(tmp.internal_value() < 0);
@@ -299,7 +301,9 @@ impl AbsoluteIndexed<{Bank::FP}> {
     }
 
     pub fn last_machine_register_index() -> usize {
-        Self::absolute_index(&Tmp::from_reg(Reg::new_fpr(TargetAssembler::last_fp_register())))
+        Self::absolute_index(&Tmp::from_reg(Reg::new_fpr(
+            TargetAssembler::last_fp_register(),
+        )))
     }
 
     pub fn tmp_for_absolute_index(index: usize) -> Tmp {
@@ -311,7 +315,7 @@ impl AbsoluteIndexed<{Bank::FP}> {
 
 pub struct LinearlyIndexed<'a> {
     pub code: &'a Code<'a>,
-    pub tmp: Tmp 
+    pub tmp: Tmp,
 }
 
 impl<'a> Deref for LinearlyIndexed<'a> {
@@ -330,17 +334,16 @@ impl<'a> DerefMut for LinearlyIndexed<'a> {
 
 impl<'a> LinearlyIndexed<'a> {
     pub fn new(code: &'a Code<'a>, tmp: Tmp) -> Self {
-        Self {
-            code,
-            tmp,
-        }
+        Self { code, tmp }
     }
 
     pub fn index(&self) -> usize {
         if self.is_gp() {
-            AbsoluteIndexed::<{Bank::GP}>::absolute_index(&self.tmp)
+            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&self.tmp)
         } else {
-            AbsoluteIndexed::<{Bank::GP}>::absolute_index(&Tmp::gp_tmp_for_index(self.code.num_gp_tmps)) + AbsoluteIndexed::<{Bank::FP}>::absolute_index(&self.tmp)
+            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+                self.code.num_gp_tmps,
+            )) + AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&self.tmp)
         }
     }
 }

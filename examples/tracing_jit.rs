@@ -4,7 +4,7 @@ use b3::{
     air::generate::emit_function_epilogue,
     jit::{compilation::Compilation, reg::Reg},
     variable::VariableId,
-    ValueRep, OptLevel,
+    OptLevel, ValueRep,
 };
 use macroassembler::{
     assembler::abstract_macro_assembler::Address,
@@ -53,7 +53,6 @@ trait Interpreter {
             Op::Gt(reg, x, target) => {
                 if self.stack()[reg as usize] > x {
                     *self.pc_mut() = target;
-                
                 } else {
                     *self.pc_mut() += 1;
                 }
@@ -82,7 +81,6 @@ trait Interpreter {
 
     fn interpret(&mut self) -> i32 {
         loop {
-           
             let ins = self.code()[self.pc()];
             match ins {
                 Op::Add { .. } => self.run_add(),
@@ -220,9 +218,8 @@ impl TracingInterpreter {
                         check,
                         Rc::new(move |jit, params| {
                             let stack = params[2].get_reg().gpr();
-                            
+
                             for (i, param) in params.iter().skip(3).enumerate() {
-                              
                                 let reg = to_restore[i];
                                 let offset = reg as i32 * 4;
 
@@ -274,9 +271,8 @@ impl TracingInterpreter {
                         check,
                         Rc::new(move |jit, params| {
                             let stack = params[2].get_reg().gpr();
-                            
+
                             for (i, param) in params.iter().skip(3).enumerate() {
-                              
                                 let reg = to_restore[i];
                                 let offset = reg as i32 * 4;
 
@@ -353,18 +349,18 @@ impl Interpreter for TracingInterpreter {
             Op::Jump(pc) => pc,
             _ => unreachable!(),
         };
-        
-        
+
         if new_pc < old_pc {
-            if let std::collections::hash_map::Entry::Vacant(e) = self.loops.entry((new_pc, old_pc)) {
+            if let std::collections::hash_map::Entry::Vacant(e) = self.loops.entry((new_pc, old_pc))
+            {
                 e.insert(LoopInfo {
-                        executable_trace: None,
-                        trace: vec![],
-                        trace_id: 0,
-                        hotness: 1,
-                        blacklisted: false,
-                        fails: 0,
-                    });
+                    executable_trace: None,
+                    trace: vec![],
+                    trace_id: 0,
+                    hotness: 1,
+                    blacklisted: false,
+                    fails: 0,
+                });
                 self.recording = false;
             } else {
                 let info = self.loops.get_mut(&(new_pc, old_pc)).unwrap();
@@ -375,24 +371,24 @@ impl Interpreter for TracingInterpreter {
                 info.hotness += 1;
                 if let Some(ref trace) = info.executable_trace {
                     self.pc = new_pc;
-                    
+
                     let stack = &mut self.stack[0];
                     let mut pc = 0;
-                    
+
                     let func: extern "C" fn(*mut i32, *mut usize) -> i32 =
                         { unsafe { std::mem::transmute(trace.code_ref().start()) } };
                     let is_ok = func(stack, &mut pc);
                     self.pc = pc;
 
-                    if is_ok != 0 {   
-                       
+                    if is_ok != 0 {
                         info.fails += 1;
                         if info.fails == 10 {
                             info.blacklisted = true;
                         }
                         return;
                     }
-                } else if info.hotness > 1000 && info.executable_trace.is_none() && !self.recording {
+                } else if info.hotness > 1000 && info.executable_trace.is_none() && !self.recording
+                {
                     self.recording = true;
                     self.pc = new_pc;
                     let mut trace = vec![];
@@ -416,7 +412,7 @@ impl Interpreter for TracingInterpreter {
                         let info = self.loops.get_mut(&(new_pc, old_pc)).unwrap();
                         info.executable_trace = Some(f);
                         self.pc = new_pc;
-                        
+
                         return;
                     } else if recording.trace_is_too_big {
                         info.fails += 1;
@@ -588,7 +584,7 @@ fn main() {
         Op::Jump(1),
         Op::Ret(0),
     ];
-    
+
     let mut tracing = TracingInterpreter::new(code.clone());
     tracing.interpret();
     println!("{:?}", tracing.stack());
@@ -596,5 +592,4 @@ fn main() {
     let mut simple = SimpleInterpreter::new(code);
     simple.interpret();
     println!("{:?}", simple.stack());
-    
 }

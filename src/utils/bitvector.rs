@@ -233,7 +233,7 @@ impl BitVector {
 
     pub fn quick_set(&mut self, bit: usize, value: bool) -> bool {
         debug_assert!(bit < self.len());
-        if value == false {
+        if !value {
             return self.quick_clear(bit);
         }
         unsafe {
@@ -275,7 +275,7 @@ impl BitVector {
     }
 
     pub fn set(&mut self, index: usize, value: bool) -> bool {
-        if value == false {
+        if !value {
             return self.clear(index);
         }
 
@@ -299,7 +299,7 @@ impl BitVector {
 
             let my_out_of_line_bits = self.out_of_line_bits_mut();
 
-            let bits_or_pointer = Self::make_inline_bits(my_out_of_line_bits.bits()[0] as usize);
+            let bits_or_pointer = Self::make_inline_bits(my_out_of_line_bits.bits()[0]);
 
             unsafe {
                 OutOfLineBits::destroy(my_out_of_line_bits);
@@ -361,7 +361,7 @@ impl BitVector {
                     .add(shift_in_words);
 
                 addr.write(self.bits_or_pointer & !(1 << Self::max_inline_bits()));
-                debug_assert!(shift_in_words + 1 <= new_num_words);
+                debug_assert!(shift_in_words < new_num_words);
                 libc::memset(
                     (*new_out_of_line_bits)
                         .bits_mut()

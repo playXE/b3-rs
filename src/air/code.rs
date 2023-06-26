@@ -1,14 +1,12 @@
 use std::rc::Rc;
 
-use macroassembler::{
-    assembler::{abstract_macro_assembler::Label, TargetMacroAssembler},
-};
+use macroassembler::assembler::{abstract_macro_assembler::Label, TargetMacroAssembler};
 use tinyvec::TinyVec;
 
 use crate::{
+    analysis::dominators::Graph,
     bank::{for_each_bank, Bank},
     block::Frequency,
-    analysis::dominators::Graph,
     jit::{
         reg::Reg,
         register_at_offset::{round_up_to_multiple_of, RegisterAtOffsetList},
@@ -80,7 +78,7 @@ impl<'a> Code<'a> {
             gp_regs_in_priority_order: vec![],
             fp_regs_in_priority_order: vec![],
             mutable_regs: ScalarRegisterSet::new(&RegisterSet::new(&RegisterSetBuilder::new())),
-            
+
             num_gp_tmps: 0,
             num_fp_tmps: 0,
             blocks: Vec::new(),
@@ -128,7 +126,8 @@ impl<'a> Code<'a> {
             this.set_regs_in_priority_order(bank, &result);
         });
 
-        this.pinned_regs.add(Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER));
+        this.pinned_regs
+            .add(Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER));
 
         this
     }
@@ -288,7 +287,9 @@ impl<'a> Code<'a> {
     }
 
     pub fn block(&self, id: BasicBlockId) -> &BasicBlock {
-        self.blocks.get(id.0).expect(&format!("no block with id {:?}", id))
+        self.blocks
+            .get(id.0)
+            .expect(&format!("no block with id {:?}", id))
     }
 
     pub fn block_mut(&mut self, id: BasicBlockId) -> &mut BasicBlock {
@@ -343,7 +344,7 @@ impl<'a> Code<'a> {
         } else {
             for i in 0..self.entrypoints.len() {
                 let id = self.entrypoints[i].0;
-                
+
                 update_predecessors_after(id, self);
             }
         }

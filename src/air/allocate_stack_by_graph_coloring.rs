@@ -242,7 +242,6 @@ impl<'a, 'b, G: InterferenceGraph> GraphColoringStackAllocator<'a, 'b, G> {
                     });
 
                     if ok {
-                        
                         self.code
                             .block_mut(block)
                             .get_mut(inst_index)
@@ -259,8 +258,6 @@ impl<'a, 'b, G: InterferenceGraph> GraphColoringStackAllocator<'a, 'b, G> {
 
             self.code.block_mut(block).retain(|x| x != &Inst::default());
         }
-
-       
 
         self.coalescable_moves
             .sort_by(|a, b| b.frequency.partial_cmp(&a.frequency).unwrap());
@@ -293,7 +290,7 @@ impl<'a, 'b, G: InterferenceGraph> GraphColoringStackAllocator<'a, 'b, G> {
                     StackSlotId(slot_to_keep as _),
                 );
             }
-            
+
             self.interference.may_clear(slot_to_kill as _);
         }
 
@@ -309,7 +306,7 @@ impl<'a, 'b, G: InterferenceGraph> GraphColoringStackAllocator<'a, 'b, G> {
                     if self.code.block(block)[inst_index].args[i].is_stack() {
                         let slot = self.code.block(block)[inst_index].args[i].stack_slot();
                         let slot = self.remap_stack_slot_id(slot);
-                        
+
                         self.code.block_mut(block)[inst_index].args[i] = Arg::new_stack(
                             slot,
                             self.code.block(block)[inst_index].args[i].offset() as _,
@@ -318,7 +315,6 @@ impl<'a, 'b, G: InterferenceGraph> GraphColoringStackAllocator<'a, 'b, G> {
                 }
 
                 if self.is_useless_move(&self.code.block(block)[inst_index]) {
-                    
                     self.code.block_mut(block)[inst_index] = Inst::default();
                 }
             }

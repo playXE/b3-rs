@@ -1,6 +1,7 @@
-
-
-use crate::{bank::Bank, block::Frequency, analysis::dominators::GraphNodeWorklist, utils::bitvector::BitVector};
+use crate::{
+    analysis::dominators::GraphNodeWorklist, bank::Bank, block::Frequency,
+    utils::bitvector::BitVector,
+};
 
 use super::{
     basic_block::BasicBlockId,
@@ -37,14 +38,13 @@ impl UseCounts {
         );
         let mut gp_num_warm_uses_and_defs = vec![0.0; gp_array_size];
         let mut gp_const_defs = BitVector::with_capacity(gp_array_size);
-        
 
         let fp_array_size = AbsoluteIndexed::<{ Bank::FP }>::absolute_index(
             &Tmp::fp_tmp_for_index(code.num_tmps(Bank::FP)),
         );
         let mut fp_num_warm_uses_and_defs = vec![0.0f32; fp_array_size];
         let mut fp_const_defs = BitVector::with_capacity(fp_array_size);
-        
+
         for block in (0..code.blocks.len()).map(BasicBlockId) {
             let mut frequency = code.block(block).frequency;
             if !fast_worklist.saw(block) {
@@ -54,21 +54,21 @@ impl UseCounts {
             for inst in code.block(block).insts.iter() {
                 inst.for_each_tmp(code, |tmp, role, bank, _| {
                     if role.is_warm_use() || role.is_any_def() {
-                       
                         if bank == Bank::GP {
-                            let absolute_index = AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp);
+                            let absolute_index =
+                                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp);
                             gp_num_warm_uses_and_defs[absolute_index] += frequency as f32;
                         } else {
-                            let absolute_index = AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp);
+                            let absolute_index =
+                                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp);
                             fp_num_warm_uses_and_defs[absolute_index] += frequency as f32;
                         }
                     }
                 });
 
-                if (inst.kind.opcode == Opcode::Move
-                    || inst.kind.opcode == Opcode::Move32)
-                        && inst.args[0].is_some_imm()
-                        && inst.args[1].is_tmp()
+                if (inst.kind.opcode == Opcode::Move || inst.kind.opcode == Opcode::Move32)
+                    && inst.args[0].is_some_imm()
+                    && inst.args[1].is_tmp()
                 {
                     let tmp = inst.args[1].tmp();
 

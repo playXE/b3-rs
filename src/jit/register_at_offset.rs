@@ -1,10 +1,13 @@
-use std::{mem::size_of, ops::{Deref, DerefMut}};
+use std::{
+    mem::size_of,
+    ops::{Deref, DerefMut},
+};
 
 use crate::width::Width;
 
 use super::{reg::Reg, register_set::RegisterSet};
 
-#[derive(Debug, Clone, Hash, Copy, Default)]
+#[derive(Debug, Clone, Hash, Copy, Default, PartialEq, Eq)]
 pub struct RegisterAtOffset {
     reg_index: u8,
     width: bool,
@@ -45,24 +48,14 @@ impl RegisterAtOffset {
     }
 
     pub fn offset_as_index(&self) -> isize {
-        self.offset_bits / size_of::<usize>() as isize 
-    }
-
-
-}
-
-impl PartialEq for RegisterAtOffset {
-    fn eq(&self, other: &Self) -> bool {
-        self.reg() == other.reg() && self.offset() == other.offset() && self.width() == other.width()
+        self.offset_bits / size_of::<usize>() as isize
     }
 }
-
-impl Eq for RegisterAtOffset {}
 
 impl PartialOrd for RegisterAtOffset {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.reg() != other.reg() {
-            return self.reg().partial_cmp(&other.reg())
+            return self.reg().partial_cmp(&other.reg());
         }
 
         self.offset().partial_cmp(&other.offset())

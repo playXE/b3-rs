@@ -1,4 +1,12 @@
-#![allow(incomplete_features)]
+#![allow(
+    incomplete_features,
+    clippy::match_like_matches_macro,
+    clippy::from_over_into,
+    clippy::new_without_default,
+    clippy::needless_lifetimes,
+    clippy::should_implement_trait,
+    clippy::too_many_arguments
+)]
 #![feature(adt_const_params)]
 
 pub mod air;
@@ -92,9 +100,9 @@ pub fn chill_div<T: PrimInt + One>(numerator: T, denominator: T) -> T {
 }
 
 pub fn chill_mod<T: PrimInt + One>(numerator: T, denominator: T) -> T {
-    if denominator == T::zero() {
-        T::zero()
-    } else if denominator == T::one().sub(T::one()).sub(T::one()) && numerator == T::min_value() {
+    if denominator == T::zero()
+        || (denominator == T::one().sub(T::one()).sub(T::one()) && numerator == T::min_value())
+    {
         T::zero()
     } else {
         numerator % denominator
@@ -127,7 +135,7 @@ pub fn fmax<T: Float>(a: T, b: T) -> T {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum OptLevel {
     /// No optimizations at all.
     ///
@@ -180,13 +188,7 @@ impl PartialOrd<u8> for OptLevel {
 
 impl PartialOrd<OptLevel> for u8 {
     fn partial_cmp(&self, other: &OptLevel) -> Option<std::cmp::Ordering> {
-        Some((*self as u8).cmp(&(*other as u8)))
-    }
-}
-
-impl Ord for OptLevel {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (*self as u8).cmp(&(*other as u8))
+        Some((*self).cmp(&(*other as u8)))
     }
 }
 

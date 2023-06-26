@@ -117,11 +117,10 @@ pub enum ValueData {
     SlotBase(StackSlotId),
     Switch(Vec<i64>),
     Alloca(Type),
-    Procedure
+    Procedure,
 }
 
 impl Value {
-
     pub fn alloca(&self) -> Option<Type> {
         match self.data {
             ValueData::Alloca(ty) => Some(ty),
@@ -186,8 +185,7 @@ impl Value {
         if !proc.value(this).has_falltrhough(proc) {
             proc.block_mut(block).successor_list_mut().push(target);
         } else {
-            proc
-                .block_mut(block)
+            proc.block_mut(block)
                 .successor_list_mut()
                 .last_mut()
                 .unwrap()
@@ -452,7 +450,7 @@ impl Value {
             typ,
             owner: None,
             num_children: NumChildren::VarArgs,
-            data: ValueData::CCallValue(effects.unwrap_or_else(|| Effects::for_call())),
+            data: ValueData::CCallValue(effects.unwrap_or_else(Effects::for_call)),
             children: Self::build_adjacency_list(NumChildren::VarArgs, args),
         }
     }
@@ -551,8 +549,6 @@ impl Value {
             children: TinyVec::new(),
         }
     }
-
-  
 
     pub fn typ(&self) -> Type {
         self.typ
@@ -994,20 +990,20 @@ impl Value {
 
     pub fn div_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(chill_div(
+            Some(Self::make_const32(chill_div(
                 self.as_int32().unwrap(),
                 other.as_int32().unwrap(),
-            )));
+            )))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(chill_div(
+            Some(Self::make_const64(chill_div(
                 self.as_int64().unwrap(),
                 other.as_int64().unwrap(),
-            )));
+            )))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(chill_div(
+            Some(Self::make_const128(chill_div(
                 self.as_int128().unwrap(),
                 other.as_int128().unwrap(),
-            )));
+            )))
         } else {
             None
         }
@@ -1015,20 +1011,20 @@ impl Value {
 
     pub fn udiv_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(chill_udiv(
+            Some(Self::make_const32(chill_udiv(
                 self.as_int32().unwrap() as u32,
                 other.as_int32().unwrap() as u32,
-            ) as _));
+            ) as _))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(chill_udiv(
+            Some(Self::make_const64(chill_udiv(
                 self.as_int64().unwrap() as u64,
                 other.as_int64().unwrap() as u64,
-            ) as _));
+            ) as _))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(chill_udiv(
+            Some(Self::make_const128(chill_udiv(
                 self.as_int128().unwrap() as u128,
                 other.as_int128().unwrap() as u128,
-            ) as _));
+            ) as _))
         } else {
             None
         }
@@ -1036,20 +1032,20 @@ impl Value {
 
     pub fn mod_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(chill_mod(
+            Some(Self::make_const32(chill_mod(
                 self.as_int32().unwrap(),
                 other.as_int32().unwrap(),
-            )));
+            )))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(chill_mod(
+            Some(Self::make_const64(chill_mod(
                 self.as_int64().unwrap(),
                 other.as_int64().unwrap(),
-            )));
+            )))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(chill_mod(
+            Some(Self::make_const128(chill_mod(
                 self.as_int128().unwrap(),
                 other.as_int128().unwrap(),
-            )));
+            )))
         } else {
             None
         }
@@ -1057,20 +1053,20 @@ impl Value {
 
     pub fn umod_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(chill_umod(
+            Some(Self::make_const32(chill_umod(
                 self.as_int32().unwrap() as u32,
                 other.as_int32().unwrap() as u32,
-            ) as _));
+            ) as _))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(chill_umod(
+            Some(Self::make_const64(chill_umod(
                 self.as_int64().unwrap() as u64,
                 other.as_int64().unwrap() as u64,
-            ) as _));
+            ) as _))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(chill_umod(
+            Some(Self::make_const128(chill_umod(
                 self.as_int128().unwrap() as u128,
                 other.as_int128().unwrap() as u128,
-            ) as _));
+            ) as _))
         } else {
             None
         }
@@ -1078,25 +1074,25 @@ impl Value {
 
     pub fn bit_and_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(
+            Some(Self::make_const32(
                 self.as_int32().unwrap() & other.as_int32().unwrap(),
-            ));
+            ))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(
+            Some(Self::make_const64(
                 self.as_int64().unwrap() & other.as_int64().unwrap(),
-            ));
+            ))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(
+            Some(Self::make_const128(
                 self.as_int128().unwrap() & other.as_int128().unwrap(),
-            ));
+            ))
         } else if self.has_double() && other.has_double() {
-            return Some(Self::make_const_double(f64::from_bits(
+            Some(Self::make_const_double(f64::from_bits(
                 self.as_double().unwrap().to_bits() & other.as_double().unwrap().to_bits(),
-            )));
+            )))
         } else if self.has_float() && other.has_float() {
-            return Some(Self::make_const_float(f32::from_bits(
+            Some(Self::make_const_float(f32::from_bits(
                 self.as_float().unwrap().to_bits() & other.as_float().unwrap().to_bits(),
-            )));
+            )))
         } else {
             None
         }
@@ -1104,25 +1100,25 @@ impl Value {
 
     pub fn bit_or_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(
+            Some(Self::make_const32(
                 self.as_int32().unwrap() | other.as_int32().unwrap(),
-            ));
+            ))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(
+            Some(Self::make_const64(
                 self.as_int64().unwrap() | other.as_int64().unwrap(),
-            ));
+            ))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(
+            Some(Self::make_const128(
                 self.as_int128().unwrap() | other.as_int128().unwrap(),
-            ));
+            ))
         } else if self.has_double() && other.has_double() {
-            return Some(Self::make_const_double(f64::from_bits(
+            Some(Self::make_const_double(f64::from_bits(
                 self.as_double().unwrap().to_bits() | other.as_double().unwrap().to_bits(),
-            )));
+            )))
         } else if self.has_float() && other.has_float() {
-            return Some(Self::make_const_float(f32::from_bits(
+            Some(Self::make_const_float(f32::from_bits(
                 self.as_float().unwrap().to_bits() | other.as_float().unwrap().to_bits(),
-            )));
+            )))
         } else {
             None
         }
@@ -1130,25 +1126,25 @@ impl Value {
 
     pub fn bit_xor_constant(&self, other: &Value) -> Option<Value> {
         if self.has_int32() && other.has_int32() {
-            return Some(Self::make_const32(
+            Some(Self::make_const32(
                 self.as_int32().unwrap() ^ other.as_int32().unwrap(),
-            ));
+            ))
         } else if self.has_int64() && other.has_int64() {
-            return Some(Self::make_const64(
+            Some(Self::make_const64(
                 self.as_int64().unwrap() ^ other.as_int64().unwrap(),
-            ));
+            ))
         } else if self.has_int128() && other.has_int128() {
-            return Some(Self::make_const128(
+            Some(Self::make_const128(
                 self.as_int128().unwrap() ^ other.as_int128().unwrap(),
-            ));
+            ))
         } else if self.has_double() && other.has_double() {
-            return Some(Self::make_const_double(f64::from_bits(
+            Some(Self::make_const_double(f64::from_bits(
                 self.as_double().unwrap().to_bits() ^ other.as_double().unwrap().to_bits(),
-            )));
+            )))
         } else if self.has_float() && other.has_float() {
-            return Some(Self::make_const_float(f32::from_bits(
+            Some(Self::make_const_float(f32::from_bits(
                 self.as_float().unwrap().to_bits() ^ other.as_float().unwrap().to_bits(),
-            )));
+            )))
         } else {
             None
         }
@@ -1931,10 +1927,14 @@ impl ValueRep {
     }
 
     pub fn late_reg(reg: Reg) -> Self {
-        Self {
-            u: ValueRepU { reg },
+        let mut this = Self {
+            u: ValueRepU { value: 0 },
             kind: ValueRepKind::LateRegister,
-        }
+        };
+
+        this.u.reg = reg;
+
+        this
     }
 
     pub fn stack(offset_from_fp: isize) -> Self {
@@ -2043,6 +2043,7 @@ impl PartialEq for ValueRep {
 impl Eq for ValueRep {}
 
 #[derive(Clone, Copy)]
+#[repr(C)]
 union ValueRepU {
     reg: Reg,
     offset_from_fp: isize,
@@ -2220,10 +2221,10 @@ impl ValueKey {
     }
 
     pub fn can_materialize(&self) -> bool {
-        match self.opcode() {
-            Opcode::CheckAdd | Opcode::CheckSub | Opcode::CheckMul => false,
-            _ => true,
-        }
+        !matches!(
+            self.opcode(),
+            Opcode::CheckAdd | Opcode::CheckSub | Opcode::CheckMul
+        )
     }
 
     pub fn empty() -> Self {
@@ -2263,17 +2264,13 @@ impl ValueKey {
         // though those nodes have side exit effects. It would be weird to materialize anything that has a side
         // exit. We can't possibly know enough about a side exit to know where it would be safe to emit one.
         match self.opcode() {
-            Opcode::FramePointer => {
-                let value = proc.add(Value::new(
-                    self.kind(),
-                    self.typ(),
-                    NumChildren::Zero,
-                    &[],
-                    ValueData::None,
-                ));
-
-                value
-            }
+            Opcode::FramePointer => proc.add(Value::new(
+                self.kind(),
+                self.typ(),
+                NumChildren::Zero,
+                &[],
+                ValueData::None,
+            )),
 
             Opcode::Identity
             | Opcode::Opaque

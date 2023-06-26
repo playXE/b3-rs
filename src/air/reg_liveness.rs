@@ -1,15 +1,11 @@
-
 use crate::{
-    jit::{
-        reg::Reg,
-        register_set::{RegisterSet, },
-    },
     analysis::liveness::Liveness,
-    utils::{index_set::IndexMap, bitvector::BitVector},
+    jit::{reg::Reg, register_set::RegisterSet},
+    utils::{bitvector::BitVector, index_set::IndexMap},
 };
 
 use super::{
-    basic_block::BasicBlockId, code::Code, liveness_adapter::UnifiedTmpLivenessAdapter, tmp::Tmp, 
+    basic_block::BasicBlockId, code::Code, liveness_adapter::UnifiedTmpLivenessAdapter, tmp::Tmp,
 };
 
 /// Although we could trivially adapt [Liveness<>](crate::liveness::Liveness) to work with Reg, this would not be so
@@ -60,15 +56,18 @@ impl RegLiveness {
 
                     if role.is_late_use() {
                         actions_for_boundary[inst_index + 1].use_.add(reg, width);
-                        assert!(actions_for_boundary[inst_index + 1].use_.contains(reg, width));
+                        assert!(actions_for_boundary[inst_index + 1]
+                            .use_
+                            .contains(reg, width));
                     }
 
                     if role.is_late_def() {
                         actions_for_boundary[inst_index + 1].def.add(reg, width);
-                        assert!(actions_for_boundary[inst_index + 1].def.contains(reg, width));
+                        assert!(actions_for_boundary[inst_index + 1]
+                            .def
+                            .contains(reg, width));
                     }
                 });
-               
             }
         }
 
@@ -78,7 +77,6 @@ impl RegLiveness {
             code.block(BasicBlockId(i)).last().unwrap().for_each_reg(
                 code,
                 |reg, role, _bank, width| {
-
                     if role.is_late_use() {
                         live_at_tail.add(reg, width);
                     }
@@ -140,7 +138,7 @@ impl RegLiveness {
                     if live_at_tail.subsumes(&workset) {
                         continue;
                     }
-                    
+
                     this.live_at_tail[*pred].merge(&workset);
                     dirty_blocks.set(pred.0, true);
                     changed = true;
@@ -158,8 +156,14 @@ impl RegLiveness {
             for block_index in (0..code.blocks.len()).rev() {
                 let actions_for_boundary = &this.actions[BasicBlockId(block_index)];
                 println!("Block {}", block_index);
-                println!("Live at head: {}", this.live_at_head[BasicBlockId(block_index)]);
-                println!("Live at tail: {}", this.live_at_tail[BasicBlockId(block_index)]);
+                println!(
+                    "Live at head: {}",
+                    this.live_at_head[BasicBlockId(block_index)]
+                );
+                println!(
+                    "Live at tail: {}",
+                    this.live_at_tail[BasicBlockId(block_index)]
+                );
 
                 for inst_index in (0..code.blocks[block_index].insts.len()).rev() {
                     println!(

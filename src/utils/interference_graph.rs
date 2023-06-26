@@ -38,7 +38,7 @@ pub trait InterferenceGraph {
     fn size(&self) -> usize;
     fn memory_use(&self) -> usize;
     fn dump_memory_use_in_kb(&self);
-    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a>;
+    fn iter(&self, u: u32) -> Self::Iter<'_>;
 }
 
 pub struct InterferenceBitVector {
@@ -51,7 +51,7 @@ pub trait Iterable {
     type Iter<'a>: Iterator<Item = u32>
     where
         Self: 'a;
-    fn iter<'a>(&'a self) -> Self::Iter<'a>;
+    fn iter(&self) -> Self::Iter<'_>;
 }
 
 #[allow(dead_code)]
@@ -170,7 +170,7 @@ impl InterferenceGraph for InterferenceBitVector {
         eprint!("InterferenceGraph uses {} kB", self.memory_use() / 1024);
     }
 
-    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+    fn iter(&self, u: u32) -> Self::Iter<'_> {
         let index = self.index(u, 0);
         let begin = self.bitvector.find_bit(self.index(u, 0), true);
         let end = self.index(u + 1, 0);
@@ -220,7 +220,7 @@ impl<'a> Iterable for InterferenceVectorIter<'a> {
 impl InterferenceGraph for InterferenceVector {
     type Iter<'a> = InterferenceVectorIter<'a>;
 
-    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+    fn iter(&self, u: u32) -> Self::Iter<'_> {
         InterferenceVectorIter {
             set: &self.vector[u as usize],
         }
@@ -290,7 +290,7 @@ impl<G: InterferenceGraph> InterferenceGraph for UndirectedEdgesDuplicatingAdapt
     type Iter<'a> = G::Iter<'a>
     where G: 'a;
 
-    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+    fn iter(&self, u: u32) -> Self::Iter<'_> {
         self.graph.iter(u)
     }
 
@@ -354,7 +354,7 @@ impl<G: InterferenceGraph> InterferenceGraph for UndirectedEdgesDedupAdapter<G> 
         where G: 'a
     ;
 
-    fn iter<'a>(&'a self, u: u32) -> Self::Iter<'a> {
+    fn iter(&self, u: u32) -> Self::Iter<'_> {
         self.graph.iter(u)
     }
 

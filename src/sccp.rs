@@ -28,14 +28,12 @@
 //! by just combining constant folding and constant propagation and dead code
 //! elimination separately.
 
-
-
 use std::collections::{HashMap, VecDeque};
 
 use crate::{
     analysis::phi_children::PhiChildren,
     utils::{bitvector::BitVector, index_set::IndexMap},
-    BlockId,  Opcode, Procedure, TriState,Value,  ValueId, Frequency,
+    BlockId, Frequency, Opcode, Procedure, TriState, Value, ValueId,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,13 +59,9 @@ impl Lattice {
             let v1 = self.val.unwrap();
             let v2 = other.val.unwrap();
 
-            if proc.value(v1).kind.opcode() == proc.value(v2).kind.opcode()
-                && proc.value(v1).as_int().unwrap() == proc.value(v2).as_int().unwrap()
-            {
-                return true;
-            } else {
-                return false;
-            }
+
+            return proc.value(v1).kind.opcode() == proc.value(v2).kind.opcode()
+                && proc.value(v1).as_int().unwrap() == proc.value(v2).as_int().unwrap();
         }
 
         true
@@ -116,23 +110,23 @@ pub fn sccp<'a>(proc: &'a mut Procedure) {
 
     loop {
         if let Some(edge) = t.edges.pop_front() {
-            if true || !t.visited.get(edge.0) {
-                let dest_visited = t.visited_block.get(edge.0);
-                t.visited.set(edge.0, true);
-                t.visited_block.set(edge.0, true);
+            //if true || !t.visited.get(edge.0) {
+            let dest_visited = t.visited_block.get(edge.0);
+            t.visited.set(edge.0, true);
+            t.visited_block.set(edge.0, true);
 
-                for i in 0..t.proc.block(edge).len() {
-                    let value = t.proc.block(edge)[i];
+            for i in 0..t.proc.block(edge).len() {
+                let value = t.proc.block(edge)[i];
 
-                    if value.opcode(t.proc) == Opcode::Phi || !dest_visited {
-                        t.visit_value(value);
-                    }
-                }
-
-                if !dest_visited {
-                    t.propagate(edge);
+                if value.opcode(t.proc) == Opcode::Phi || !dest_visited {
+                    t.visit_value(value);
                 }
             }
+
+            if !dest_visited {
+                t.propagate(edge);
+            }
+            //}
 
             continue;
         }
@@ -148,7 +142,10 @@ pub fn sccp<'a>(proc: &'a mut Procedure) {
     let (replace_cnt, rewire_cnt) = t.replace_consts();
 
     if proc.options.dump_b3_at_each_phase {
-        eprintln!("SCCP: replaced {} constants, rewired {} blocks", replace_cnt, rewire_cnt);
+        eprintln!(
+            "SCCP: replaced {} constants, rewired {} blocks",
+            replace_cnt, rewire_cnt
+        );
     }
 }
 
@@ -262,38 +259,46 @@ impl<'a> Worklist<'a> {
                 .bit_xor_constant(self.proc.value(args[1])),
 
             BitwiseCast => self.proc.value(args[0]).bitwise_cast_constant(),
-            Above => wrap_tri(self
-                .proc
-                .value(args[0])
-                .above_constant(self.proc.value(args[1]))),
-            AboveEqual => wrap_tri(self
-                .proc
-                .value(args[0])
-                .above_equal_constant(self.proc.value(args[1]))),
-            Below => wrap_tri(self
-                .proc
-                .value(args[0])
-                .below_constant(self.proc.value(args[1]))),
-            BelowEqual => wrap_tri(self
-                .proc
-                .value(args[0])
-                .below_equal_constant(self.proc.value(args[1]))),
-            GreaterThan => wrap_tri(self
-                .proc
-                .value(args[0])
-                .greater_than_constant(self.proc.value(args[1]))),
-            GreaterEqual => wrap_tri(self
-                .proc
-                .value(args[0])
-                .greater_than_equal_constant(self.proc.value(args[1]))),
-            LessThan => wrap_tri(self
-                .proc
-                .value(args[0])
-                .less_than_constant(self.proc.value(args[1]))),
-            LessEqual => wrap_tri(self
-                .proc
-                .value(args[0])
-                .less_than_equal_constant(self.proc.value(args[1]))),
+            Above => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .above_constant(self.proc.value(args[1])),
+            ),
+            AboveEqual => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .above_equal_constant(self.proc.value(args[1])),
+            ),
+            Below => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .below_constant(self.proc.value(args[1])),
+            ),
+            BelowEqual => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .below_equal_constant(self.proc.value(args[1])),
+            ),
+            GreaterThan => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .greater_than_constant(self.proc.value(args[1])),
+            ),
+            GreaterEqual => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .greater_than_equal_constant(self.proc.value(args[1])),
+            ),
+            LessThan => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .less_than_constant(self.proc.value(args[1])),
+            ),
+            LessEqual => wrap_tri(
+                self.proc
+                    .value(args[0])
+                    .less_than_equal_constant(self.proc.value(args[1])),
+            ),
             _ => {
                 return Lattice {
                     level: LatticeLevel::Bottom,
@@ -320,7 +325,6 @@ impl<'a> Worklist<'a> {
 
     /// Meets all of phi arguments and computes result lattice
     fn meet(&mut self, val: ValueId) -> Lattice {
-       
         let mut optimistic_lt = Lattice {
             level: LatticeLevel::Top,
             val: None,
@@ -330,11 +334,7 @@ impl<'a> Worklist<'a> {
 
         for upsilon in children {
             let arg = self.proc.value(upsilon).children[0];
-            let edge = self
-                .proc
-                .value(arg)
-                .owner
-                .expect("upsilon must have owner");
+            let edge = self.proc.value(arg).owner.expect("upsilon must have owner");
             // If incoming edge for phi is not visited, assume top optimistically.
             // According to rules of meet:
             // 		Top ∩ any = any
@@ -342,14 +342,13 @@ impl<'a> Worklist<'a> {
             // we will ignore Top and only take other lattices into consideration.
 
             if self.visited.get(edge.0) {
-                
                 let lt = self.get_lattice_cell(arg);
 
                 if lt.level == LatticeLevel::Constant {
                     if optimistic_lt.level == LatticeLevel::Top {
                         optimistic_lt = lt;
                     } else {
-                        if !optimistic_lt.equals(&lt, &self.proc) {
+                        if !optimistic_lt.equals(&lt, self.proc) {
                             // ConstantA ∩ ConstantB = Bottom
                             return Lattice {
                                 level: LatticeLevel::Bottom,
@@ -480,7 +479,7 @@ impl<'a> Worklist<'a> {
 
         cls(self);
     }
-    
+
     /// build_def_uses builds def-use chain for some values early, because once the
     /// lattice of a value is changed, we need to update lattices of use. But we don't
     /// need all uses of it, only uses that can become constants would be added into
@@ -501,11 +500,14 @@ impl<'a> Worklist<'a> {
                     }
                 }
 
-                if val.opcode(&self.proc) == Opcode::Phi {
+                if val.opcode(self.proc) == Opcode::Phi {
                     let upsilons = self.phi_children.at(val).iter().collect::<Vec<_>>();
 
                     for upsilon in upsilons {
-                        self.def_use.entry(upsilon).or_insert_with(Vec::new).push(val);
+                        self.def_use
+                            .entry(upsilon)
+                            .or_insert_with(Vec::new)
+                            .push(val);
                     }
                 }
             }
@@ -513,9 +515,11 @@ impl<'a> Worklist<'a> {
             let terminator = *self.proc.block(block).last().unwrap();
             let control_value = match terminator.opcode(self.proc) {
                 Opcode::Branch | Opcode::Switch => Some(self.proc.value(terminator).children[0]),
-                _ => None 
+                _ => None,
             };
-            if let Some(control_value) = control_value.filter(|&control_value| possible_const(self.proc, control_value)) {
+            if let Some(control_value) =
+                control_value.filter(|&control_value| possible_const(self.proc, control_value))
+            {
                 self.def_block
                     .entry(control_value)
                     .or_insert_with(Vec::new)
@@ -525,7 +529,7 @@ impl<'a> Worklist<'a> {
     }
     /// add_uses finds all uses of value and appends them into work list for further process
     fn add_uses(&mut self, val: ValueId) {
-        let mut uses = std::mem::replace(&mut self.uses, VecDeque::new());
+        let mut uses = std::mem::take(&mut self.uses);
 
         for &use_ in self.def_use[&val].iter() {
             if val == use_ {
@@ -568,7 +572,6 @@ impl<'a> Worklist<'a> {
                 let cond_lattice = self.get_lattice_cell(cond);
 
                 if cond_lattice.level == LatticeLevel::Bottom {
-              
                     for i in 0..self.proc.block(block).successor_list.len() {
                         self.edges
                             .push_back(self.proc.block(block).successor_list[i].0);
@@ -641,16 +644,13 @@ impl<'a> Worklist<'a> {
                     const_cnt += 1;
                 }
 
-                
-                
                 if let Some(ctrl_block) = self.def_block.remove(&val) {
                     for block in ctrl_block {
                         if self.rewire_successor(block, val) {
                             rewire_cnt += 1;
                         }
                     }
-                }   
-            
+                }
             }
         }
 
@@ -669,10 +669,15 @@ impl<'a> Worklist<'a> {
                     self.proc.block(block).successor_list[1].0
                 };
 
-                self.proc.value_mut(terminator).replace_with_jump(block, (succ, Frequency::Normal));
+                self.proc
+                    .value_mut(terminator)
+                    .replace_with_jump(block, (succ, Frequency::Normal));
                 self.proc.block_mut(block).successor_list.clear();
-                self.proc.block_mut(block).successor_list.push((succ, Frequency::Normal));
-                true 
+                self.proc
+                    .block_mut(block)
+                    .successor_list
+                    .push((succ, Frequency::Normal));
+                true
             }
 
             Opcode::Switch => {
@@ -685,14 +690,18 @@ impl<'a> Worklist<'a> {
                 }
                 let succ = self.proc.block(block).successor_list[value as usize].0;
 
-               
-                self.proc.value_mut(terminator).replace_with_jump(block, (succ, Frequency::Normal));
+                self.proc
+                    .value_mut(terminator)
+                    .replace_with_jump(block, (succ, Frequency::Normal));
                 self.proc.block_mut(block).successor_list.clear();
-                self.proc.block_mut(block).successor_list.push((succ, Frequency::Normal));
+                self.proc
+                    .block_mut(block)
+                    .successor_list
+                    .push((succ, Frequency::Normal));
                 true
             }
 
-            _ => false
+            _ => false,
         }
     }
 }
@@ -711,9 +720,10 @@ fn possible_const(proc: &Procedure, val: ValueId) -> bool {
         Phi => true,
         Upsilon => true,
 
-        Abs | Neg | Floor | Ceil | Trunc | Sqrt | ZExt32 | SExt32 | SExt8 | SExt16
-        | SExt16To64 | SExt8To64 | BitwiseCast | DoubleToFloat | FloatToDouble | IToD | IToF
-        | DToI | FToI => true,
+        Abs | Neg | Floor | Ceil | Trunc | Sqrt | ZExt32 | SExt32 | SExt8 | SExt16 | SExt16To64
+        | SExt8To64 | BitwiseCast | DoubleToFloat | FloatToDouble | IToD | IToF | DToI | FToI => {
+            true
+        }
 
         Jump | Branch | Switch => true,
 

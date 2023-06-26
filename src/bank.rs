@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use macroassembler::jit::{gpr_info, fpr_info};
+use macroassembler::jit::{fpr_info, gpr_info};
 
 use crate::width::{width_for_bytes, Width};
 
@@ -17,14 +17,14 @@ impl Bank {
     pub fn num_of_argument_registers(&self) -> usize {
         match self {
             Self::GP => gpr_info::NUMBER_OF_ARGUMENT_REGISTERS,
-            Self::FP => fpr_info::NUMBER_OF_ARGUMENT_REGISTERS
+            Self::FP => fpr_info::NUMBER_OF_ARGUMENT_REGISTERS,
         }
     }
 
-    pub fn to_argument_register(&self ,index: usize) -> u8 {
+    pub fn to_argument_register(&self, index: usize) -> u8 {
         match self {
             Self::GP => gpr_info::to_argument_register(index),
-            Self::FP => fpr_info::to_argument_register(index)
+            Self::FP => fpr_info::to_argument_register(index),
         }
     }
 }

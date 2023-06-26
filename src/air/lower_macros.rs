@@ -37,7 +37,7 @@ pub fn lower_macros(code: &mut Code) {
                         let inst = inst.clone();
 
                         let mut destinations = compute_ccalling_convention(code, value);
-                       
+
                         let result_count = ccall_result_count(code, value);
 
                         let mut shuffle_pairs = TinyVec::<[ShufflePair; 16]>::new();
@@ -52,7 +52,7 @@ pub fn lower_macros(code: &mut Code) {
                                 destinations[offset],
                                 width,
                             );
-                         
+
                             shuffle_pairs.push(pair);
 
                             has_register_source |= pair.src.is_reg();

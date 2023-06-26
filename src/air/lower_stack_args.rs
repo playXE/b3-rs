@@ -58,13 +58,13 @@ pub fn lower_stack_args(code: &mut Code) {
                 let mut inst = std::mem::take(&mut code.block_mut(block_id).insts[inst_index]);
                 let code2 = unsafe { &*(code as *const Code) };
                 let origin = inst.origin;
-                
+
                 let inst_clone = inst.clone();
                 inst.for_each_arg_mut(code, |index, arg, role, _, width| {
                     let stack_addr = |_inst_index, offset_from_fp: isize| -> Arg {
                         let offset_from_sp = offset_from_fp + code2.frame_size as isize;
-                    
-                        if false && inst_clone.admits_extended_offset_addr(index, code2) {
+
+                        if inst_clone.admits_extended_offset_addr(index, code2) {
                             // Stackmaps and patchpoints expect addr inputs relative to SP or FP only. We might as well
                             // not even bother generating an addr with valid form for these opcodes since extended offset
                             // addr is always valid.
@@ -135,7 +135,6 @@ pub fn lower_stack_args(code: &mut Code) {
                             );
                         }
                         ArgKind::CallArg => {
-                           
                             *arg = stack_addr(
                                 inst_index,
                                 arg.offset() as isize - code2.frame_size as isize,
@@ -145,7 +144,7 @@ pub fn lower_stack_args(code: &mut Code) {
                         _ => (),
                     }
                 });
-               
+
                 code.block_mut(block_id).insts[inst_index] = inst;
             }
 

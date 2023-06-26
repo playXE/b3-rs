@@ -137,5 +137,5 @@ pub fn alloca_to_reg(proc: &mut Procedure) {
         proc.reset_value_owners();
     }
 
-    println!("{}", proc.display_());
+    println!("{}", proc.display());
 }

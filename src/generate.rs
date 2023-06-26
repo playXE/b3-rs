@@ -4,6 +4,7 @@ use crate::{
     air::{self, code::Code},
     estimate_static_exec_counts::estimate_static_execution_counts,
     fix_ssa::fix_ssa,
+    hoist_loop_invariant_values::hoist_loop_invariant_values,
     infer_switches::infer_switches,
     legalize_memory_offsets::legalize_memory_offsets,
     lower_macros::lower_macros,
@@ -11,7 +12,7 @@ use crate::{
     move_constants::move_constants,
     procedure::Procedure,
     reduce_strength::reduce_strength,
-    OptLevel, hoist_loop_invariant_values::hoist_loop_invariant_values, 
+    OptLevel,
 };
 
 pub fn prepare_for_generation<'a>(proc: &'a mut Procedure) -> Code<'a> {
@@ -30,12 +31,11 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         hoist_loop_invariant_values(proc);
         // SCCP is quite expensive and untested pass. We do not run it by default.
         if proc.options.enable_sccp {
-            
             crate::sccp::sccp(proc);
         }
 
         // TODO: Should we run `fix_ssa` after or before `reduce_strength`?
-        // 
+        //
         // Running it before seems more beneficial because `reduce_strength`
         // can simplify SSA form and entirely remove some phi nodes.
 
@@ -44,14 +44,11 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
 
         // convet sequence of branches to switches when possible
         infer_switches(proc);
-
-        
     } else if proc.options.opt_level >= OptLevel::O1 {
         // Reduces strength in one pass.
         reduce_strength(proc);
     }
 
-    
     lower_macros(proc);
 
     legalize_memory_offsets(proc);
@@ -61,7 +58,7 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
     move_constants(proc);
     legalize_memory_offsets(proc);
     //eliminate_dead_code(proc);
-    
+
     if proc.options.estimate_static_execution_counts {
         // Estimate frequency of each basic block based on loop analysis.
         //
@@ -71,7 +68,6 @@ pub fn generate_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
         estimate_static_execution_counts(proc);
     }
 
-    
     let code = lower_to_air(proc);
     if code.proc.options.dump_air_at_each_phase {
         println!("AIR after lowering to AIR:");

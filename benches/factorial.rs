@@ -1,8 +1,6 @@
 use b3::{jit::reg::Reg, OptLevel};
-use cranelift::{
-    prelude::{
-        AbiParam, Configurable, FunctionBuilder, FunctionBuilderContext, InstBuilder, Variable,
-    },
+use cranelift::prelude::{
+    AbiParam, Configurable, FunctionBuilder, FunctionBuilderContext, InstBuilder, Variable,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use macroassembler::{assembler::TargetMacroAssembler, jit::gpr_info::ARGUMENT_GPR0};
@@ -154,7 +152,8 @@ fn clif_factorial(optimize: bool) {
             context.optimize(&*isa).unwrap();
             //context.compute_domtree();
 
-            isa.compile_function(&context.func, &context.domtree, true).unwrap()
+            isa.compile_function(&context.func, &context.domtree, true)
+                .unwrap()
         }
     };
 

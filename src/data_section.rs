@@ -4,7 +4,9 @@ pub struct DataSection {
 
 impl DataSection {
     pub fn new(size: usize) -> DataSection {
-        DataSection { data: vec![0; size] }
+        DataSection {
+            data: vec![0; size],
+        }
     }
 
     pub fn data(&self) -> &[u8] {

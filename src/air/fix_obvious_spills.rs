@@ -1,5 +1,8 @@
-
-use crate::{jit::reg::Reg, utils::{index_set::IndexMap, bitvector::BitVector}, width::Width};
+use crate::{
+    jit::reg::Reg,
+    utils::{bitvector::BitVector, index_set::IndexMap},
+    width::Width,
+};
 
 use super::{
     arg::{Arg, ArgKind, ArgRole},
@@ -24,7 +27,7 @@ struct FixObviousSpills<'a, 'b> {
     code: &'a mut Code<'b>,
     at_head: IndexMap<State, BasicBlockId>,
     state: State,
-    not_bottom:BitVector,
+    not_bottom: BitVector,
     should_visit: BitVector,
     block: Option<BasicBlockId>,
     inst_index: usize,
@@ -35,7 +38,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
         let not_bottom = BitVector::new();
         let should_visit = BitVector::new();
         let mut at_head = IndexMap::with_capacity(code.blocks.len());
-      
 
         for block in code.indices() {
             at_head.insert(block, State::new());
@@ -72,7 +74,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
 
             for block_index in 0..self.should_visit.len() {
                 if self.should_visit.get(block_index) {
-                    
                     self.should_visit.set(block_index, false);
                     debug_assert!(self.not_bottom.get(block_index));
                     self.block = Some(BasicBlockId(block_index));
@@ -92,7 +93,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                         if self.not_bottom.get(successor_index) {
                             let changed_at_successor_head = to_state.merge(&self.state);
                             if changed_at_successor_head {
-                                
                                 changed = true;
                                 self.should_visit.set(successor_index, true);
                             }
@@ -130,14 +130,13 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
         });
 
         if !should_live {
-           
             self.code.block_mut(self.block.unwrap()).insts[self.inst_index] = Inst::default();
             return;
         }
 
         match inst.kind.opcode {
             Opcode::Move => {
-                if false && inst.args[0].is_big_imm()
+                if inst.args[0].is_big_imm()
                     && inst.args[1].is_reg()
                     && is_valid_form(Opcode::Add64, &[ArgKind::Tmp, ArgKind::Tmp, ArgKind::Tmp])
                 {
@@ -166,8 +165,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                         }
                     }
                 }
-
-                
             }
 
             _ => (),
@@ -186,7 +183,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
 
         let handle_arg =
             |this: &Self, arg: &mut Arg, role: ArgRole, _, width: Width, did_things: &mut bool| {
-              
                 if !this.is_spill_slot(arg) {
                     return;
                 }
@@ -223,7 +219,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                         _ => return,
                     }
                 } else {
-                    
                 }
 
                 if let Some(alias) = this.state.get_slot_const(arg.stack_slot()) {
@@ -237,7 +232,6 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                     *did_things = true;
                     return;
                 } else {
-                    
                 }
             };
 
@@ -262,7 +256,7 @@ impl<'a, 'b> FixObviousSpills<'a, 'b> {
                 *arg = arg_copy;
             }
         });
-        
+
         self.code.block_mut(self.block.unwrap()).insts[self.inst_index] = inst;
     }
 
@@ -738,7 +732,6 @@ impl State {
         other: &[T],
         mut func: impl FnMut(&mut T, &T) -> bool,
     ) -> bool {
-        
         let old_size = own.len();
         own.retain_mut(|x| {
             let it = other.iter().find(|y| !(y < &&*x));
@@ -752,5 +745,3 @@ impl State {
         own.len() != old_size
     }
 }
-
-

@@ -202,7 +202,9 @@ impl Inst {
     }
 
     pub fn for_each_tmp_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Tmp)) {
-        self.for_each_arg_mut(code, |_, arg, _, _, _| arg.for_each_tmp_fast_mut(|tmp| f(tmp)))
+        self.for_each_arg_mut(code, |_, arg, _, _, _| {
+            arg.for_each_tmp_fast_mut(|tmp| f(tmp))
+        })
     }
 
     pub fn for_each_reg(&self, code: &Code<'_>, mut f: impl FnMut(Reg, ArgRole, Bank, Width)) {
@@ -230,7 +232,9 @@ impl Inst {
     }
 
     pub fn for_each_reg_fast_mut(&mut self, code: &mut Code<'_>, mut f: impl FnMut(&mut Reg)) {
-        self.for_each_arg_mut(code, |_, arg, _, _, _| arg.for_each_reg_fast_mut(|reg| f(reg)))
+        self.for_each_arg_mut(code, |_, arg, _, _, _| {
+            arg.for_each_reg_fast_mut(|reg| f(reg))
+        })
     }
 
     pub fn for_each_stack_slot(
@@ -359,17 +363,29 @@ impl Inst {
                 functor(Tmp::from_reg(reg), ArgRole::Def, bank, width, preserved64)
             };
 
-            prev_inst.extra_clobbered_regs(code).to_register_set().for_each_with_width_and_preserved(report_reg);
+            prev_inst
+                .extra_clobbered_regs(code)
+                .to_register_set()
+                .for_each_with_width_and_preserved(report_reg);
         }
 
         if let Some(next_inst) = next_inst.filter(|x| x.kind.opcode == Opcode::Patch) {
             let report_reg = |reg: Reg, width, preserved64: bool| {
                 let bank = if reg.is_gpr() { Bank::GP } else { Bank::FP };
 
-                functor(Tmp::from_reg(reg), ArgRole::EarlyDef, bank, width, preserved64)
+                functor(
+                    Tmp::from_reg(reg),
+                    ArgRole::EarlyDef,
+                    bank,
+                    width,
+                    preserved64,
+                )
             };
 
-            next_inst.extra_early_clobbered_regs(code).to_register_set().for_each_with_width_and_preserved(report_reg);
+            next_inst
+                .extra_early_clobbered_regs(code)
+                .to_register_set()
+                .for_each_with_width_and_preserved(report_reg);
         }
     }
 
@@ -383,11 +399,11 @@ impl Inst {
             | Opcode::Add64
             | Opcode::And32
             | Opcode::And64
-            | Opcode::Mul32 
+            | Opcode::Mul32
             | Opcode::Mul64
             | Opcode::Or32
             | Opcode::Or64
-            | Opcode::Xor32 
+            | Opcode::Xor32
             | Opcode::Xor64
             | Opcode::AndFloat
             | Opcode::AndDouble
@@ -399,11 +415,10 @@ impl Inst {
                     return Some(2);
                 }
 
-                return None; 
+                return None;
             }
 
-            Opcode::BranchAdd32
-            | Opcode::BranchAdd64 => {
+            Opcode::BranchAdd32 | Opcode::BranchAdd64 => {
                 if self.args.len() == 4 {
                     return Some(3);
                 }
@@ -419,8 +434,7 @@ impl Inst {
             | Opcode::MoveDoubleConditionally64
             | Opcode::MoveDoubleConditionallyTest32
             | Opcode::MoveDoubleConditionallyTest64
-            | Opcode::MoveDoubleConditionallyFloat
-             => {
+            | Opcode::MoveDoubleConditionallyFloat => {
                 if self.args.len() == 6 {
                     return Some(5);
                 }
@@ -430,7 +444,7 @@ impl Inst {
                 return None;
             }
 
-            _ => ()
+            _ => (),
         }
 
         None
@@ -477,4 +491,3 @@ impl std::fmt::Display for Inst {
         Ok(())
     }
 }
-

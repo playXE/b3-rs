@@ -3,17 +3,20 @@ use tinyvec::TinyVec;
 
 use crate::{
     air::{
-        arg::{Arg, ArgRole,},
+        arg::{Arg, ArgRole},
         code::Code,
+        generate::select_scratch_gpr_for_gpr,
         generation_context::GenerationContext,
         inst::Inst,
         kind::Kind,
-        opcode::Opcode as AirOpcode, generate::select_scratch_gpr_for_gpr,
+        opcode::Opcode as AirOpcode,
     },
     bank::Bank,
     opcode::Opcode,
+    stackmap_generation_params::StackmapGenerationParams,
     stackmap_special::{RoleMode, StackMapSpecial},
-    width::Width, ValueId, stackmap_generation_params::StackmapGenerationParams,
+    width::Width,
+    ValueId,
 };
 
 /// We want to lower Check instructions to a branch, but then we want to route that branch to our
@@ -50,11 +53,7 @@ impl CheckSpecial {
     }
 
     pub fn hidden_branch(&self, code: &Code<'_>, inst: &Inst) -> Inst {
-        let mut hidden_branch = Inst::new(
-            self.check_kind,
-            inst.origin,
-            &[]
-        );
+        let mut hidden_branch = Inst::new(self.check_kind, inst.origin, &[]);
 
         for i in 0..self.num_check_args {
             hidden_branch.args.push(inst.args[i + 1]);
@@ -81,11 +80,10 @@ impl CheckSpecial {
                     assert!(optional_def_arg_width.is_none(), "only one def arg allowed");
                     optional_def_arg_width = Some(width);
                 }
-                
+
                 lambda(index + 1, &inst.args[1 + index], role, bank, width);
             };
 
-        
         hidden.for_each_arg(code, hidden_lambda);
 
         let mut first_recoverable_index = None;
@@ -121,7 +119,7 @@ impl CheckSpecial {
                 assert!(optional_def_arg_width.is_none(), "only one def arg allowed");
                 optional_def_arg_width = Some(width);
             }
-            
+
             lambda(1 + index, &mut inst.args[1 + index], role, bank, width);
         });
 
@@ -210,7 +208,7 @@ impl CheckSpecial {
 
         let check_kind = self.check_kind;
         let num_check_args = self.num_check_args;
-        
+
         let origin = inst.origin;
         context.late_paths.push(Box::new(move |jit, context| {
             fail.link(jit);
@@ -221,7 +219,8 @@ impl CheckSpecial {
                     // this instruction happens not to be used (and requires unimplemented assembler instructions) in 32-bit
                     if cfg!(target_pointer_width = "64") {
                         if (num_check_args == 4 && args[1] == args[2] && args[2] == args[3])
-                        || (num_check_args == 3 && args[1] == args[2]) {
+                            || (num_check_args == 3 && args[1] == args[2])
+                        {
                             assert!(args[1].is_gpr());
 
                             let value_gpr = args[1].gpr();
@@ -234,12 +233,27 @@ impl CheckSpecial {
                             jit.pop_to_restore_gpr(scratch_gpr);
                         } else if num_check_args == 4 {
                             if args[1] == args[3] {
-                                Inst::new(AirOpcode::Sub32.into(), ValueId(usize::MAX), &[args[2], args[3]]).generate(jit, context);
+                                Inst::new(
+                                    AirOpcode::Sub32.into(),
+                                    ValueId(usize::MAX),
+                                    &[args[2], args[3]],
+                                )
+                                .generate(jit, context);
                             } else if args[2] == args[3] {
-                                Inst::new(AirOpcode::Sub32.into(), ValueId(usize::MAX), &[args[1], args[3]]).generate(jit, context);
+                                Inst::new(
+                                    AirOpcode::Sub32.into(),
+                                    ValueId(usize::MAX),
+                                    &[args[1], args[3]],
+                                )
+                                .generate(jit, context);
                             }
                         } else if num_check_args == 3 {
-                            Inst::new(AirOpcode::Sub32.into(), ValueId(usize::MAX), &[args[1], args[2]]).generate(jit, context);
+                            Inst::new(
+                                AirOpcode::Sub32.into(),
+                                ValueId(usize::MAX),
+                                &[args[1], args[2]],
+                            )
+                            .generate(jit, context);
                         }
                     } else {
                         unreachable!("Unreachable for current platform");
@@ -249,7 +263,8 @@ impl CheckSpecial {
                 AirOpcode::BranchAdd64 => {
                     if cfg!(target_pointer_width = "64") {
                         if (num_check_args == 4 && args[1] == args[2] && args[2] == args[3])
-                        || (num_check_args == 3 && args[1] == args[2]) {
+                            || (num_check_args == 3 && args[1] == args[2])
+                        {
                             assert!(args[1].is_gpr());
 
                             let value_gpr = args[1].gpr();
@@ -262,12 +277,27 @@ impl CheckSpecial {
                             jit.pop_to_restore_gpr(scratch_gpr);
                         } else if num_check_args == 4 {
                             if args[1] == args[3] {
-                                Inst::new(AirOpcode::Sub64.into(), ValueId(usize::MAX), &[args[2], args[3]]).generate(jit, context);
+                                Inst::new(
+                                    AirOpcode::Sub64.into(),
+                                    ValueId(usize::MAX),
+                                    &[args[2], args[3]],
+                                )
+                                .generate(jit, context);
                             } else if args[2] == args[3] {
-                                Inst::new(AirOpcode::Sub64.into(), ValueId(usize::MAX), &[args[1], args[3]]).generate(jit, context);
+                                Inst::new(
+                                    AirOpcode::Sub64.into(),
+                                    ValueId(usize::MAX),
+                                    &[args[1], args[3]],
+                                )
+                                .generate(jit, context);
                             }
                         } else if num_check_args == 3 {
-                            Inst::new(AirOpcode::Sub64.into(), ValueId(usize::MAX), &[args[1], args[2]]).generate(jit, context);
+                            Inst::new(
+                                AirOpcode::Sub64.into(),
+                                ValueId(usize::MAX),
+                                &[args[1], args[2]],
+                            )
+                            .generate(jit, context);
                         }
                     } else {
                         unreachable!("Unreachable for current platform");
@@ -275,22 +305,34 @@ impl CheckSpecial {
                 }
 
                 AirOpcode::BranchSub32 => {
-                    Inst::new(AirOpcode::Add32.into(), ValueId(usize::MAX), &[args[1], args[2]]).generate(jit, context);
+                    Inst::new(
+                        AirOpcode::Add32.into(),
+                        ValueId(usize::MAX),
+                        &[args[1], args[2]],
+                    )
+                    .generate(jit, context);
                 }
 
                 AirOpcode::BranchSub64 => {
-                    Inst::new(AirOpcode::Add64.into(), ValueId(usize::MAX), &[args[1], args[2]]).generate(jit, context);
+                    Inst::new(
+                        AirOpcode::Add64.into(),
+                        ValueId(usize::MAX),
+                        &[args[1], args[2]],
+                    )
+                    .generate(jit, context);
                 }
 
                 AirOpcode::BranchNeg32 => {
-                    Inst::new(AirOpcode::Neg32.into(), ValueId(usize::MAX), &[args[1]]).generate(jit, context);
+                    Inst::new(AirOpcode::Neg32.into(), ValueId(usize::MAX), &[args[1]])
+                        .generate(jit, context);
                 }
 
                 AirOpcode::BranchNeg64 => {
-                    Inst::new(AirOpcode::Neg64.into(), ValueId(usize::MAX), &[args[1]]).generate(jit, context);
+                    Inst::new(AirOpcode::Neg64.into(), ValueId(usize::MAX), &[args[1]])
+                        .generate(jit, context);
                 }
 
-                _ => ()
+                _ => (),
             }
 
             // Generate the handler
@@ -299,6 +341,6 @@ impl CheckSpecial {
             generator(jit, &mut params);
         }));
 
-        Jump::default()  // As far as Air thinks, we are not a terminal.
+        Jump::default() // As far as Air thinks, we are not a terminal.
     }
 }

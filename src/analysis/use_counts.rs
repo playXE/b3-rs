@@ -27,7 +27,7 @@ impl UseCounts {
                 continue;
             }
             children.truncate(0);
-            
+
             for child in proc.value(value).children.iter() {
                 counts[child.0].num_uses += 1;
                 children.push(*child);

@@ -221,7 +221,6 @@ pub enum Opcode {
     AtomicXchgSub,
     AtomicXchgXor,
 
-
     /// Atomically exchange a value with a memory location. Syntax:
     //
     /// @oldValue = AtomicXchg(@newValue, @ptr)
@@ -413,27 +412,25 @@ pub enum Opcode {
     /// This is a terminal that indicates that we will never get here.
     Oops,
 
-
     // Higher-level operations that are lowered to the above operations.
-    // They are used in `b3::module` pipeline for aggregate types & 
+    // They are used in `b3::module` pipeline for aggregate types &
     // connecting procedures.
-
-    /// Get procedure address. This is usually lowered to `Patchpoint`. 
+    /// Get procedure address. This is usually lowered to `Patchpoint`.
     /// Might be lowered to `Const64` if the procedure address is known already and linkage is `ImportStatic`.
     ProcedureAddr,
-        
+
     /// Get global address. This is lowered to `Patchpoint`.
-    /// 
-    /// Globals are stored in data-section. 
+    ///
+    /// Globals are stored in data-section.
     GlobalAddr,
 
     /// Allocates `N` bytes on the stack. This is eliminated when lowering, instead stack slots are allocated.
-    /// 
+    ///
     /// Should be used for variables and aggregate types.
-    Alloca, 
+    Alloca,
 
     /// Used to get the address of sub-fields of an aggregate type.
-    /// 
+    ///
     /// It performs address calculation only and does not access memory.
     GetElementPtr,
 
@@ -441,7 +438,7 @@ pub enum Opcode {
     TailCCall,
 
     /// Get parameter value. This is lowered to `Argument` or to `FramePointer` with `Load` if the parameter is passed on stack.
-    /// 
+    ///
     /// Exist to simplify emitting high-level code and to simplify inlining.
     Parameter,
 }
@@ -479,8 +476,6 @@ impl Opcode {
                 | Select
         )
     }
-
-    
 
     pub const fn is_check_math(self) -> bool {
         matches!(self, Self::CheckAdd | Self::CheckSub | Self::CheckMul)

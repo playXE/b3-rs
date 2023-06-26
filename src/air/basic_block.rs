@@ -2,9 +2,14 @@ use std::ops::{Deref, DerefMut};
 
 use tinyvec::TinyVec;
 
-use crate::{block::Frequency, sparse_collection::SparseElement, analysis::dominators::{PostOrderGraphNodeWorklist, GraphVisitOrder}, utils::index_set::KeyIndex};
+use crate::{
+    analysis::dominators::{GraphVisitOrder, PostOrderGraphNodeWorklist},
+    block::Frequency,
+    sparse_collection::SparseElement,
+    utils::index_set::KeyIndex,
+};
 
-use super::{inst::Inst, code::Code};
+use super::{code::Code, inst::Inst};
 
 pub struct BasicBlock {
     pub index: usize,

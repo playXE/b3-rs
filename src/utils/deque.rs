@@ -48,7 +48,7 @@ impl<T> VecDequeExt<T> for VecDeque<T> {
 
         None
     }
-    
+
     fn take_last(&mut self, mut func: impl FnMut(&T) -> bool) -> Option<T> {
         let mut count = 0;
         let len = self.len();
@@ -74,14 +74,12 @@ impl<T> VecDequeExt<T> for VecDeque<T> {
     }
 
     fn remove_first_matching(&mut self, mut func: impl FnMut(&T) -> bool) -> Option<T> {
-        let mut position = 0;
         
-        for item in self.iter() {
+
+        for (position, item) in self.iter().enumerate() {
             if func(item) {
                 return self.remove(position);
             }
-            
-            position += 1;
         }
 
         None
@@ -100,7 +98,7 @@ impl<T> VecDequeExt<T> for VecDeque<T> {
         }
 
         result
-    }   
+    }
     /// This is a priority enqueue. The callback is given a value, and if it returns true, then this
     /// will put the appended value before that value. It will keep bubbling until the callback returns
     /// false or the value ends up at the head of the queue.

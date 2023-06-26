@@ -9,14 +9,14 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use tinyvec::TinyVec;
 
-use crate::bank::Bank;
-use crate::jit::reg::Reg;
-use crate::jit::register_set::RegisterSet;
 use crate::analysis::liveness::IndexSparseSetEntry;
 use crate::analysis::liveness::Iterable;
 use crate::analysis::liveness::Liveness;
 use crate::analysis::liveness::LivenessAdapter;
 use crate::analysis::liveness::LocalCalc;
+use crate::bank::Bank;
+use crate::jit::reg::Reg;
+use crate::jit::register_set::RegisterSet;
 use crate::utils::bitvector::*;
 use crate::utils::interference_graph::*;
 use crate::width::bytes_for_width;
@@ -2366,7 +2366,6 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             } else {
                 AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp as usize)
             };
-           
 
             let index = if BANK == Bank::GP {
                 AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
@@ -2429,9 +2428,14 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                                     | Opcode::MoveFloat
                                     | Opcode::Move32 => {
                                         let other_arg_index = arg as *mut Arg as usize - args;
-                                        let other_arg_index = other_arg_index / std::mem::size_of::<Arg>();
+                                        let other_arg_index =
+                                            other_arg_index / std::mem::size_of::<Arg>();
                                         let other_arg_index = other_arg_index ^ 1;
-                                        if other_arg_index >= allocator.allocator.code.block(block)[inst_index].args.len() {
+                                        if other_arg_index
+                                            >= allocator.allocator.code.block(block)[inst_index]
+                                                .args
+                                                .len()
+                                        {
                                             return;
                                         }
                                         let other_arg = allocator.allocator.code.block(block)

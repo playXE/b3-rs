@@ -71,11 +71,11 @@ pub fn compute_division_magic(divisor: i32) -> DivisionMagic {
 
     let bit_width = 32;
     ad = if divisor < 0 {
-        (-divisor) as u32 
+        (-divisor) as u32
     } else {
         divisor as u32
     };
-    
+
     t = signed_min + (d >> (bit_width - 1));
     anc = t - 1 - t % ad; // absolute value of nc
     p = bit_width - 1; // initialize p
@@ -88,14 +88,16 @@ pub fn compute_division_magic(divisor: i32) -> DivisionMagic {
         p = p + 1;
         q1 = q1 << 1; // update q1 = 2p/|nc|
         r1 = r1 << 1; // update r1 = rem(2p/|nc|)
-        if r1 >= anc { // must be unsigned comparison
+        if r1 >= anc {
+            // must be unsigned comparison
             q1 = q1 + 1;
             r1 = r1 - anc;
         }
 
         q2 = q2 << 1; // update q2 = 2p/|d|
         r2 = r2 << 1; // update r2 = rem(2p/|d|)
-        if r2 >= ad { // must be unsigned comparison
+        if r2 >= ad {
+            // must be unsigned comparison
             q2 = q2 + 1;
             r2 = r2 - ad;
         }
@@ -108,10 +110,9 @@ pub fn compute_division_magic(divisor: i32) -> DivisionMagic {
             break;
         }
     }
-    
+
     mag.magic_multiplier = (q2 + 1) as i32;
     if divisor < 0 {
-        
         mag.magic_multiplier = -mag.magic_multiplier;
     }
 

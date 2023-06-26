@@ -16,6 +16,11 @@ pub struct LikelyDenseIntegerSet {
     min: u32,
 }
 
+impl Default for LikelyDenseIntegerSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl Drop for LikelyDenseIntegerSet {
     fn drop(&mut self) {
@@ -52,7 +57,7 @@ impl<'a> Iterator for Iter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.iter {
             IterVariant::BitVector(iter) => iter.next().map(|x| x as u32 + self.shift),
-            IterVariant::HashSet(iter) => iter.next().map(|x| *x),
+            IterVariant::HashSet(iter) => iter.next().copied(),
         }
     }
 }
@@ -173,13 +178,17 @@ impl LikelyDenseIntegerSet {
         let is_new_entry = !self.bitvector_mut().set(ix, true);
         debug_assert!(is_new_entry);
         self.max = new_max;
-        return true;
+        true
     }
 
     pub fn len(&self) -> usize {
         self.is_bitvector()
-            .then(|| self.size)
+            .then_some(self.size)
             .unwrap_or_else(|| self.hashset().len())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn iter(&self) -> Iter {
@@ -217,19 +226,19 @@ impl LikelyDenseIntegerSet {
     }
 
     fn bitvector(&self) -> &BitVector {
-        unsafe { &*self.u.bitvector }
+        unsafe { &self.u.bitvector }
     }
 
     fn bitvector_mut(&mut self) -> &mut BitVector {
-        unsafe { &mut *self.u.bitvector }
+        unsafe { &mut self.u.bitvector }
     }
 
     fn hashset(&self) -> &IndexSet<u32> {
-        unsafe { &*self.u.hashset }
+        unsafe { &self.u.hashset }
     }
 
     fn hashset_mut(&mut self) -> &mut IndexSet<u32> {
-        unsafe { &mut *self.u.hashset }
+        unsafe { &mut self.u.hashset }
     }
 
     fn transition_to_hash_set(&mut self) {

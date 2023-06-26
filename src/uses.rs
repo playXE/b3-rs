@@ -29,7 +29,7 @@ impl Uses {
                 continue;
             }
             children.truncate(0);
-            
+
             for child in proc.value(value).children.iter() {
                 counts[child.0].num_uses += 1;
                 counts[child.0].users.push(value);
@@ -46,7 +46,7 @@ impl Uses {
                 }
 
                 counts[child.0].num_using_instructions += 1;
-                
+
                 last = Some(child);
             }
         }

@@ -65,7 +65,7 @@ impl<'a> MoveConstants<'a> {
 
     /// FIXME: This thing seems to be broken? It makes produced code segfault. I can't figure out why
     /// as it segfaults only in large IR inputs and debugging those is painful.
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::overly_complex_bool_expr, clippy::ifs_same_cond)]
     fn hoist_constants(&mut self, filter: impl Fn(&Value) -> bool) {
         self.proc.dominators_or_compute();
         let dominators = self.proc.dominators().clone();

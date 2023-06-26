@@ -1,15 +1,18 @@
 use std::mem::size_of;
 
-use macroassembler::assembler::{TargetAssembler,TargetMacroAssembler};
+use macroassembler::assembler::{TargetAssembler, TargetMacroAssembler};
 
-use crate::{width::Width, bitmap};
+use crate::{bitmap, width::Width};
 
 use super::reg::Reg;
 /*
 pub type RegisterBitmap =
     BitMap<{ TargetAssembler::number_of_registers() + TargetAssembler::number_of_fp_registers() }>;
 */
-bitmap!(RegisterBitmap, TargetAssembler::number_of_registers() + TargetAssembler::number_of_fp_registers());
+bitmap!(
+    RegisterBitmap,
+    TargetAssembler::number_of_registers() + TargetAssembler::number_of_fp_registers()
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct RegisterSetBuilder {
@@ -43,7 +46,7 @@ impl RegisterSetBuilder {
     pub fn from_regs(set: &RegisterSet) -> Self {
         Self {
             bits: set.bits,
-            upper_bits: set.upper_bits
+            upper_bits: set.upper_bits,
         }
     }
 
@@ -120,7 +123,6 @@ impl RegisterSetBuilder {
         self.upper_bits.filter(&other.upper_bits);
         self
     }
-    
 
     pub fn filter_regs(&mut self, other: &RegisterSet) -> &mut Self {
         self.bits.filter(&other.bits);
@@ -177,10 +179,10 @@ impl RegisterSetBuilder {
     pub fn callee_saved_registers() -> RegisterSet {
         let mut result = RegisterSet::default();
 
-        #[cfg(target_arch="x86_64")]
+        #[cfg(target_arch = "x86_64")]
         {
             use macroassembler::assembler::x86assembler::r12;
-            use macroassembler::assembler::x86assembler::{ebx, r15, r14, r13, ebp};
+            use macroassembler::assembler::x86assembler::{ebp, ebx, r13, r14, r15};
             result.add(Reg::new_gpr(ebx), Width::W64);
             result.add(Reg::new_gpr(ebp), Width::W64);
             result.add(Reg::new_gpr(r12), Width::W64);
@@ -189,7 +191,7 @@ impl RegisterSetBuilder {
             result.add(Reg::new_gpr(r15), Width::W64);
         }
 
-        #[cfg(target_arch="riscv64gc")]
+        #[cfg(target_arch = "riscv64gc")]
         {
             use macroassembler::assembler::riscv64assembler::*;
 
@@ -212,14 +214,23 @@ impl RegisterSetBuilder {
     }
 
     pub fn build_and_validate(&self) -> RegisterSet {
-        RegisterSet { bits: self.bits, upper_bits: self.upper_bits }
+        RegisterSet {
+            bits: self.bits,
+            upper_bits: self.upper_bits,
+        }
     }
 
     pub fn stack_registers() -> RegisterSet {
         let mut result = RegisterSet::default();
 
-        result.add(Reg::new_gpr(TargetMacroAssembler::STACK_POINTER_REGISTER), Width::W64);
-        result.add(Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER), Width::W64);
+        result.add(
+            Reg::new_gpr(TargetMacroAssembler::STACK_POINTER_REGISTER),
+            Width::W64,
+        );
+        result.add(
+            Reg::new_gpr(TargetMacroAssembler::FRAME_POINTER_REGISTER),
+            Width::W64,
+        );
 
         result
     }
@@ -229,7 +240,7 @@ impl RegisterSetBuilder {
 
         result.exclude_regs(&Self::callee_saved_registers());
         result.exclude_regs(&Self::stack_registers());
-        
+
         result
     }
 }
@@ -312,8 +323,8 @@ impl RegisterSet {
             let preserved_width = self.upper_bits.get(index);
 
             f(reg, included_width, preserved_width);
-            false 
-        }); 
+            false
+        });
     }
     pub fn byte_size_of_set_registers(&self) -> usize {
         (self.bits.count() + self.upper_bits.count()) * size_of::<usize>()
@@ -365,9 +376,7 @@ impl RegisterSet {
     }
 
     pub fn build_scalar_register_set(&self) -> ScalarRegisterSet {
-        ScalarRegisterSet {
-            bits: self.bits,
-        }
+        ScalarRegisterSet { bits: self.bits }
     }
 
     pub fn is_empty(&self) -> bool {

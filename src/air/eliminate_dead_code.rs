@@ -184,8 +184,6 @@ pub fn eliminate_dead_code(code: &mut Code<'_>) -> bool {
 
         let mut removed_insts = 0;
 
-        
-
         for block in code2.blocks.iter_mut() {
             block.insts.retain(|inst| {
                 if is_inst_live(inst, &live_tmps, &live_stack_slots) {

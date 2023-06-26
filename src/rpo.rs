@@ -29,6 +29,7 @@ pub fn compute_rrpo(proc: &Procedure) -> Vec<BlockId> {
     po
 }
 
+#[allow(clippy::type_complexity)]
 fn compute_general_po(
     proc: &Procedure,
     splitter: impl Fn(
@@ -48,6 +49,7 @@ fn compute_general_po(
 
     mark_block(&mut stack, &mut already_pushed, proc, BlockId(0));
 
+    #[allow(clippy::type_complexity)]
     fn mark_block<'a>(
         stack: &mut Vec<((BlockId, Frequency), &'a [(BlockId, Frequency)])>,
         already_pushed: &mut [bool],
@@ -58,12 +60,13 @@ fn compute_general_po(
 
         stack.push(((bid, Frequency::Normal), successors));
         already_pushed[bid.0] = true;
-    }
+    }   
 
+    #[allow(clippy::type_complexity)]
     fn process_child<'a>(
         proc: &'a Procedure,
         stack: &mut Vec<((BlockId, Frequency), &'a [(BlockId, Frequency)])>,
-        already_pushed: &mut Vec<bool>,
+        already_pushed: &mut [bool],
         bid: (BlockId, Frequency),
         parent: ((BlockId, Frequency), &'a [(BlockId, Frequency)]),
     ) -> bool {

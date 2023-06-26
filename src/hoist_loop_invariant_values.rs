@@ -4,8 +4,8 @@ use std::{
 };
 
 use crate::{
-    blocks_in_pre_order,
     analysis::dominators::{BackwardsGraph, Dominators, SingleGraphNode},
+    blocks_in_pre_order,
     ensure_loop_pre_headers::ensure_loop_pre_headers,
     utils::RangeExt,
     BlockId, Procedure,
@@ -22,10 +22,8 @@ pub fn hoist_loop_invariant_values(proc: &mut Procedure) -> bool {
     proc.reset_value_owners();
     proc.dominators_or_compute();
     let dominators = proc.dominators().clone();
-    let proc2 = unsafe {
-        &mut *(proc as *mut Procedure as *mut Procedure)
-    };
-    
+    let proc2 = unsafe { &mut *(proc as *mut Procedure as *mut Procedure) };
+
     let backwards_dominators = {
         let backwards = BackwardsGraph::new(proc2);
         Dominators::new(&backwards)
@@ -158,7 +156,7 @@ pub fn hoist_loop_invariant_values(proc: &mut Procedure) -> bool {
                 {
                     continue;
                 }
-               
+
                 proc.block_mut(loop_data.pre_header.unwrap())
                     .append_non_terminal(value);
                 let nop = proc.add_nop();

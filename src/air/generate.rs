@@ -38,8 +38,7 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
 
         let num_tmps = code.num_tmps(Bank::GP) + code.num_tmps(Bank::FP);
 
-        let mut use_linear_scan = 
-            code.proc.options.opt_level <= OptLevel::O1
+        let mut use_linear_scan = code.proc.options.opt_level <= OptLevel::O1
             || num_tmps > code.proc.options.maximum_tmps_for_graph_coloring;
         if code.proc.options.air_force_linear_scan_allocator {
             use_linear_scan = true;
@@ -78,7 +77,7 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
-       
+
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
         // best order for blocks but aids in optimizations.
         optimize_block_order(code);

@@ -22,7 +22,7 @@ fn main() {
     let res3 = builder.binary(b3::Opcode::Add, res1, res2);
 
     builder.return_(Some(res3));
-    println!("{}", proc.display_());
+    println!("{}", proc.display());
     let code = b3::compile(proc);
 
     println!("{}", code.disassembly());

@@ -1,6 +1,8 @@
 use crate::value::ValueId;
 
-use super::{code::Code, insertion_set::InsertionSet, inst::Inst, opcode::Opcode, basic_block::BasicBlockId};
+use super::{
+    basic_block::BasicBlockId, code::Code, insertion_set::InsertionSet, inst::Inst, opcode::Opcode,
+};
 
 /// This isn't a phase - it's meant to be a utility that other phases use. Air reasons about liveness by
 /// reasoning about interference at boundaries between instructions. This is convenient because it works
@@ -17,7 +19,8 @@ pub fn pad_interference(code: &mut Code<'_>) {
         let block = &code.blocks[block_id];
         for inst_index in 1..block.insts.len() {
             if Inst::needs_padding(code, &block[inst_index - 1], &block[inst_index]) {
-                insertion_set.insert_inst(inst_index, Inst::new(Opcode::Nop.into(), ValueId(0), &[]));
+                insertion_set
+                    .insert_inst(inst_index, Inst::new(Opcode::Nop.into(), ValueId(0), &[]));
             }
         }
 

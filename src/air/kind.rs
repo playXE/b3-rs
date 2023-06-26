@@ -1,4 +1,4 @@
-use super::{opcode::Opcode, form_table::print_internal};
+use super::{form_table::print_internal, opcode::Opcode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Kind {
@@ -14,7 +14,7 @@ impl Default for Kind {
     fn default() -> Self {
         Self {
             opcode: Opcode::Oops,
-            effects: true
+            effects: true,
         }
     }
 }

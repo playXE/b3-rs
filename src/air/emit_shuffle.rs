@@ -340,9 +340,9 @@ pub fn emit_shuffle_for_bank(
     };
 
     let get_scratch = |result: &mut Vec<_>,
-                           scratches: &[Arg; 2],
-                           index: usize,
-                           possible_scratch|
+                       scratches: &[Arg; 2],
+                       index: usize,
+                       possible_scratch|
      -> Option<Tmp> {
         if scratches[index].is_tmp() {
             return Some(scratches[index].tmp());
@@ -371,9 +371,9 @@ pub fn emit_shuffle_for_bank(
     };
 
     let handle_shift_pair = |result: &mut Vec<Inst>,
-                                 scratches: &[Arg; 2],
-                                 pair: &ShufflePair,
-                                 scratch_index: usize| {
+                             scratches: &[Arg; 2],
+                             pair: &ShufflePair,
+                             scratch_index: usize| {
         let mov = move_for_width(pair.width);
 
         if !is_valid_form(mov, &[pair.src.kind(), pair.dst.kind()]) {
@@ -582,17 +582,16 @@ pub fn emit_shuffle_for_bank(
             handle_shift_pair(
                 &mut result,
                 &mut scratches,
-                &ShufflePair::new(rotate.loop_.last().unwrap().dst, rotate_save, rotate.loop_[0].width),
-                1
+                &ShufflePair::new(
+                    rotate.loop_.last().unwrap().dst,
+                    rotate_save,
+                    rotate.loop_[0].width,
+                ),
+                1,
             );
 
             for i in (1..rotate.loop_.len()).rev() {
-                handle_shift_pair(
-                    &mut result,
-                    &mut scratches,
-                    &rotate.loop_[i],
-                    0,
-                );
+                handle_shift_pair(&mut result, &mut scratches, &rotate.loop_[i], 0);
             }
 
             if let Some(scratch) = scratch {
@@ -615,7 +614,7 @@ pub fn emit_shuffle(
     pairs: &[ShufflePair],
     gp_scratch: [Arg; 2],
     fp_scratch: [Arg; 2],
-    origin: ValueId
+    origin: ValueId,
 ) -> Vec<Inst> {
     let mut gp_pairs = vec![];
     let mut fp_pairs = vec![];
@@ -628,13 +627,12 @@ pub fn emit_shuffle(
     }
 
     let mut result = vec![];
-    
+
     result.extend(emit_shuffle_for_bank(code, gp_pairs, gp_scratch, Bank::GP, origin).into_iter());
     result.extend(emit_shuffle_for_bank(code, fp_pairs, fp_scratch, Bank::FP, origin).into_iter());
 
     result
 }
-
 
 pub struct GraphNodeWorklist<Node: Copy + Clone + PartialEq + Eq + Hash> {
     seen: HashSet<Node>,

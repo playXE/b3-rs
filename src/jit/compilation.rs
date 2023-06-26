@@ -14,7 +14,11 @@ pub struct Compilation {
 }
 
 impl Compilation {
-    pub fn new(code_ref: CodeRef, byproducts: Vec<DataSection>, entrypoints: Vec<*const u8>) -> Self {
+    pub fn new(
+        code_ref: CodeRef,
+        byproducts: Vec<DataSection>,
+        entrypoints: Vec<*const u8>,
+    ) -> Self {
         Compilation {
             code_ref,
             byproducts: byproducts.into_iter().map(Arc::new).collect(),
@@ -37,13 +41,18 @@ impl Compilation {
     pub fn disassembly(&self) -> String {
         let mut out = String::new();
 
-        try_to_disassemble(
-            self.code_ref.start(),
-            self.code_ref.size_in_bytes(),
-            "  ",
-            &mut out,
-        )
-        .unwrap();
+        // SAFETY:
+        // `code_ref` is fully initialized
+        //
+        unsafe {
+            try_to_disassemble(
+                self.code_ref.start(),
+                self.code_ref.size_in_bytes(),
+                "  ",
+                &mut out,
+            )
+            .unwrap();
+        }
 
         out
     }

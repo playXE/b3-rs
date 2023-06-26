@@ -1,6 +1,6 @@
 use crate::{
-    block::BlockId,
     analysis::liveness::{Liveness, LivenessAdapter},
+    block::BlockId,
     opcode::Opcode,
     procedure::Procedure,
     variable::VariableId,

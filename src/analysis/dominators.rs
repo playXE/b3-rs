@@ -141,12 +141,11 @@ impl<'a, G: Graph> LengauerTarjan<'a, G> {
                 let next_successor_index = successor_index + 1;
 
                 if next_successor_index < self.graph.successors(block).len() {
-                  
                     worklist.force_push(block, next_successor_index);
                 }
 
                 let successor_block = self.graph.successors(block)[successor_index];
-              
+
                 if worklist.push(successor_block, 0) {
                     self.data.get_mut(&successor_block).unwrap().parent = Some(block);
                 }

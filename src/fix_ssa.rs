@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
+    analysis::liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
+    analysis::variable_liveness::{VariableLiveness, VariableLivenessAdapter},
     block::{blocks_in_pre_order, BlockId},
     break_critical_edges::break_critical_edges,
     insertion_set::InsertionSet,
-    analysis::liveness::{IndexSparseSet, LiveAtHeadCloned, LocalCalc},
     opcode::Opcode,
     procedure::Procedure,
     ssa_calculator::SSACalculator,
@@ -15,7 +16,6 @@ use crate::{
     },
     value::{NumChildren, Value, ValueData, ValueId},
     variable::VariableId,
-    analysis::variable_liveness::{VariableLiveness, VariableLivenessAdapter},
 };
 
 /// Turns all mentions of the given values into accesses to variables. This is meant to be used
@@ -164,7 +164,6 @@ pub fn fix_ssa(proc: &mut Procedure) -> bool {
         if proc.variables.is_empty() {
             return false;
         }
-        
 
         break_critical_edges(proc);
         fix_ssa_globally(proc);

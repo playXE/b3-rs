@@ -4,7 +4,10 @@ use tinyvec::TinyVec;
 
 use super::{basic_block::*, code::*};
 
-use crate::{block::Frequency, analysis::dominators::GraphNodeWorklist, sparse_collection::SparseElement, air::opcode::Opcode};
+use crate::{
+    air::opcode::Opcode, analysis::dominators::GraphNodeWorklist, block::Frequency,
+    sparse_collection::SparseElement,
+};
 
 /// Compute the Block post-order for a Code. In the returned Vec a BasicBlockId will
 /// appear after all of its successors.
@@ -144,7 +147,7 @@ impl SortedSuccessors {
 
         // Pushing the successors in ascending order of frequency ensures that the very next block we visit
         // is our highest-frequency successor (unless that successor has already been visited).
-        
+
         for i in 0..self.successors.len() {
             worklist.push(self.successors[i]);
         }
@@ -198,7 +201,6 @@ pub fn blocks_in_optimized_order(code: &Code) -> Vec<BasicBlockId> {
     sorted_slow_successors.process(code, &mut slow_worklist);
 
     while let Some(block) = slow_worklist.pop() {
-        
         if fast_worklist.saw(block) {
             continue;
         }
@@ -222,7 +224,7 @@ pub fn blocks_in_optimized_order(code: &Code) -> Vec<BasicBlockId> {
 /// taken edge is just a fall-through.
 pub fn optimize_block_order(code: &mut Code) {
     let blocks_in_order = blocks_in_optimized_order(code);
-    
+
     let remap = order_to_remap(&blocks_in_order, code.blocks.len());
 
     // Update successor edges for surviving blocks to use the new BlockIds.
@@ -252,7 +254,6 @@ pub fn optimize_block_order(code: &mut Code) {
         block.index = i;
     }
 
-   
     assert_eq!(code.blocks.len(), blocks_in_order.len());
     code.reset_reachability();
     // Finally, flip any branches that we recognize. It's most optimal if the taken successor does not point
@@ -268,11 +269,11 @@ pub fn optimize_block_order(code: &mut Code) {
         // forget about this phase, then at worst your new instructions won't opt into the inversion
         // optimization.  You'll probably realize that as soon as you look at the disassembly, and it
         // certainly won't cause any correctness issues.
-        
+
         match code.block(block).insts.last().unwrap().kind.opcode {
-            Opcode::Branch8 
+            Opcode::Branch8
             | Opcode::Branch32
-            | Opcode::Branch64 
+            | Opcode::Branch64
             | Opcode::BranchTest8
             | Opcode::BranchTest32
             | Opcode::BranchTest64
@@ -285,20 +286,19 @@ pub fn optimize_block_order(code: &mut Code) {
             | Opcode::BranchMul32
             | Opcode::BranchMul64
             | Opcode::BranchNeg32
-            | Opcode::BranchNeg64
-            => {
-
+            | Opcode::BranchNeg64 => {
                 let arg = code.block(block).insts.last().unwrap().args[0];
-                if code.find_next_block_index(block.0) == Some(code.block(block).successors[0].0.0) && arg.is_invertible() {
+                if code.find_next_block_index(block.0) == Some(code.block(block).successors[0].0 .0)
+                    && arg.is_invertible()
+                {
                     let mut inst = code.block_mut(block).insts.pop().unwrap();
                     inst.args[0] = arg.inverted(true);
                     code.block_mut(block).insts.push(inst);
                     code.block_mut(block).successors.swap(0, 1);
-                   
-                } 
+                }
             }
 
-            _ => ()
+            _ => (),
         }
     }
 }

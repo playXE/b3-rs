@@ -230,7 +230,7 @@ impl BfJIT {
                     builder.branch(cond, body, (end, Frequency::Normal));
                     jumps_to_end.push((start, end));
 
-                    builder = BasicBlockBuilder::new( &mut proc, body);
+                    builder = BasicBlockBuilder::new(&mut proc, body);
                 }
 
                 Token::LoopEnd => {
@@ -300,7 +300,6 @@ use std::path::PathBuf;
 fn parse_path(s: &OsStr) -> Result<PathBuf, &'static str> {
     Ok(s.into())
 }
-
 
 fn main() {
     let mut args = pico_args::Arguments::from_env();

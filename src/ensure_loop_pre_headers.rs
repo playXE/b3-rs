@@ -1,7 +1,6 @@
 use tinyvec::TinyVec;
 
-use crate::{Procedure, BlockId, Frequency, rpo::rpo_sort};
-
+use crate::{rpo::rpo_sort, BlockId, Frequency, Procedure};
 
 /// Creates a pre-header for any loop that don't already have one. A loop has a pre-header if its header has
 /// exactly one predecessor that isn't in the loop body. If a loop header has more than one out-of-body
@@ -31,12 +30,15 @@ pub fn ensure_loop_pre_headers(proc: &mut Procedure) -> bool {
 
         let jmp = proc.add_jump();
         proc.add_to_block(pre_header, jmp);
-        proc.successors_mut(pre_header).push((loop_.header(), Frequency::Normal));
+        proc.successors_mut(pre_header)
+            .push((loop_.header(), Frequency::Normal));
 
         for predecessor in out_of_body_predecessors {
-            proc.block_mut(predecessor).replace_successor(loop_.header(), pre_header);
+            proc.block_mut(predecessor)
+                .replace_successor(loop_.header(), pre_header);
             proc.block_mut(pre_header).add_predecessor(predecessor);
-            proc.block_mut(loop_.header()).remove_predecessor(predecessor);
+            proc.block_mut(loop_.header())
+                .remove_predecessor(predecessor);
         }
 
         proc.block_mut(loop_.header()).add_predecessor(pre_header);

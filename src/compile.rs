@@ -21,7 +21,8 @@ pub fn compile(mut proc: Procedure) -> Compilation {
         super::generate::generate(&mut air, &mut jit);
         let entrypoint_labels = std::mem::take(&mut air.entrypoint_labels);
 
-        let mut link_buffer = LinkBuffer::from_macro_assembler(&mut jit).expect("failed to create link buffer");
+        let mut link_buffer =
+            LinkBuffer::from_macro_assembler(&mut jit).expect("failed to create link buffer");
 
         entrypoints.resize(entrypoint_labels.len(), std::ptr::null());
 

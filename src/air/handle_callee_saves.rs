@@ -36,7 +36,6 @@ pub fn handle_callee_saves(code: &mut Code<'_>) {
     for block in code.blocks.iter() {
         for inst in block.insts.iter() {
             inst.for_each_tmp_fast(code, |tmp| {
-                
                 used_callee_saves.add(tmp.reg(), tmp.reg().conservative_width_without_vectors());
             });
 

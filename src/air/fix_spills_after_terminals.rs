@@ -23,7 +23,7 @@ pub fn fix_spills_after_terminals(code: &mut Code<'_>) {
     for block_id in (0..code.blocks.len()).map(BasicBlockId) {
         let mut terminal_index = code.block(block_id).len();
         let mut found_terminal = false;
-        
+
         while terminal_index > 0 {
             terminal_index -= 1;
 

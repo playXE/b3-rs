@@ -33,7 +33,7 @@ impl InsertionSet {
 
     pub fn execute(&mut self, code: &mut Code<'_>, block: BasicBlockId) {
         self.insertions.sort();
-        
+
         execute_insertions(&mut code.block_mut(block).insts, &mut self.insertions);
         code.block_mut(block).retain(|x| x.index != usize::MAX);
         self.insertions.clear();

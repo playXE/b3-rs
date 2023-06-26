@@ -89,7 +89,7 @@ pub fn execute_insertions<TargetType: Default>(
         } {
             target[i] = std::mem::take(&mut target[i - index_offset]);
         }
-        
+
         target[first_index] = std::mem::take(insertions[index_in_insertion].element_mut());
         last_index = first_index;
     }

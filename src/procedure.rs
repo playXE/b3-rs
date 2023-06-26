@@ -8,21 +8,27 @@ use crate::{
         special::{Special, SpecialId},
         stack_slot::{StackSlot, StackSlotId, StackSlotKind},
     },
+    analysis::dominators::{Dominators, Graph},
+    analysis::natural_loops::NaturalLoops,
     block::{is_block_dead, recompute_predecessors, BasicBlock, BlockId, FrequentBlock},
     data_section::DataSection,
-    analysis::dominators::{Dominators, Graph},
     effects::Effects,
-    jit::{reg::Reg, register_set::{RegisterSetBuilder, ScalarRegisterSet}},
+    jit::{
+        reg::Reg,
+        register_set::{RegisterSetBuilder, ScalarRegisterSet},
+    },
     kind::Kind,
-    analysis::natural_loops::NaturalLoops,
     opcode::Opcode,
+    patchpoint_value::PatchpointValue,
     rpo::rpo_sort,
     sparse_collection::SparseCollection,
     stackmap_generation_params::StackmapGenerationParams,
+    stackmap_value::StackMapValue,
     typ::{Type, TypeKind},
+    utils::index_set::KeyIndex,
     value::{NumChildren, Value, ValueData, ValueId},
     variable::{Variable, VariableId},
-    ConstrainedValue, ValueRep, ValueRepKind, patchpoint_value::PatchpointValue, stackmap_value::StackMapValue, utils::index_set::KeyIndex,
+    ConstrainedValue, ValueRep, ValueRepKind,
 };
 use crate::{Frequency, Options};
 pub struct Procedure {
@@ -164,7 +170,7 @@ impl Procedure {
     }
 
     pub fn value(&self, id: ValueId) -> &Value {
-        self.values.at(id).expect(&format!("{:?} not found", id))
+        self.values.at(id).unwrap_or_else(|| panic!("{:?} not found", id))
     }
 
     pub fn value_mut(&mut self, id: ValueId) -> &mut Value {
@@ -546,8 +552,8 @@ impl Procedure {
         ))
     }
 
-    pub fn display_(&self) -> ProcedureDisplay<'_> {
-        ProcedureDisplay { procedure: &self }
+    pub fn display(&self) -> ProcedureDisplay<'_> {
+        ProcedureDisplay { procedure: self }
     }
 
     pub fn add_jump(&mut self) -> ValueId {
@@ -687,7 +693,7 @@ impl Procedure {
             .unwrap()
             .result_constraints[0]
     }
-
+    #[allow(clippy::type_complexity)]
     /// Set generator for stackmap
     pub fn stackmap_set_generator(
         &mut self,
@@ -789,9 +795,7 @@ impl Procedure {
             }),
         );
 
-        let value = self.add(value);
-        
-        value
+        self.add(value)
     }
 }
 

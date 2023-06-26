@@ -10,14 +10,14 @@ use crate::{
 };
 
 /// This is a parameters for the stackmap generation. It is passed to generator callback.
-/// 
+///
 /// The following data is passed to the generator callback:
 /// - Scratch registers if number of scratch registers is not zero.
 /// - Used registers (when `proc.set_needs_used_registers(true)` is called).
 /// - Successor labels.
 /// - Is it possible to fallthrough to the next successor or not.
 /// - Value representation of appended values.
-/// 
+///
 // NOTE: It's possible to capture StackmapGenerationParams by value, but not all of the methods will
 // work if you do that.
 pub struct StackmapGenerationParams<'a, 'b, 'c> {
@@ -43,6 +43,7 @@ impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn add_late_path(
         &mut self,
         path: Box<dyn FnOnce(&mut TargetMacroAssembler, &mut GenerationContext)>,
@@ -142,15 +143,15 @@ impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
     }
 
     pub fn code(&self) -> &Code<'_> {
-        &self.context.code
+        self.context.code
     }
 
     pub fn proc(&self) -> &Procedure {
-        &self.context.code.proc
+        self.context.code.proc
     }
 
     pub fn proc_mut(&mut self) -> &mut Procedure {
-        &mut self.context.code.proc
+        self.context.code.proc
     }
 
     pub fn size(&self) -> usize {

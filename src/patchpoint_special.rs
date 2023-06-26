@@ -66,7 +66,7 @@ impl PatchpointSpecial {
             inst,
             RoleMode::SameAsRep,
             None,
-            |ix, arg, role, bank, width| lambda(ix, &arg, role, bank, width),
+            |ix, arg, role, bank, width| lambda(ix, arg, role, bank, width),
             None,
             code,
         );

@@ -47,6 +47,7 @@ name = "b3"
 version = "0.1.0"
 dependencies = [
  "cfg-if",
+ "cool-bitvector",
  "cranelift",
  "cranelift-jit",
  "cranelift-module",
@@ -154,6 +155,12 @@ checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
 dependencies = [
  "os_str_bytes",
 ]
+
+[[package]]
+name = "cool-bitvector"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c983c7bfd1fe9e4fd9aa69757725fcb61b0af26cbbb6684885adf6f74a117448"
 
 [[package]]
 name = "cranelift"

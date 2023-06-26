@@ -1,3 +1,4 @@
+#![allow(clippy::needless_return, clippy::needless_late_init)]
 use std::collections::HashMap;
 
 use crate::air;
@@ -1861,7 +1862,7 @@ impl<'a> LowerToAir<'a> {
                             return None;
                         }
 
-                        if let Some(right_imm) = right_imm.clone() {
+                        if let Some(right_imm) = right_imm {
                             let mut leftp = this.load_promise(
                                 left,
                                 load_opcode,
@@ -1879,7 +1880,7 @@ impl<'a> LowerToAir<'a> {
                             }
                         }
 
-                        if let Some(right_imm64) = right_imm64.clone() {
+                        if let Some(right_imm64) = right_imm64 {
                             let mut leftp = this.load_promise(
                                 left,
                                 load_opcode,
@@ -1993,7 +1994,7 @@ impl<'a> LowerToAir<'a> {
                                 this,
                                 Width::W32,
                                 &mut leftp,
-                                &mut ArgPromise::new(right_imm.clone().unwrap(), None),
+                                &mut ArgPromise::new(right_imm.unwrap(), None),
                             ) {
                                 return Some(result);
                             }
@@ -2002,7 +2003,7 @@ impl<'a> LowerToAir<'a> {
                                 this,
                                 Width::W32,
                                 &mut leftp,
-                                &mut ArgPromise::new(right_imm64.clone().unwrap(), None),
+                                &mut ArgPromise::new(right_imm64.unwrap(), None),
                             ) {
                                 return Some(result);
                             }
@@ -2014,7 +2015,7 @@ impl<'a> LowerToAir<'a> {
                             this,
                             width,
                             &mut leftp,
-                            &mut ArgPromise::new(right_imm.clone().unwrap(), None),
+                            &mut ArgPromise::new(right_imm.unwrap(), None),
                         ) {
                             return Some(result);
                         }
@@ -2023,7 +2024,7 @@ impl<'a> LowerToAir<'a> {
                             this,
                             width,
                             &mut leftp,
-                            &mut ArgPromise::new(right_imm64.clone().unwrap(), None),
+                            &mut ArgPromise::new(right_imm64.unwrap(), None),
                         ) {
                             return Some(result);
                         }
@@ -3783,7 +3784,7 @@ impl<'a> LowerToAir<'a> {
     }
 
     fn value(&self, value: ValueId) -> &Value {
-        &self.code.proc.value(value)
+        self.code.proc.value(value)
     }
 
     fn value_mut(&mut self, value: ValueId) -> &mut Value {
@@ -3791,7 +3792,7 @@ impl<'a> LowerToAir<'a> {
     }
 
     fn child(&self, value: ValueId, index: usize) -> &Value {
-        &self.code.proc.value(self.value(value).children[index])
+        self.code.proc.value(self.value(value).children[index])
     }
 
     fn child_mut(&mut self, value: ValueId, index: usize) -> &mut Value {
@@ -3839,8 +3840,7 @@ impl ArgPromise {
     }
 
     pub fn tmp(&self) -> Self {
-        let result = Self::new(Arg::default(), self.value);
-        result
+        Self::new(Arg::default(), self.value)
     }
 
     pub fn is_set(&self) -> bool {
@@ -3862,7 +3862,7 @@ impl ArgPromise {
         } else {
             lower.commit_internal(self.value);
 
-            self.arg.clone()
+            self.arg
         }
     }
 

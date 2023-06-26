@@ -1,4 +1,4 @@
-use std::hash::{Hash, Hasher};
+/*use std::hash::{Hash, Hasher};
 
 /// This is a space-efficient, resizeable bitvector class. In the common case it
 /// occupies one word, but if necessary, it will inflate this one word to point
@@ -662,3 +662,5 @@ impl<'a> ExactSizeIterator for BitVectorIter<'a> {
         self.bit_vector.bit_count()
     }
 }
+*/
+pub use cool_bitvector::*;

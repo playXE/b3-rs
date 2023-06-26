@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 use std::{collections::HashMap, mem::size_of};
 
 use crate::{
@@ -149,7 +150,7 @@ impl<'a> MoveConstants<'a> {
                         let nop = self.proc.add_nop();
                         self.proc.block_mut(block)[i] = nop;
                     } else {
-                        Value::replace_with_nop_ignoring_type(&mut self.proc.value_mut(value));
+                        Value::replace_with_nop_ignoring_type(self.proc.value_mut(value));
                     }
                 }
             }
@@ -204,7 +205,7 @@ impl<'a> MoveConstants<'a> {
                 if false && self.proc.value_mut(value).memory_value().is_some() {
                     let pointer = self.proc.value(value).children.last().copied().unwrap();
 
-                    if self.proc.value(pointer).has_int64() && filter(&self.proc.value(pointer)) {
+                    if self.proc.value(pointer).has_int64() && filter(self.proc.value(pointer)) {
                         let desired_offset = |this: &Self, other_pointer: &Value| -> usize {
                             // We would turn this:
                             //
@@ -232,9 +233,8 @@ impl<'a> MoveConstants<'a> {
                             let candidate_offset =
                                 desired_offset(this, this.proc.value(candidate_pointer));
 
-                            let is_legal = candidate_offset as i32 as usize == candidate_offset
-                                && is_legal_offset(candidate_offset as _);
-                            is_legal
+                            candidate_offset as i32 as usize == candidate_offset
+                                && is_legal_offset(candidate_offset as _)
                         });
 
                         if let Some(best_pointer) = best_pointer {
@@ -302,7 +302,7 @@ impl<'a> MoveConstants<'a> {
             // We may have some constants that need to be materialized right at the end of this
             // block.
             for value in materializations[block].iter().copied() {
-                if self.proc.value(value).owner == None {
+                if self.proc.value(value).owner.is_none() {
                     continue;
                 }
 
@@ -310,7 +310,7 @@ impl<'a> MoveConstants<'a> {
                     .insert_value(self.proc.block(block).len() - 1, value);
             }
 
-            self.insertion_set.execute(&mut self.proc, block);
+            self.insertion_set.execute(self.proc, block);
         }
     }
 
@@ -410,7 +410,7 @@ impl<'a> MoveConstants<'a> {
                 }
             }
 
-            self.insertion_set.execute(&mut self.proc, block);
+            self.insertion_set.execute(self.proc, block);
         }
 
         for block in (0..self.proc.blocks.len()).map(BlockId) {
@@ -449,7 +449,7 @@ impl<'a> MoveConstants<'a> {
                 self.proc.value_mut(value).replace_with_identity(result);
             }
 
-            self.insertion_set.execute(&mut self.proc, block);
+            self.insertion_set.execute(self.proc, block);
         }
     }
 }

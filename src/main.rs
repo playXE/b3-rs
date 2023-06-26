@@ -23,7 +23,5 @@ fn main() {
 
     builder.return_(Some(res3));
     println!("{}", proc.display());
-    let code = b3::compile(proc);
-
-    println!("{}", code.disassembly());
+    b3::prepare_for_generation(&mut proc);
 }

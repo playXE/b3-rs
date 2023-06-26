@@ -538,7 +538,7 @@ end
 
 writeH("opcode") {
     | outp |
-    outp.puts "#[repr(i16)] #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)] #[derive(std::marker::ConstParamTy)] pub enum Opcode {"
+    outp.puts "#[repr(i16)] #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)] pub enum Opcode {"
     $opcodes.keys.each {
         | opcode |
         outp.puts "    #{opcode},"
@@ -546,7 +546,6 @@ writeH("opcode") {
     outp.puts "}"
 
     outp.puts "pub const NUM_OPCODES: usize = #{$opcodes.keys.size};"
-
 }
 
 # From here on, we don't try to emit properly indented code, since we're using a recursive pattern

@@ -7,7 +7,7 @@ use crate::air::form_table::{is_valid_form, is_x86};
 use crate::air::helpers::{move_for_type, relaxed_move_for_type};
 use crate::air::insertion_set::InsertionSet;
 use crate::air::kind::Kind;
-use crate::air::opcode::Opcode as AirOpcode;
+use crate::air::opcode::{Opcode as AirOpcode, NUM_OPCODES};
 use crate::air::special::{Special, SpecialId, SpecialKind};
 use crate::bank::Bank;
 use crate::block::{blocks_in_pre_order, Frequency};
@@ -55,6 +55,12 @@ pub fn lower_to_air<'a>(proc: &'a mut Procedure) -> Code<'a> {
 
         lower_to_air.code
     })
+}
+
+const fn opcode_from_i16(i: i16) -> AirOpcode {
+    assert!((i as usize) < NUM_OPCODES);
+
+    unsafe { std::mem::transmute::<i16, AirOpcode>(i) }
 }
 
 macro_rules! opcode_for_width {
@@ -655,19 +661,19 @@ impl<'a> LowerToAir<'a> {
     }
 
     fn append_un_op<
-        const OPCODE32: AirOpcode,
-        const OPCODE64: AirOpcode,
-        const OPCODE_FLOAT: AirOpcode,
-        const OPCODE_DOUBLE: AirOpcode,
+        const OPCODE32: i16,
+        const OPCODE64: i16,
+        const OPCODE_FLOAT: i16,
+        const OPCODE_DOUBLE: i16,
     >(
         &mut self,
         value: ValueId,
     ) {
         let opcode = self.try_opcode_for_type(
-            OPCODE32,
-            OPCODE64,
-            OPCODE_DOUBLE,
-            OPCODE_FLOAT,
+            opcode_from_i16(OPCODE32),
+            opcode_from_i16(OPCODE64),
+            opcode_from_i16(OPCODE_DOUBLE),
+            opcode_from_i16(OPCODE_FLOAT),
             self.value(value).typ(),
         );
 
@@ -802,10 +808,10 @@ impl<'a> LowerToAir<'a> {
     }
 
     fn append_bin_op<
-        const OPCODE32: AirOpcode,
-        const OPCODE64: AirOpcode,
-        const OPCODE_FLOAT: AirOpcode,
-        const OPCODE_DOUBLE: AirOpcode,
+        const OPCODE32: i16,
+        const OPCODE64: i16,
+        const OPCODE_FLOAT: i16,
+        const OPCODE_DOUBLE: i16,
         const NOT_COMMUTATIVE: bool,
     >(
         &mut self,
@@ -813,10 +819,10 @@ impl<'a> LowerToAir<'a> {
         right: ValueId,
     ) {
         let opcode = self.try_opcode_for_type(
-            OPCODE32,
-            OPCODE64,
-            OPCODE_DOUBLE,
-            OPCODE_FLOAT,
+            opcode_from_i16(OPCODE32),
+            opcode_from_i16(OPCODE64),
+            opcode_from_i16(OPCODE_DOUBLE),
+            opcode_from_i16(OPCODE_FLOAT),
             self.value(left).typ(),
         );
         assert_ne!(opcode, AirOpcode::Oops);
@@ -1034,26 +1040,22 @@ impl<'a> LowerToAir<'a> {
         self.append(opcode, &[Arg::new_tmp(right), Arg::new_tmp(result)]);
     }
 
-    fn append_bin_op_int<
-        const OPCODE32: AirOpcode,
-        const OPCODE64: AirOpcode,
-        const NOT_COMMUTATIVE: bool,
-    >(
+    fn append_bin_op_int<const OPCODE32: i16, const OPCODE64: i16, const NOT_COMMUTATIVE: bool>(
         &mut self,
         left: ValueId,
         right: ValueId,
     ) {
-        self.append_bin_op::<OPCODE32, OPCODE64, { AirOpcode::Oops }, { AirOpcode::Oops }, NOT_COMMUTATIVE>(left, right)
+        self.append_bin_op::<OPCODE32, OPCODE64, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, NOT_COMMUTATIVE>(left, right)
     }
 
-    fn append_shift<const OPCODE32: AirOpcode, const OPCODE64: AirOpcode>(
+    fn append_shift<const OPCODE32: i16, const OPCODE64: i16>(
         &mut self,
         value: ValueId,
         amount: ValueId,
     ) {
         let opcode = self.try_opcode_for_type(
-            OPCODE32,
-            OPCODE64,
+            opcode_from_i16(OPCODE32),
+            opcode_from_i16(OPCODE64),
             AirOpcode::Oops,
             AirOpcode::Oops,
             self.value(value).typ(),
@@ -1129,13 +1131,13 @@ impl<'a> LowerToAir<'a> {
         inst
     }
 
-    fn try_append_store_unop<const OPCODE32: AirOpcode, const OPCODE64: AirOpcode>(
+    fn try_append_store_unop<const OPCODE32: i16, const OPCODE64: i16>(
         &mut self,
         value: ValueId,
     ) -> bool {
         let opcode = self.try_opcode_for_type(
-            OPCODE32,
-            OPCODE64,
+            opcode_from_i16(OPCODE32),
+            opcode_from_i16(OPCODE64),
             AirOpcode::Oops,
             AirOpcode::Oops,
             self.value(value).typ(),
@@ -1170,8 +1172,8 @@ impl<'a> LowerToAir<'a> {
     }
 
     fn try_append_store_binop<
-        const OPCODE32: AirOpcode,
-        const OPCODE64: AirOpcode,
+        const OPCODE32: i16,
+        const OPCODE64: i16,
         const NOT_COMMUTATIVE: bool,
     >(
         &mut self,
@@ -1181,8 +1183,8 @@ impl<'a> LowerToAir<'a> {
         assert!(self.value(self.value).memory_value().is_some());
 
         let opcode = self.try_opcode_for_type(
-            OPCODE32,
-            OPCODE64,
+            opcode_from_i16(OPCODE32),
+            opcode_from_i16(OPCODE64),
             AirOpcode::Oops,
             AirOpcode::Oops,
             self.value(left).typ(),
@@ -2921,25 +2923,25 @@ impl<'a> LowerToAir<'a> {
 
                 let left = self.value(self.value).children[0];
                 let right = self.value(self.value).children[1];
-                self.append_bin_op::<{ AirOpcode::Add32 }, { AirOpcode::Add64}, { AirOpcode::AddFloat }, { AirOpcode::AddDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Add32 as i16 }, { AirOpcode::Add64 as i16 }, { AirOpcode::AddFloat as i16 }, { AirOpcode::AddDouble as i16 }, false>(left, right);
             }
 
             Opcode::Sub => {
                 let left = self.value(self.value).children[0];
                 let right = self.value(self.value).children[1];
-                self.append_bin_op::<{ AirOpcode::Sub32 }, { AirOpcode::Sub64}, { AirOpcode::SubFloat }, { AirOpcode::SubDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Sub32 as i16 }, { AirOpcode::Sub64 as i16 }, { AirOpcode::SubFloat as i16 }, { AirOpcode::SubDouble as i16 }, false>(left, right);
             }
 
             Opcode::Neg => {
                 let child = self.value(self.value).children[0];
 
-                self.append_un_op::<{ AirOpcode::Neg32 }, { AirOpcode::Neg64}, { AirOpcode::NegateFloat }, { AirOpcode::NegateDouble }>(child);
+                self.append_un_op::<{ AirOpcode::Neg32 as i16 }, { AirOpcode::Neg64 as i16 }, { AirOpcode::NegateFloat as i16 }, { AirOpcode::NegateDouble as i16 }>(child);
             }
 
             Opcode::Mul => {
                 let left = self.value(self.value).children[0];
                 let right = self.value(self.value).children[1];
-                self.append_bin_op::<{ AirOpcode::Mul32 }, { AirOpcode::Mul64}, { AirOpcode::MulFloat }, { AirOpcode::MulDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Mul32 as i16 }, { AirOpcode::Mul64 as i16 }, { AirOpcode::MulFloat as i16 }, { AirOpcode::MulDouble as i16 }, false>(left, right);
             }
 
             Opcode::Div => {
@@ -2952,7 +2954,7 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_bin_op::<{ AirOpcode::Div32 }, { AirOpcode::Div64}, { AirOpcode::DivFloat }, { AirOpcode::DivDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Div32 as i16 }, { AirOpcode::Div64 as i16 }, { AirOpcode::DivFloat as i16 }, { AirOpcode::DivDouble as i16 }, false>(left, right);
             }
 
             Opcode::UDiv => {
@@ -2965,7 +2967,7 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_bin_op::<{ AirOpcode::UDiv32 }, { AirOpcode::UDiv64}, { AirOpcode::Oops }, { AirOpcode::Oops }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::UDiv32 as i16 }, { AirOpcode::UDiv64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, false>(left, right);
             }
 
             Opcode::Mod => {
@@ -3023,28 +3025,28 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 1);
 
                 if self.value(right).is_int_of(0xff) {
-                    self.append_un_op::<{ AirOpcode::ZeroExtend8To32 }, { AirOpcode::ZeroExtend8To32 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                    self.append_un_op::<{ AirOpcode::ZeroExtend8To32 as i16 }, { AirOpcode::ZeroExtend8To32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(left);
                     return;
                 }
 
                 if self.value(right).is_int_of(0xffff) {
-                    self.append_un_op::<{ AirOpcode::ZeroExtend16To32 }, { AirOpcode::ZeroExtend16To32 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                    self.append_un_op::<{ AirOpcode::ZeroExtend16To32 as i16 }, { AirOpcode::ZeroExtend16To32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(left);
                     return;
                 }
 
                 if self.value(right).is_int_of(0xffffffff) {
-                    self.append_un_op::<{ AirOpcode::Move32 }, { AirOpcode::Move32 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                    self.append_un_op::<{ AirOpcode::Move32 as i16 }, { AirOpcode::Move32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(left);
                     return;
                 }
 
-                self.append_bin_op::<{ AirOpcode::And32 }, { AirOpcode::And64}, { AirOpcode::AndFloat }, { AirOpcode::AndDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::And32 as i16 }, { AirOpcode::And64 as i16 }, { AirOpcode::AndFloat as i16 }, { AirOpcode::AndDouble as i16 }, false>(left, right);
             }
 
             Opcode::BitOr => {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_bin_op::<{ AirOpcode::Or32 }, { AirOpcode::Or64}, { AirOpcode::OrFloat }, { AirOpcode::OrDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Or32 as i16 }, { AirOpcode::Or64 as i16 }, { AirOpcode::OrFloat as i16 }, { AirOpcode::OrDouble as i16 }, false>(left, right);
             }
 
             Opcode::BitXor => {
@@ -3052,11 +3054,11 @@ impl<'a> LowerToAir<'a> {
                 let right = self.child_id(self.value, 1);
 
                 if self.value(right).is_int_of(-1) {
-                    self.append_un_op::<{ AirOpcode::Not32 }, { AirOpcode::Not64 }, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                    self.append_un_op::<{ AirOpcode::Not32 as i16 }, { AirOpcode::Not64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(left);
                     return;
                 }
 
-                self.append_bin_op::<{ AirOpcode::Xor32 }, { AirOpcode::Xor64}, { AirOpcode::XorFloat }, { AirOpcode::XorDouble }, false>(left, right);
+                self.append_bin_op::<{ AirOpcode::Xor32 as i16 }, { AirOpcode::Xor64 as i16 }, { AirOpcode::XorFloat as i16 }, { AirOpcode::XorDouble as i16 }, false>(left, right);
             }
 
             Opcode::Depend => {
@@ -3072,21 +3074,21 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_shift::<{ AirOpcode::Lshift32 }, { AirOpcode::Lshift64 }>(left, right);
+                self.append_shift::<{ AirOpcode::Lshift32 as i16 }, { AirOpcode::Lshift64 as i16 }>(left, right);
             }
 
             Opcode::SShr => {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_shift::<{ AirOpcode::Rshift32 }, { AirOpcode::Rshift64 }>(left, right);
+                self.append_shift::<{ AirOpcode::Rshift32 as i16 }, { AirOpcode::Rshift64 as i16 }>(left, right);
             }
 
             Opcode::ZShr => {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_shift::<{ AirOpcode::Urshift32 }, { AirOpcode::Urshift64 }>(
+                self.append_shift::<{ AirOpcode::Urshift32 as i16 }, { AirOpcode::Urshift64 as i16 }>(
                     left, right,
                 );
             }
@@ -3095,7 +3097,7 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_shift::<{ AirOpcode::RotateRight32 }, { AirOpcode::RotateRight64 }>(
+                self.append_shift::<{ AirOpcode::RotateRight32 as i16 }, { AirOpcode::RotateRight64 as i16 }>(
                     left, right,
                 );
             }
@@ -3104,7 +3106,7 @@ impl<'a> LowerToAir<'a> {
                 let left = self.child_id(self.value, 0);
                 let right = self.child_id(self.value, 1);
 
-                self.append_shift::<{ AirOpcode::RotateLeft32 }, { AirOpcode::RotateLeft64 }>(
+                self.append_shift::<{ AirOpcode::RotateLeft32 as i16 }, { AirOpcode::RotateLeft64 as i16 }>(
                     left, right,
                 );
             }
@@ -3112,7 +3114,7 @@ impl<'a> LowerToAir<'a> {
             Opcode::Clz => {
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::CountLeadingZeros32 }, { AirOpcode::CountLeadingZeros64}, { AirOpcode::Oops }, { AirOpcode::Oops }>(left);
+                self.append_un_op::<{ AirOpcode::CountLeadingZeros32 as i16 }, { AirOpcode::CountLeadingZeros64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(left);
             }
 
             Opcode::Abs => {
@@ -3122,31 +3124,31 @@ impl<'a> LowerToAir<'a> {
                 );
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::AbsFloat }, { AirOpcode::AbsDouble }>(left);
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::AbsFloat as i16 }, { AirOpcode::AbsDouble as i16 }>(left);
             }
 
             Opcode::Ceil => {
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::CeilFloat }, { AirOpcode::CeilDouble }>(left);
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::CeilFloat as i16 }, { AirOpcode::CeilDouble as i16 }>(left);
             }
 
             Opcode::Floor => {
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::FloorFloat }, { AirOpcode::FloorDouble }>(left);
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::FloorFloat as i16 }, { AirOpcode::FloorDouble as i16 }>(left);
             }
 
             Opcode::Sqrt => {
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::SqrtFloat }, { AirOpcode::SqrtDouble }>(left);
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::SqrtFloat as i16 }, { AirOpcode::SqrtDouble as i16 }>(left);
             }
 
             Opcode::BitwiseCast => {
                 let left = self.child_id(self.value, 0);
 
-                self.append_un_op::<{ AirOpcode::Move32ToFloat }, { AirOpcode::Move64ToDouble }, { AirOpcode::MoveFloatTo32 }, { AirOpcode::MoveDoubleTo64 }>(left);
+                self.append_un_op::<{ AirOpcode::Move32ToFloat as i16 }, { AirOpcode::Move64ToDouble as i16 }, { AirOpcode::MoveFloatTo32 as i16 }, { AirOpcode::MoveDoubleTo64 as i16 }>(left);
             }
 
             Opcode::Store => {
@@ -3159,7 +3161,7 @@ impl<'a> LowerToAir<'a> {
                         Opcode::Add => {
                             let left = self.child_id(value_to_store, 0);
                             let right = self.child_id(value_to_store, 1);
-                            matched = self.try_append_store_binop::<{AirOpcode::Add32}, {AirOpcode::Add64}, false>(left, right);
+                            matched = self.try_append_store_binop::<{AirOpcode::Add32 as i16}, {AirOpcode::Add64 as i16}, false>(left, right);
                         }
 
                         Opcode::Sub => {
@@ -3167,16 +3169,16 @@ impl<'a> LowerToAir<'a> {
                             let right = self.child_id(value_to_store, 1);
 
                             if self.value(left).is_int_of(0) {
-                                matched = self.try_append_store_unop::<{AirOpcode::Neg32}, {AirOpcode::Neg64}>(right);
+                                matched = self.try_append_store_unop::<{AirOpcode::Neg32 as i16}, {AirOpcode::Neg64 as i16}>(right);
                             } else {
-                                matched = self.try_append_store_binop::<{AirOpcode::Sub32}, {AirOpcode::Sub64}, false>(left, right);
+                                matched = self.try_append_store_binop::<{AirOpcode::Sub32 as i16}, {AirOpcode::Sub64 as i16}, false>(left, right);
                             }
                         }
 
                         Opcode::BitAnd => {
                             let left = self.child_id(value_to_store, 0);
                             let right = self.child_id(value_to_store, 1);
-                            matched = self.try_append_store_binop::<{AirOpcode::And32}, {AirOpcode::And64}, false>(left, right);
+                            matched = self.try_append_store_binop::<{AirOpcode::And32 as i16}, {AirOpcode::And64 as i16}, false>(left, right);
                         }
 
                         Opcode::BitXor => {
@@ -3184,9 +3186,9 @@ impl<'a> LowerToAir<'a> {
                             let right = self.child_id(value_to_store, 1);
 
                             if self.value(right).is_int_of(-1) {
-                                matched = self.try_append_store_unop::<{AirOpcode::Not32}, {AirOpcode::Not64}>(left);
+                                matched = self.try_append_store_unop::<{AirOpcode::Not32 as i16}, {AirOpcode::Not64 as i16}>(left);
                             } else {
-                                matched = self.try_append_store_binop::<{AirOpcode::Xor32}, {AirOpcode::Xor64}, false>(left, right);
+                                matched = self.try_append_store_binop::<{AirOpcode::Xor32 as i16}, {AirOpcode::Xor64 as i16}, false>(left, right);
                             }
                         }
                         _ => (),
@@ -3217,35 +3219,35 @@ impl<'a> LowerToAir<'a> {
 
             Opcode::Trunc => (),
             Opcode::SExt8 => {
-                self.append_un_op::<{ AirOpcode::SignExtend8To32 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::SignExtend8To32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::SExt16 => {
-                self.append_un_op::<{ AirOpcode::SignExtend16To32 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::SignExtend16To32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::SExt8To64 => {
-                self.append_un_op::<{ AirOpcode::SignExtend8To64 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::SignExtend8To64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::SExt16To64 => {
-                self.append_un_op::<{ AirOpcode::SignExtend16To64 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::SignExtend16To64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::ZExt32 => {
-                self.append_un_op::<{ AirOpcode::Move32 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::Move32 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::SExt32 => {
-                self.append_un_op::<{ AirOpcode::SignExtend32To64 }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::SignExtend32To64 as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::FloatToDouble => {
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::ConvertFloatToDouble }, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::ConvertFloatToDouble as i16 }, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::DoubleToFloat => {
-                self.append_un_op::<{ AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::Oops }, { AirOpcode::ConvertDoubleToFloat }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::Oops as i16 }, { AirOpcode::ConvertDoubleToFloat as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::ArgumentReg => {
@@ -3335,11 +3337,11 @@ impl<'a> LowerToAir<'a> {
             }
 
             Opcode::IToD => {
-                self.append_un_op::<{ AirOpcode::ConvertInt32ToDouble }, { AirOpcode::ConvertInt64ToDouble }, { AirOpcode::Oops}, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::ConvertInt32ToDouble as i16 }, { AirOpcode::ConvertInt64ToDouble as i16 }, { AirOpcode::Oops as i16}, { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::IToF => {
-                self.append_un_op::<{ AirOpcode::ConvertInt32ToFloat }, { AirOpcode::ConvertInt64ToFloat }, { AirOpcode::Oops}, { AirOpcode::Oops }>(self.child_id(self.value, 0));
+                self.append_un_op::<{ AirOpcode::ConvertInt32ToFloat as i16 }, { AirOpcode::ConvertInt64ToFloat as i16 }, { AirOpcode::Oops as i16},  { AirOpcode::Oops as i16 }>(self.child_id(self.value, 0));
             }
 
             Opcode::Upsilon => {

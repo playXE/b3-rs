@@ -55,7 +55,7 @@ struct MoveOperands {
 
 /// The AbstractColoringAllocator defines all the code that is independant
 /// from the bank or register and can be shared when allocating registers.
-struct AbstractColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+struct AbstractColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> {
     regs_in_priority_order: Vec<Reg>,
     last_precolored_register_index: u32,
     interference_edges: InterferenceSet,
@@ -83,7 +83,7 @@ struct AbstractColoringAllocator<'a, 'b, InterferenceSet: InterferenceGraph, con
 
 const TRACE_DEBUG: bool = false;
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8>
     AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>
 {
     fn dump_interference_graph_in_dot(&self) {
@@ -141,18 +141,18 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 
     fn tmp_for_absolute_index(index: usize) -> Tmp {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(index)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(index)
         }
     }
 
     fn tmp_to_index(tmp: Tmp) -> usize {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
         }
     }
 
@@ -255,10 +255,10 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 
     fn index_to_tmp(index: u32) -> Tmp {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index as usize)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(index as usize)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index as usize)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(index as usize)
         }
     }
 
@@ -665,12 +665,12 @@ impl MoveSetTrait for MoveSet {
     }
 }
 
-struct Briggs<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+struct Briggs<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> {
     base: AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>,
     worklist_moves: MoveSet,
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8>
     Allocator<'a, 'b, InterferenceSet, BANK> for Briggs<'a, 'b, InterferenceSet, BANK>
 {
     type MoveList = MoveSet;
@@ -832,7 +832,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         self.assign_colors();
     }
 }
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8>
     Briggs<'a, 'b, InterferenceSet, BANK>
 {
     fn for_each_adjacent(&mut self, tmp_index: u32, mut function: impl FnMut(&mut Self, u32)) {
@@ -858,16 +858,16 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         }
 
         if TRACE_DEBUG {
-            let utmp = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(u as _)
+            let utmp = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(u as _)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(u as _)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(u as _)
             };
 
-            let vtmp = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(v as _)
+            let vtmp = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(v as _)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(v as _)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(v as _)
             };
 
             print!(
@@ -966,10 +966,10 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
             }
 
             let degree = self.degrees[i];
-            let tmp = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(i)
+            let tmp = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(i)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(i)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(i)
             };
 
             if degree < register_count as u32 {
@@ -1005,10 +1005,10 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
         self.is_on_select_stack.set(last_index as usize, true);
 
         if TRACE_DEBUG {
-            let ix = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(last_index as _)
+            let ix = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(last_index as _)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(last_index as _)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(last_index as _)
             };
 
             println!(
@@ -1052,7 +1052,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> Deref
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> Deref
     for Briggs<'a, 'b, InterferenceSet, BANK>
 {
     type Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>;
@@ -1062,7 +1062,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> Deref
     }
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> DerefMut
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> DerefMut
     for Briggs<'a, 'b, InterferenceSet, BANK>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -1201,7 +1201,7 @@ impl OrderedMoveSet {
 }
 
 #[allow(dead_code)]
-struct IRC<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
+struct IRC<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> {
     base: AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>,
     // Work lists.
     /// Low-degree, Move related.
@@ -1214,7 +1214,7 @@ struct IRC<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> {
     moves_to_enable: BitVector,
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Deref
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> std::ops::Deref
     for IRC<'a, 'b, InterferenceSet, BANK>
 {
     type Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>;
@@ -1224,7 +1224,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Der
     }
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::DerefMut
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8> std::ops::DerefMut
     for IRC<'a, 'b, InterferenceSet, BANK>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
@@ -1232,7 +1232,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank> std::ops::Der
     }
 }
 
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8>
     Allocator<'a, 'b, InterferenceSet, BANK> for IRC<'a, 'b, InterferenceSet, BANK>
 {
     type MoveList = OrderedMoveSet;
@@ -1312,7 +1312,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
 }
 
 #[allow(dead_code)]
-impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
+impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: i8>
     IRC<'a, 'b, InterferenceSet, BANK>
 {
     fn make_worklist(&mut self) {
@@ -1572,7 +1572,7 @@ impl<'a, 'b, InterferenceSet: InterferenceGraph, const BANK: Bank>
     }
 }
 
-trait Allocator<'a, 'b: 'a, InterferenceSet: InterferenceGraph, const BANK: Bank>:
+trait Allocator<'a, 'b: 'a, InterferenceSet: InterferenceGraph, const BANK: i8>:
     Deref<Target = AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>> + DerefMut
 {
     type MoveList: MoveSetTrait;
@@ -1598,7 +1598,7 @@ struct ColoringAllocator<
     'b: 'a,
     InterferenceSet: InterferenceGraph,
     Alloc: Allocator<'a, 'b, InterferenceSet, BANK>,
-    const BANK: Bank,
+    const BANK: i8,
 > {
     allocator: Alloc,
     marker: PhantomData<AbstractColoringAllocator<'a, 'b, InterferenceSet, BANK>>,
@@ -1609,7 +1609,7 @@ impl<
         'b,
         InterferenceSet: InterferenceGraph,
         Alloc: Allocator<'a, 'b, InterferenceSet, BANK>,
-        const BANK: Bank,
+        const BANK: i8,
     > ColoringAllocator<'a, 'b, InterferenceSet, Alloc, BANK>
 {
     fn new(
@@ -1618,17 +1618,22 @@ impl<
         unspillable_tmps: &'a BitVector,
         graph: InterferenceSet,
     ) -> Self {
-        let regs_in_priority_order = code.regs_in_priority_order(BANK).to_vec();
-        let tmp_array_size = code.num_tmps(BANK);
-        let tmp_array_size = if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(tmp_array_size))
+        let bank = Bank::from(BANK);
+        let regs_in_priority_order = code.regs_in_priority_order(bank).to_vec();
+        let tmp_array_size = code.num_tmps(bank);
+        let tmp_array_size = if bank == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
+                tmp_array_size,
+            ))
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(tmp_array_size))
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&Tmp::fp_tmp_for_index(
+                tmp_array_size,
+            ))
         };
-        let last_precolored_register_index = if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::last_machine_register_index()
+        let last_precolored_register_index = if bank == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::last_machine_register_index()
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::last_machine_register_index()
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::last_machine_register_index()
         };
 
         let mut this = Self {
@@ -1647,19 +1652,19 @@ impl<
         let pinned_set = this.allocator.code.pinned_regs.to_register_set();
 
         pinned_set.for_each(|reg| {
-            if (BANK == Bank::GP && reg.is_gpr()) || (BANK == Bank::FP && reg.is_fpr()) {
+            if (bank == Bank::GP && reg.is_gpr()) || (bank == Bank::FP && reg.is_fpr()) {
                 this.allocator.pinned_regs.push(Tmp::from_reg(reg));
                 this.allocator.regs_in_priority_order.push(reg);
             }
         });
 
-        let absolute_index = if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
-                this.allocator.code.num_tmps(BANK),
+        let absolute_index = if bank == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
+                this.allocator.code.num_tmps(bank),
             ))
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(
-                this.allocator.code.num_tmps(BANK),
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&Tmp::fp_tmp_for_index(
+                this.allocator.code.num_tmps(bank),
             ))
         };
 
@@ -1674,10 +1679,10 @@ impl<
     }
 
     fn tmp_for_absolute_index(absolute_index: usize) -> Tmp {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(absolute_index)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(absolute_index)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(absolute_index)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(absolute_index)
         }
     }
 
@@ -1727,10 +1732,10 @@ impl<
     }
 
     fn tmp_to_index(tmp: Tmp) -> usize {
-        if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+        if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
         }
     }
 
@@ -1787,10 +1792,14 @@ impl<
             println!("Building between {:?} and {:?}:", prev_inst, next_inst);
             print!("live values: [");
             for live_tmp in local_calc.live().iter() {
-                let tmp = if BANK == Bank::GP {
-                    AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(live_tmp.key() as _)
+                let tmp = if Bank::from(BANK) == Bank::GP {
+                    AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(
+                        live_tmp.key() as _
+                    )
                 } else {
-                    AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(live_tmp.key() as _)
+                    AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(
+                        live_tmp.key() as _
+                    )
                 };
                 print!("{},", tmp);
             }
@@ -1804,7 +1813,7 @@ impl<
             next_inst,
             self.allocator.code,
             |arg, role, arg_bank, _, preserve64| {
-                if arg_bank != BANK {
+                if arg_bank != Bank::from(BANK) {
                     return;
                 }
                 assert!(role.is_any_def());
@@ -1817,7 +1826,7 @@ impl<
                     next_inst,
                     self.allocator.code,
                     |other_arg, other_role, arg_bank, def_width| {
-                        if arg_bank != BANK {
+                        if arg_bank != Bank::from(BANK) {
                             return;
                         }
                         assert!(other_role.is_any_def());
@@ -1956,7 +1965,9 @@ impl<
             return false;
         }
 
-        if left_tmp.is_gp() != (BANK == Bank::GP) || right_tmp.is_gp() != (BANK == Bank::GP) {
+        if left_tmp.is_gp() != (BANK == Bank::GP as i8)
+            || right_tmp.is_gp() != (BANK == Bank::GP as i8)
+        {
             return false;
         }
 
@@ -2003,14 +2014,14 @@ impl<
             next_inst,
             self.allocator.code,
             |tmp, role, arg_bank, _, _preserve64| {
-                if arg_bank != BANK {
+                if arg_bank != Bank::from(BANK) {
                     return;
                 }
                 assert!(role.is_any_def());
                 for live_tmp in live_tmps.iter() {
                     let live_tmp = Self::tmp_for_absolute_index(live_tmp.key());
 
-                    debug_assert!(live_tmp.is_gp() == (BANK == Bank::GP));
+                    debug_assert!(live_tmp.is_gp() == (Bank::from(BANK) == Bank::GP));
                     if TRACE_DEBUG {
                         println!(
                             "      Adding def-live edge {}, {} in {:?} {:?}",
@@ -2041,8 +2052,8 @@ impl<
     }
 }
 
-fn may_be_coalescable_impl<const BANK: Bank>(inst: &Inst) -> bool {
-    match BANK {
+fn may_be_coalescable_impl<const BANK: i8>(inst: &Inst) -> bool {
+    match Bank::from(BANK) {
         Bank::GP => match inst.kind.opcode {
             Opcode::Move32 | Opcode::Move => (),
             _ => return false,
@@ -2080,13 +2091,13 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
     fn run<'b>(&mut self, code: &'a mut Code<'b>) {
         pad_interference(code);
 
-        self.allocate_on_bank::<{ Bank::GP }>(code);
-        self.allocate_on_bank::<{ Bank::FP }>(code);
+        self.allocate_on_bank::<{ Bank::GP as i8 }>(code);
+        self.allocate_on_bank::<{ Bank::FP as i8 }>(code);
 
         fix_spills_after_terminals(code);
     }
 
-    fn allocate_on_bank<'c, const BANK: Bank>(&mut self, code: &'c mut Code) {
+    fn allocate_on_bank<'c, const BANK: i8>(&mut self, code: &'c mut Code) {
         let mut unspillable_tmps = self.compute_unspillable_tmps::<{ BANK }>(code);
         let use_irc = !code.proc.options.air_force_briggs_allocator;
         let mut num_iterations = 0;
@@ -2095,7 +2106,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         while !done {
             num_iterations += 1;
 
-            if code.num_tmps(BANK) < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
+            if code.num_tmps(Bank::from(BANK)) < MAX_SIZE_FOR_SMALL_INTERFERENCE_GRAPH {
                 let graph = SmallInterferenceGraph::new(InterferenceBitVector::new());
                 let cloned = unspillable_tmps.clone();
 
@@ -2177,7 +2188,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         }
     }
 
-    fn compute_unspillable_tmps<const BANK: Bank>(&self, code: &Code) -> BitVector {
+    fn compute_unspillable_tmps<const BANK: i8>(&self, code: &Code) -> BitVector {
         #[derive(Clone, Copy)]
         struct Range {
             first: usize,
@@ -2197,11 +2208,12 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             }
         }
 
-        let num_tmps = code.num_tmps(BANK);
-        let array_size = if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(num_tmps))
+        let bank = Bank::from(BANK);
+        let num_tmps = code.num_tmps(bank);
+        let array_size = if bank == Bank::GP {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(num_tmps))
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(num_tmps))
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&Tmp::fp_tmp_for_index(num_tmps))
         };
 
         let mut ranges = vec![Range::default(); array_size];
@@ -2212,15 +2224,15 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
             for inst in block.iter() {
                 inst.for_each_arg(code, |arg_index, arg, _, arg_bank, _| {
                     if arg.is_tmp() && inst.admits_stack(arg_index, code) {
-                        if arg_bank != BANK {
+                        if arg_bank != Bank::from(BANK) {
                             return;
                         }
 
                         let tmp = arg.tmp();
-                        let index = if BANK == Bank::GP {
-                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                        let index = if BANK == Bank::GP as i8 {
+                            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
                         } else {
-                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
                         };
                         let range = &mut ranges[index];
                         range.count += 1;
@@ -2237,13 +2249,13 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                     }
 
                     arg.for_each_tmp_fast(|tmp| {
-                        if tmp.is_gp() != (BANK == Bank::GP) {
+                        if tmp.is_gp() != (BANK == Bank::GP as i8) {
                             return;
                         }
-                        let index = if BANK == Bank::GP {
-                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                        let index = if BANK == Bank::GP as i8 {
+                            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
                         } else {
-                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
                         };
                         let range = &mut ranges[index];
                         range.count += 1;
@@ -2265,10 +2277,10 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
         let mut unspillable_tmps = BitVector::with_capacity(array_size);
 
-        let start = if BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::last_machine_register_index()
+        let start = if BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::last_machine_register_index()
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::last_machine_register_index()
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::last_machine_register_index()
         };
 
         for i in start + 1..ranges.len() {
@@ -2287,7 +2299,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         'b: 'c,
         InterferenceSet: InterferenceGraph,
         Alloc: Allocator<'c, 'b, InterferenceSet, BANK>,
-        const BANK: Bank,
+        const BANK: i8,
     >(
         allocator: &mut ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>,
     ) {
@@ -2303,7 +2315,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                 let may_be_coalescable = allocator.may_be_coalescable(&inst);
 
                 inst.for_each_tmp_fast_mut(unsafe { &mut *code_ptr }, |tmp| {
-                    if tmp.is_reg() || tmp.bank() != BANK {
+                    if tmp.is_reg() || tmp.bank() != Bank::from(BANK) {
                         return;
                     }
 
@@ -2353,7 +2365,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         'b: 'c,
         InterferenceSet: InterferenceGraph,
         Alloc: Allocator<'c, 'b, InterferenceSet, BANK>,
-        const BANK: Bank,
+        const BANK: i8,
     >(
         allocator: &mut ColoringAllocator<'c, 'b, InterferenceSet, Alloc, BANK>,
         unspillable_tmps: &mut BitVector,
@@ -2361,16 +2373,16 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
         let mut stackslots = HashMap::new();
         let code_ptr = (&mut *allocator.allocator).code as *mut Code;
         for &tmp in allocator.allocator.spilled_tmps.iter() {
-            let tmp = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(tmp as usize)
+            let tmp = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(tmp as usize)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp as usize)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(tmp as usize)
             };
 
-            let index = if BANK == Bank::GP {
-                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+            let index = if BANK == Bank::GP as i8 {
+                AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
             } else {
-                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
             };
 
             unspillable_tmps.set(index, true);
@@ -2405,7 +2417,7 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                             return;
                         }
 
-                        if arg_bank != BANK {
+                        if arg_bank != Bank::from(BANK) {
                             return;
                         }
 
@@ -2468,10 +2480,10 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                             // optimization to kick in, we need to avoid placing the Tmp's stack
                             // address into the instruction.
 
-                            let index = if BANK == Bank::GP {
-                                AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&arg.tmp())
+                            let index = if BANK == Bank::GP as i8 {
+                                AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&arg.tmp())
                             } else {
-                                AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&arg.tmp())
+                                AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&arg.tmp())
                             };
 
                             if !role.is_cold_use()
@@ -2508,10 +2520,10 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
 
                     let tmp = allocator.allocator.code.new_tmp(inst_bank);
 
-                    let index = if BANK == Bank::GP {
-                        AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&tmp)
+                    let index = if BANK == Bank::GP as i8 {
+                        AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&tmp)
                     } else {
-                        AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&tmp)
+                        AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&tmp)
                     };
 
                     unspillable_tmps.set(index, true);
@@ -2532,26 +2544,26 @@ impl<'a> GraphColoringRegisterAllocation<'a> {
                 let origin = inst.origin;
                 // For every other case, add Load/Store as needed.
                 inst.for_each_tmp_mut(unsafe { &mut *code_ptr }, |tmp, role, arg_bank, _| {
-                    if tmp.is_reg() || arg_bank != BANK {
+                    if tmp.is_reg() || arg_bank != Bank::from(BANK) {
                         return;
                     }
 
                     if let Some(stack_slot) = stackslots.get(tmp).copied() {
                         let _spill_width = Width::W64;
 
-                        let mov = if BANK == Bank::GP {
+                        let mov = if BANK == Bank::GP as i8 {
                             Opcode::Move
                         } else {
                             Opcode::MoveDouble
                         };
 
-                        let new_tmp = allocator.allocator.code.new_tmp(BANK);
+                        let new_tmp = allocator.allocator.code.new_tmp(Bank::from(BANK));
                         *tmp = new_tmp;
 
-                        let index = if BANK == Bank::GP {
-                            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&new_tmp)
+                        let index = if BANK == Bank::GP as i8 {
+                            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&new_tmp)
                         } else {
-                            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&new_tmp)
+                            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&new_tmp)
                         };
 
                         unspillable_tmps.set(index, true);

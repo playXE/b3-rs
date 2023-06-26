@@ -25,15 +25,15 @@ pub type ActionsForBoundary = Vec<Actions>;
 
 pub struct TmpLivenessAdapter<
     'a,
-    const ADAPTER_BANK: Bank,
-    const MINIMUM_TEMPERATURE: ArgTemperature = { ArgTemperature::Cold },
+    const ADAPTER_BANK: i8,
+    const MINIMUM_TEMPERATURE: u8 = { ArgTemperature::Cold as u8 },
 > {
     code: &'a Code<'a>,
     actions: Vec<ActionsForBoundary>,
     verbose: bool,
 }
 
-impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature>
+impl<'a, const ADAPTER_BANK: i8, const MINIMUM_TEMPERATURE: u8>
     TmpLivenessAdapter<'a, ADAPTER_BANK, MINIMUM_TEMPERATURE>
 {
     pub fn new(code: &'a Code<'a>) -> Self {
@@ -50,11 +50,11 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature>
     }
 
     pub fn accepts_bank(bank: Bank) -> bool {
-        bank == ADAPTER_BANK
+        bank == Bank::from(ADAPTER_BANK)
     }
 
     pub fn accepts_role(role: ArgRole) -> bool {
-        role.temperature() >= MINIMUM_TEMPERATURE
+        role.temperature() >= MINIMUM_TEMPERATURE.into()
     }
 
     pub fn actions_at(&self, block: BasicBlockId, boundary: usize) -> &Actions {
@@ -66,7 +66,7 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature>
     }
 }
 
-impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Adapter
+impl<'a, const ADAPTER_BANK: i8, const MINIMUM_TEMPERATURE: u8> Adapter
     for TmpLivenessAdapter<'a, ADAPTER_BANK, MINIMUM_TEMPERATURE>
 {
     type CFG = Code<'a>;
@@ -77,30 +77,30 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Ad
     }
 
     fn num_indices(&self) -> usize {
-        if ADAPTER_BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+        if ADAPTER_BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
                 self.code.num_gp_tmps,
             ))
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&Tmp::fp_tmp_for_index(
                 self.code.num_fp_tmps,
             ))
         }
     }
 
     fn value_to_index(_: &Self::CFG, thing: Self::Thing) -> usize {
-        if ADAPTER_BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&thing)
+        if ADAPTER_BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&thing)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&thing)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&thing)
         }
     }
 
     fn index_to_value(_: &Self::CFG, index: usize) -> Self::Thing {
-        if ADAPTER_BANK == Bank::GP {
-            AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(index)
+        if ADAPTER_BANK == Bank::GP as i8 {
+            AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(index)
         } else {
-            AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(index)
+            AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(index)
         }
     }
 
@@ -217,7 +217,7 @@ impl<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> Ad
     }
 }
 
-pub type TmpLiveness<'a, const ADAPTER_BANK: Bank, const MINIMUM_TEMPERATURE: ArgTemperature> =
+pub type TmpLiveness<'a, const ADAPTER_BANK: i8, const MINIMUM_TEMPERATURE: u8> =
     Liveness<'a, TmpLivenessAdapter<'a, ADAPTER_BANK, MINIMUM_TEMPERATURE>>;
 
 pub struct UnifiedTmpLivenessAdapter<'a> {
@@ -253,9 +253,9 @@ impl<'a> Adapter for UnifiedTmpLivenessAdapter<'a> {
     }
 
     fn num_indices(&self) -> usize {
-        AbsoluteIndexed::<{ Bank::GP }>::absolute_index(&Tmp::gp_tmp_for_index(
+        AbsoluteIndexed::<{ Bank::GP as i8 }>::absolute_index(&Tmp::gp_tmp_for_index(
             self.code.num_gp_tmps,
-        )) + AbsoluteIndexed::<{ Bank::FP }>::absolute_index(&Tmp::fp_tmp_for_index(
+        )) + AbsoluteIndexed::<{ Bank::FP as i8 }>::absolute_index(&Tmp::fp_tmp_for_index(
             self.code.num_fp_tmps,
         ))
     }

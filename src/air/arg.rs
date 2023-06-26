@@ -61,11 +61,18 @@ pub enum ArgKind {
     SIMDInfo,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, std::marker::ConstParamTy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum ArgTemperature {
     Cold,
     Warm,
+}
+
+impl From<u8> for ArgTemperature {
+    fn from(value: u8) -> Self {
+        assert!(value < 2);
+        unsafe { std::mem::transmute::<u8, ArgTemperature>(value) }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

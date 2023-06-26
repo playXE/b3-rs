@@ -6,8 +6,8 @@ use crate::{
 use super::tmp::{AbsoluteIndexed, Tmp};
 
 pub struct TmpSet {
-    gp: IndexSet<AbsoluteIndexed<{ Bank::GP }>>,
-    fp: IndexSet<AbsoluteIndexed<{ Bank::FP }>>,
+    gp: IndexSet<AbsoluteIndexed<{ Bank::GP as i8 }>>,
+    fp: IndexSet<AbsoluteIndexed<{ Bank::FP as i8 }>>,
 }
 
 impl TmpSet {
@@ -53,18 +53,18 @@ impl TmpSet {
     pub fn iter(&self) -> impl Iterator<Item = Tmp> + '_ {
         self.gp
             .indices()
-            .map(|tmp| AbsoluteIndexed::<{ Bank::GP }>::tmp_for_absolute_index(tmp))
+            .map(|tmp| AbsoluteIndexed::<{ Bank::GP as i8 }>::tmp_for_absolute_index(tmp))
             .chain(
                 self.fp
                     .indices()
-                    .map(|tmp| AbsoluteIndexed::<{ Bank::FP }>::tmp_for_absolute_index(tmp)),
+                    .map(|tmp| AbsoluteIndexed::<{ Bank::FP as i8 }>::tmp_for_absolute_index(tmp)),
             )
     }
 }
 
 pub struct TmpMap<V> {
-    gp: IndexMap<V, AbsoluteIndexed<{ Bank::GP }>>,
-    fp: IndexMap<V, AbsoluteIndexed<{ Bank::FP }>>,
+    gp: IndexMap<V, AbsoluteIndexed<{ Bank::GP as i8 }>>,
+    fp: IndexMap<V, AbsoluteIndexed<{ Bank::FP as i8 }>>,
 }
 
 impl<V> TmpMap<V> {
@@ -137,8 +137,8 @@ impl<V> TmpMap<V> {
 }
 
 pub enum TmpEntry<'a, V> {
-    GP(Entry<'a, V, AbsoluteIndexed<{ Bank::GP }>>),
-    FP(Entry<'a, V, AbsoluteIndexed<{ Bank::FP }>>),
+    GP(Entry<'a, V, AbsoluteIndexed<{ Bank::GP as i8 }>>),
+    FP(Entry<'a, V, AbsoluteIndexed<{ Bank::FP as i8 }>>),
 }
 
 impl<'a, V> TmpEntry<'a, V> {

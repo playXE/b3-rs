@@ -6,11 +6,18 @@ use crate::width::{width_for_bytes, Width};
 
 use super::typ::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, std::marker::ConstParamTy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i8)]
 pub enum Bank {
     GP,
     FP,
+}
+
+impl Bank {
+    pub const fn from(value: i8) -> Self {
+        assert!(value < 2);
+        unsafe { std::mem::transmute::<i8, Bank>(value) }
+    }
 }
 
 impl Bank {

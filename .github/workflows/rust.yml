@@ -33,9 +33,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install Ruby
-      uses: crazy-max/ghaction-chocolatey@v2
+      uses: ruby/setup-ruby@v1
       with:
-        args: install ruby
+        ruby-version: "3.2.2"
     - name: Setup Rust
       uses: ATiltedTree/setup-rust@v1
       with:

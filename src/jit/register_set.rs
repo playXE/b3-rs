@@ -181,14 +181,27 @@ impl RegisterSetBuilder {
 
         #[cfg(target_arch = "x86_64")]
         {
-            use macroassembler::assembler::x86assembler::r12;
-            use macroassembler::assembler::x86assembler::{ebp, ebx, r13, r14, r15};
-            result.add(Reg::new_gpr(ebx), Width::W64);
-            result.add(Reg::new_gpr(ebp), Width::W64);
-            result.add(Reg::new_gpr(r12), Width::W64);
-            result.add(Reg::new_gpr(r13), Width::W64);
-            result.add(Reg::new_gpr(r14), Width::W64);
-            result.add(Reg::new_gpr(r15), Width::W64);
+            use macroassembler::assembler::x86assembler::*;
+            #[cfg(windows)]
+            {
+                result.add(Reg::new_gpr(ebx), Width::W64);
+                result.add(Reg::new_gpr(ebp), Width::W64);
+                result.add(Reg::new_gpr(edi), Width::W64);
+                result.add(Reg::new_gpr(esi), Width::W64);
+                result.add(Reg::new_gpr(r12), Width::W64);
+                result.add(Reg::new_gpr(r13), Width::W64);
+                result.add(Reg::new_gpr(r14), Width::W64);
+                result.add(Reg::new_gpr(r15), Width::W64);
+            }
+            #[cfg(not(windows))]
+            {
+                result.add(Reg::new_gpr(ebx), Width::W64);
+                result.add(Reg::new_gpr(ebp), Width::W64);
+                result.add(Reg::new_gpr(r12), Width::W64);
+                result.add(Reg::new_gpr(r13), Width::W64);
+                result.add(Reg::new_gpr(r14), Width::W64);
+                result.add(Reg::new_gpr(r15), Width::W64);
+            }
         }
 
         #[cfg(target_arch = "riscv64gc")]

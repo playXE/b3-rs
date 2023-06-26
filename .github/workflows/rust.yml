@@ -33,7 +33,9 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install Ruby
-      run: winget install RubyInstallerTeam.Ruby
+      uses: crazy-max/ghaction-chocolatey@v2
+      with:
+        args: install ruby
     - name: Setup Rust
       uses: ATiltedTree/setup-rust@v1
       with:

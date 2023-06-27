@@ -518,9 +518,9 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
 name = "jit-allocator"
-version = "0.2.3"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9df968c6633fa4ffcccf661c28c4ea2c15046ec1bbec2bb3fc44c26b2117be3"
+checksum = "b888c5265b9f5fc7458e4c53ce055a78ec17ce6c02aae41e8d7e1596ab9a4f04"
 dependencies = [
  "cfgenius",
  "errno",
@@ -594,7 +594,7 @@ dependencies = [
 [[package]]
 name = "macroassembler"
 version = "0.1.0"
-source = "git+https://github.com/playxe/masm-rs#cfab3f4b652e50426eda8a3231bf7f76f30d1e1d"
+source = "git+https://github.com/playxe/masm-rs#ef0878a978dc2baa9eaebc011232ffbc21fb2389"
 dependencies = [
  "cfg-if",
  "errno",

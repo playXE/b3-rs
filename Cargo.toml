@@ -29,7 +29,7 @@ criterion = "0.5"
 target-lexicon = "0.12"
 cranelift = "0.95"
 cranelift-module = "0.95"
-cranelift-jit = "0.95"
+cranelift-jit = "0.97"
 pico-args = "0.5"
 mimalloc = "0.1"
 r7rs-parser = { git = "https://github.com/playxe/r7rs-parser" }

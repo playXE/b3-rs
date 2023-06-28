@@ -1,8 +1,8 @@
 [package]
 name = "b3"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
-license = "GPL-2.0"
+license = "BSD-2-Clause"
 repository = "https://github.com/playxe/b3-rs"
 readme = "README.md"
 description = "A Rust port of B3 WebKit codegen backend"

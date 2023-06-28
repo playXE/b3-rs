@@ -80,3 +80,11 @@ fn main() {
     assert_eq!(func(5), 120);
 }
 ```
+
+## Contributors
+
+- [PROMETHIA](https://github.com/PROMETHIA-27) - helped to fix UB and port B3 to stable toolchain.
+
+## Licensing
+
+Original B3 code belongs to WebKit and is licensed under GPL 2.0. Rust port of B3 because of that is also licensed with GPL 2.0 license.

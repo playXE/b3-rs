@@ -87,4 +87,4 @@ fn main() {
 
 ## Licensing
 
-Original B3 code belongs to WebKit and is licensed under GPL 2.0. Rust port of B3 because of that is also licensed with GPL 2.0 license.
+Original B3 code belongs to WebKit and is licensed under BSD-2. Rust port of B3 because of that is also licensed with BSD-2 license.

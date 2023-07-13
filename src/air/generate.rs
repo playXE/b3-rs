@@ -77,7 +77,8 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
-
+        eliminate_dead_code(code);
+        code.reset_reachability();
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
         // best order for blocks but aids in optimizations.
         optimize_block_order(code);

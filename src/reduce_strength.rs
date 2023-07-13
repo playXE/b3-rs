@@ -3228,6 +3228,7 @@ impl<'a> ReduceStrength<'a> {
             let mut ok = true;
 
             for child in phi_children.at(phi).values().iter() {
+                let child = self.proc.value(child).children[0];
                 if child == phi {
                     continue;
                 }
@@ -3255,7 +3256,7 @@ impl<'a> ReduceStrength<'a> {
                 for upsilon in phi_children.at(phi).iter() {
                     self.proc.value_mut(upsilon).replace_with_nop();
                 }
-
+               
                 self.proc.value_mut(phi).replace_with_identity(other_child);
             } else {
                 // Wow, this would be super weird. It probably won't happen, except that things could

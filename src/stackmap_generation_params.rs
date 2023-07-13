@@ -142,7 +142,12 @@ impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
         next_block == successor.0
     }
 
+    
     pub fn code(&self) -> &Code<'_> {
+        self.context.code
+    }
+
+    pub fn code_mut(&mut self) -> &mut Code<'_> {
         self.context.code
     }
 

@@ -227,6 +227,19 @@ impl<'a> Code<'a> {
         jit.ret();
     }
 
+    pub fn emit_epilogue_without_return(&mut self, jit: &mut TargetMacroAssembler) {
+        if self.frame_size != 0 {
+            emit_restore(
+                jit,
+                &self.callee_save_registers_at_offset_list(),
+                TargetMacroAssembler::FRAME_POINTER_REGISTER,
+            );
+            emit_function_epilogue(jit);
+        } else {
+            emit_function_epilogue_with_empty_frame(jit);
+        }
+    }
+
     pub fn special(&self, id: SpecialId) -> &Special {
         self.proc.special(id)
     }

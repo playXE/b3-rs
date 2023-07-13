@@ -306,7 +306,7 @@ impl PatchpointSpecial {
         for _ in (0..num_fp_scratch).rev() {
             params.fp_scratch.push(inst.args[offset].fpr());
             offset += 1;
-        }
+        }   
 
         (generator.unwrap())(jit, &mut params);
 

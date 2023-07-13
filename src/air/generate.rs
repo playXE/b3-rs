@@ -77,7 +77,7 @@ pub fn prepare_for_generation(code: &mut Code<'_>) {
         // phase.
         simplify_cfg(code);
         code.reset_reachability();
-        eliminate_dead_code(code);
+        //eliminate_dead_code(code);
         code.reset_reachability();
         // Optimize the order of basic blocks based on their frequency. Before this we used RPO sort that does not produce
         // best order for blocks but aids in optimizations.
@@ -370,6 +370,10 @@ pub fn emit_function_epilogue(jit: &mut TargetMacroAssembler) {
 pub fn emit_function_epilogue_with_empty_frame(jit: &mut TargetMacroAssembler) {
     #[cfg(target_arch = "x86_64")]
     {
+        jit.mov(
+            TargetMacroAssembler::FRAME_POINTER_REGISTER,
+            TargetMacroAssembler::STACK_POINTER_REGISTER,
+        );
         jit.pop(TargetMacroAssembler::FRAME_POINTER_REGISTER);
     }
 }

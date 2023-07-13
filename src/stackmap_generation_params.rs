@@ -145,6 +145,10 @@ impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
     pub fn emit_epilogue(&mut self, jit: &mut TargetMacroAssembler) {
         self.context.code.emit_epilogue(jit);
     }
+
+    pub fn emit_epilogue_without_return(&mut self, jit: &mut TargetMacroAssembler) {
+        self.context.code.emit_epilogue_without_return(jit);
+    }
     
     pub fn code(&self) -> &Code<'_> {
         self.context.code

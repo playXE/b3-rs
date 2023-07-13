@@ -1991,47 +1991,51 @@ impl<'a> LowerToAir<'a> {
 
                         if right_const.unwrap() as u32 as i64 == right_const.unwrap() {
                             let mut leftp = this.tmp_promise(Some(left));
+                            if right_imm.is_some() {
+                                if let Some(result) = try_test(
+                                    this,
+                                    Width::W32,
+                                    &mut leftp,
+                                    &mut ArgPromise::new(right_imm.unwrap(), None),
+                                ) {
+                                    return Some(result);
+                                }
+                            }
 
+                            if right_imm64.is_some() {
+                                if let Some(result) = try_test(
+                                    this,
+                                    Width::W32,
+                                    &mut leftp,
+                                    &mut ArgPromise::new(right_imm64.unwrap(), None),
+                                ) {
+                                    return Some(result);
+                                }
+                            }
+                        }
+
+                        let mut leftp = this.tmp_promise(Some(left));
+                        if right_imm.is_some() {
                             if let Some(result) = try_test(
                                 this,
-                                Width::W32,
+                                width,
                                 &mut leftp,
                                 &mut ArgPromise::new(right_imm.unwrap(), None),
                             ) {
                                 return Some(result);
                             }
-
+                        }
+                        if right_imm64.is_some() {
                             if let Some(result) = try_test(
                                 this,
-                                Width::W32,
+                                width,
                                 &mut leftp,
                                 &mut ArgPromise::new(right_imm64.unwrap(), None),
                             ) {
                                 return Some(result);
                             }
                         }
-
-                        let mut leftp = this.tmp_promise(Some(left));
-
-                        if let Some(result) = try_test(
-                            this,
-                            width,
-                            &mut leftp,
-                            &mut ArgPromise::new(right_imm.unwrap(), None),
-                        ) {
-                            return Some(result);
-                        }
-
-                        if let Some(result) = try_test(
-                            this,
-                            width,
-                            &mut leftp,
-                            &mut ArgPromise::new(right_imm64.unwrap(), None),
-                        ) {
-                            return Some(result);
-                        }
                     }
-
                     let mut leftp = this.tmp_promise(Some(left));
                     let mut rightp = this.tmp_promise(Some(right));
                     try_test(this, width, &mut leftp, &mut rightp)

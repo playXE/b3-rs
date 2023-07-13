@@ -142,12 +142,11 @@ impl<'a, 'b, 'c> StackmapGenerationParams<'a, 'b, 'c> {
         next_block == successor.0
     }
 
+    pub fn emit_epilogue(&mut self, jit: &mut TargetMacroAssembler) {
+        self.context.code.emit_epilogue(jit);
+    }
     
     pub fn code(&self) -> &Code<'_> {
-        self.context.code
-    }
-
-    pub fn code_mut(&mut self) -> &mut Code<'_> {
         self.context.code
     }
 

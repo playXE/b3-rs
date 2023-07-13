@@ -39,7 +39,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "b3"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "cfg-if",
  "cool-bitvector",
@@ -78,6 +78,26 @@ name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
+
+[[package]]
+name = "capstone"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1097e608594dad3bad608295567f757742b883606fe150faf7a9740b849730d8"
+dependencies = [
+ "capstone-sys",
+ "libc",
+]
+
+[[package]]
+name = "capstone-sys"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e7f651d5ec4c2a2e6c508f2c8032655003cd728ec85663e9796616990e25b5a"
+dependencies = [
+ "cc",
+ "libc",
+]
 
 [[package]]
 name = "cast"
@@ -538,9 +558,9 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
 name = "jit-allocator"
-version = "0.2.5"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b888c5265b9f5fc7458e4c53ce055a78ec17ce6c02aae41e8d7e1596ab9a4f04"
+checksum = "e28cf4ebc39fb6f738ec0d837aa6ad34d5ce3902c275b298fad2d0e9f857fff0"
 dependencies = [
  "cfgenius",
  "errno",
@@ -619,10 +639,11 @@ dependencies = [
 
 [[package]]
 name = "macroassembler"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3ea1d1edc4ad57f8b16f743c1e9e13043a39b452ca253167813b9e5826fb5de"
+checksum = "c279f6e88ab277e544d01c3c7587538ab2217ca3e038c87c1d50651f09f67058"
 dependencies = [
+ "capstone",
  "cfg-if",
  "errno",
  "iced-x86",

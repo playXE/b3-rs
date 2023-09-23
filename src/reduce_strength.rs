@@ -155,7 +155,7 @@ impl<'a> ReduceStrength<'a> {
                     }
                     self.index += 1;
                 }
-                println!("before insertion_set.execute(): {}", self.proc.display());
+             
                 self.insertion_set.execute(self.proc, block);
             }
 

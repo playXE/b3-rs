@@ -155,7 +155,7 @@ impl<'a> ReduceStrength<'a> {
                     }
                     self.index += 1;
                 }
-             
+
                 self.insertion_set.execute(self.proc, block);
             }
 
@@ -2421,6 +2421,26 @@ impl<'a> ReduceStrength<'a> {
                         self.changed = true;
                     }
                 }
+
+                if self.proc.value(self.value).kind.opcode() == Opcode::Store {
+                    // Turn this: Store(float-constant, address)
+                    // Into this: Store(int32-constant, address)
+                    if self.proc.value(self.value.child(self.proc, 0)).has_float() {
+                        let value = self.proc.value(self.value.child(self.proc, 0)).as_float().unwrap();
+                        let constant = self.insertion_set.insert_int_constant(self.index, Type::Int32, value.to_bits() as i64, self.proc);
+                        self.proc.value_mut(self.value).children[0] = constant;
+                        self.changed = true;
+                    }
+
+                    // Turn this: Store(double-constant, address)
+                    // Into this: Store(int64-constant, address)
+                    if self.proc.value(self.value.child(self.proc, 0)).has_double() {
+                        let value = self.proc.value(self.value.child(self.proc, 0)).as_double().unwrap();
+                        let constant = self.insertion_set.insert_int_constant(self.index, Type::Int64, value.to_bits() as i64, self.proc);
+                        self.proc.value_mut(self.value).children[0] = constant;
+                        self.changed = true;
+                    }
+                }
             }
 
             Opcode::Equal => {
@@ -3256,7 +3276,7 @@ impl<'a> ReduceStrength<'a> {
                 for upsilon in phi_children.at(phi).iter() {
                     self.proc.value_mut(upsilon).replace_with_nop();
                 }
-               
+
                 self.proc.value_mut(phi).replace_with_identity(other_child);
             } else {
                 // Wow, this would be super weird. It probably won't happen, except that things could
@@ -3710,9 +3730,16 @@ impl IntRange {
     }
 
     fn zext32(&self) -> Self {
-        Self {
-            min: self.min as u32 as u64 as i64,
-            max: self.max as u32 as u64 as i64,
+        if self.min >= 0 || self.max < 0 {
+            Self {
+                min: self.min as u32 as u64 as i64,
+                max: self.max as u32 as u64 as i64,
+            }
+        } else {
+            Self {
+                min: 0,
+                max: u32::MAX as _,
+            }
         }
     }
 }

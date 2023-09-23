@@ -1,6 +1,6 @@
 [package]
 name = "b3"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 license = "BSD-2-Clause"
 repository = "https://github.com/playxe/b3-rs"
@@ -23,6 +23,7 @@ cfg-if = "1.0"
 cool-bitvector = "0.1.1"
 
 [features]
+disassembly = ["macroassembler/x86-disasm", "macroassembler/arm-disasm"]
 
 [dev-dependencies]
 criterion = "0.5"

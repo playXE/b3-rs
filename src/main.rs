@@ -3,10 +3,10 @@ use macroassembler::jit::gpr_info::{ARGUMENT_GPR0, ARGUMENT_GPR1};
 
 fn main() {
     let mut opts = b3::Options::default();
-    opts.dump_air_at_each_phase = true;
+   // opts.dump_air_at_each_phase = true;
     opts.opt_level = b3::OptLevel::O3;
     opts.air_force_irc_allocator = true;
-    opts.dump_b3_reduce_strength = true;
+    //opts.dump_b3_reduce_strength = true;
 
     let mut proc = b3::Procedure::new(opts);
     let var0 = proc.add_variable(b3::Type::Int64);
@@ -52,5 +52,7 @@ fn main() {
     builder.return_(Some(c));
 
     println!("{}", proc.display());
-    b3::prepare_for_generation(&mut proc);
+    let code = b3::compile(proc);
+
+    println!("{}", code.disassembly());
 }

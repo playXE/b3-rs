@@ -778,7 +778,7 @@ impl<'a> BasicBlockBuilder<'a> {
             Opcode::Store16,
             Type::Void,
             NumChildren::Two,
-            &[ptr, value],
+            &[value, ptr],
             ValueData::MemoryValue {
                 offset,
                 range: range.unwrap_or(0..usize::MAX),

@@ -62,7 +62,7 @@ pub fn execute_insertions(target: &mut Vec<ValueId>, insertions: &mut Vec<Insert
 }
 
 pub struct InsertionSet {
-    insertions: Vec<Insertion>,
+    pub insertions: Vec<Insertion>,
     bottom_for_type: HashMap<Type, ValueId>,
 }
 
@@ -133,6 +133,7 @@ impl InsertionSet {
     }
 
     pub fn insert_clone(&mut self, index: usize, value: ValueId, proc: &mut Procedure) -> ValueId {
+        
         let x = proc.clone(value);
         self.insert_value(index, x)
     }

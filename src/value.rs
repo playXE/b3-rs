@@ -1653,7 +1653,9 @@ impl Value {
         let mut current = val;
 
         while proc.value(current).kind.opcode() == Opcode::Identity {
+            //println!("fold {:?} -> {:?}", current, proc.value(current).children[0]);
             current = proc.value(current).children[0];
+            
         }
 
         current

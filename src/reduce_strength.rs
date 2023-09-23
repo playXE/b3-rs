@@ -155,7 +155,7 @@ impl<'a> ReduceStrength<'a> {
                     }
                     self.index += 1;
                 }
-
+                println!("before insertion_set.execute(): {}", self.proc.display());
                 self.insertion_set.execute(self.proc, block);
             }
 
@@ -1666,7 +1666,7 @@ impl<'a> ReduceStrength<'a> {
                 // Turn this: BitOr(valueX, valueX)
                 // Into this: valueX.
                 if self.value.child(self.proc, 0) == self.value.child(self.proc, 1) {
-                    self.replace_with_new_value(Some(self.value.child(self.proc, 0)));
+                    self.replace_with_identity(self.value.child(self.proc, 0));
                     return;
                 }
 
@@ -1679,7 +1679,7 @@ impl<'a> ReduceStrength<'a> {
                     .filter(|x| *x == 0)
                     .is_some()
                 {
-                    self.replace_with_new_value(Some(self.value.child(self.proc, 0)));
+                    self.replace_with_identity(self.value.child(self.proc, 0));
                     return;
                 }
 
@@ -1695,7 +1695,7 @@ impl<'a> ReduceStrength<'a> {
                             .map(|x| x as u64)
                             == Some(0xffffffffffffffff))
                 {
-                    self.replace_with_new_value(Some(self.value.child(self.proc, 1)));
+                    self.replace_with_identity(self.value.child(self.proc, 1));
                     return;
                 }
 

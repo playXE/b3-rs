@@ -169,7 +169,7 @@ fn test_check() {
     builder.procedure.stackmap_set_generator(
         check,
         Rc::new(|jit, params| {
-            let input = params[1];
+            let input = params[0];
             jit.mul64(input.get_reg().gpr(), input.get_reg().gpr());
             jit.mov(input.get_reg().gpr(), RETURN_VALUE_GPR);
             emit_function_epilogue(jit);

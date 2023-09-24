@@ -802,6 +802,7 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
         x
     }
+    
 
     /// Return absolute value of a floating point value. The type of `value`
     /// must be `Type::Float` or `Type::Double`.
@@ -980,7 +981,7 @@ impl<'a> BasicBlockBuilder<'a> {
         x
     }
 
-    /// Zero extends 32-bit value to 32-bit value.
+    /// Zero extends 32-bit value to 64-bit value.
     ///
     /// Takes Int32 value and returns Int64 value.
     pub fn zext32(&mut self, src: ValueId) -> ValueId {

@@ -276,7 +276,6 @@ impl<'a> LowerToAir<'a> {
         // if we'd actually do the right thing when matching over such a DAG pattern. For now, it simply
         // doesn't matter because we don't implement patterns that would trigger this.
         if self.use_counts.num_uses(value) != 1 {
-            println!("{:?} cannot be internal because it has more than one use: {:?}", value, self.use_counts.num_uses(value));
             return false;
         }
         

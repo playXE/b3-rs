@@ -1298,8 +1298,8 @@ impl<'a> BasicBlockBuilder<'a> {
         let value = Value::new(
             Opcode::Check,
             Type::Void,
-            NumChildren::One,
-            &[predicate],
+            NumChildren::VarArgs,
+            &[],
             ValueData::StackMap(StackMapValue {
                 reps: vec![],
                 generator: None,

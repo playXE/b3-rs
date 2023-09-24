@@ -276,9 +276,10 @@ impl<'a> LowerToAir<'a> {
         // if we'd actually do the right thing when matching over such a DAG pattern. For now, it simply
         // doesn't matter because we don't implement patterns that would trigger this.
         if self.use_counts.num_uses(value) != 1 {
+            println!("{:?} cannot be internal because it has more than one use: {:?}", value, self.use_counts.num_uses(value));
             return false;
         }
-
+        
         true
     }
 
@@ -1450,8 +1451,8 @@ impl<'a> LowerToAir<'a> {
         // register pressure is not *that* common. For this reason, this algorithm will always
         // duplicate the comparison.
         //
-        // However, we cannot duplicate loads. The canBeInternal() on a load will assume that we
-        // already validated canBeInternal() on all of the values that got us to the load. So, even
+        // However, we cannot duplicate loads. The can_be_internal() on a load will assume that we
+        // already validated can_be_internal() on all of the values that got us to the load. So, even
         // if we are sharing a value, we still need to call canBeInternal() for the purpose of
         // tracking whether we are still in good shape to fuse loads.
         //
@@ -1474,7 +1475,7 @@ impl<'a> LowerToAir<'a> {
         // have already separately locked its children. So, if we're not locking a value then we need
         // to make sure that its children aren't locked. We encapsulate this in two ways:
         //
-        // canCommitInternal: This variable tells us if the values that we've fused so far are
+        // can_commit_internal: This variable tells us if the values that we've fused so far are
         // locked. This means that we're not sharing any of them with anyone. This permits us to fuse
         // loads. If it's false, then we cannot fuse loads and we also need to ensure that the
         // children of any values we try to fuse-by-sharing are not already locked. You don't have to

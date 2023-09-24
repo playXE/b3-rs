@@ -277,4 +277,45 @@ impl LoopAnalysis {
     pub fn at_mut(&mut self, l: LoopId) -> &mut Loop {
         &mut self.loops[l.index()]
     }
+
+    /// Return all blocks inside the loop that have successors
+    /// outside of the loop.  These are the blocks _inside of the current loop_
+    /// which branch out.  The returned list is always unique.
+    pub fn get_exiting_blocks(&self, proc: &Procedure, l: LoopId) -> TinyVec<[BlockId; 4]> {
+        let mut list = TinyVec::new();
+        for bb in self.get_blocks(l) {
+            for succ in proc.block(*bb).successor_list().iter() {
+                if !self.contains_block(l, succ.0) {
+                    list.push(*bb);
+                }
+            }
+        }
+
+        list
+    }
+    /// If [`get_exiting_blocks`] would return exactly one block,
+    /// return that block. Otherwise return `None`.
+    pub fn get_exiting_block(&self, proc: &Procedure, l: LoopId) -> Option<BlockId> {
+        let mut list = self.get_exiting_blocks(proc, l);
+        if list.len() == 1 {
+            Some(list.pop().unwrap())
+        } else {
+            None
+        }
+    }
+    /// Return all of the successor blocks of this loop.  These
+    /// are the blocks _outside of the current loop_ which are branched to.
+    ///
+    pub fn get_exit_blocks(&self, proc: &Procedure, l: LoopId) -> TinyVec<[BlockId; 4]> {
+        let mut list = TinyVec::new();
+        for bb in self.get_blocks(l) {
+            for succ in proc.block(*bb).successor_list().iter() {
+                if !self.contains_block(l, succ.0) {
+                    list.push(succ.0);
+                }
+            }
+        }
+
+        list
+    }
 }

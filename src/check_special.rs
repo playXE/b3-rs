@@ -54,7 +54,7 @@ impl CheckSpecial {
 
     pub fn hidden_branch(&self, code: &Code<'_>, inst: &Inst) -> Inst {
         let mut hidden_branch = Inst::new(self.check_kind, inst.origin, &[]);
-
+        
         for i in 0..self.num_check_args {
             hidden_branch.args.push(inst.args[i + 1]);
         }

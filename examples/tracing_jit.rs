@@ -124,7 +124,7 @@ impl TracingInterpreter {
         Self {
             loops: HashMap::new(),
             code,
-            stack: vec![0; 5],
+            stack: vec![0; 6],
             recording: false,
             trace_id: 0,
             pc: 0,
@@ -135,6 +135,9 @@ impl TracingInterpreter {
         let info = self.loops.get(&range).unwrap();
         let mut opts = b3::Options::default();
         opts.opt_level = OptLevel::O3;
+        opts.dump_air_at_each_phase = true;
+        opts.dump_b3_at_each_phase = true;
+        
         let mut proc = b3::Procedure::new(opts);
 
         let entry = proc.add_block(1.0);
@@ -217,7 +220,7 @@ impl TracingInterpreter {
                     builder.procedure.stackmap_set_generator(
                         check,
                         Rc::new(move |jit, params| {
-                            let stack = params[2].get_reg().gpr();
+                            let stack = params[1].get_reg().gpr();
 
                             for (i, param) in params.iter().skip(3).enumerate() {
                                 let reg = to_restore[i];
@@ -236,7 +239,7 @@ impl TracingInterpreter {
                                     jit.store32(param.get_reg().gpr(), Address::new(stack, offset));
                                 }
                             }
-                            let pc = params[1].get_reg().gpr();
+                            let pc = params[0].get_reg().gpr();
                             jit.store64(pc_ as i32, Address::new(pc, 0));
                             jit.mov(1i32, RETURN_VALUE_GPR);
                             emit_function_epilogue(jit);
@@ -270,7 +273,7 @@ impl TracingInterpreter {
                     builder.procedure.stackmap_set_generator(
                         check,
                         Rc::new(move |jit, params| {
-                            let stack = params[2].get_reg().gpr();
+                            let stack = params[1].get_reg().gpr();
 
                             for (i, param) in params.iter().skip(3).enumerate() {
                                 let reg = to_restore[i];
@@ -291,7 +294,7 @@ impl TracingInterpreter {
                                     jit.store32(param.get_reg().gpr(), Address::new(stack, offset));
                                 }
                             }
-                            let pc = params[1].get_reg().gpr();
+                            let pc = params[0].get_reg().gpr();
                             jit.store64(pc_ as i32, Address::new(pc, 0));
                             jit.mov(1i32, RETURN_VALUE_GPR);
                             emit_function_epilogue(jit);
@@ -314,7 +317,7 @@ impl TracingInterpreter {
         }
 
         builder.jump(Some(loop_block));
-
+        println!("IR: {}", proc.display());
         let compilation = b3::compile(proc);
 
         println!("{}", compilation.disassembly());
@@ -579,17 +582,20 @@ impl SimpleInterpreter {
 fn main() {
     let code = vec![
         Op::Movi(0, 0),
-        Op::Gt(0, 5000000, 4),
-        Op::Add(0, 4),
+        Op::Gt(0, 10000000, 4),
+        Op::Add(0, 1),
         Op::Jump(1),
         Op::Ret(0),
     ];
 
     let mut tracing = TracingInterpreter::new(code.clone());
+    let start = std::time::Instant::now();
     tracing.interpret();
-    println!("{:?}", tracing.stack());
+    println!("Interpreter + Tracing JIT: {:?} in {:.4}ms", tracing.stack(), start.elapsed().as_micros() as f64 / 1000.0);
 
     let mut simple = SimpleInterpreter::new(code);
+    let start = std::time::Instant::now();
     simple.interpret();
-    println!("{:?}", simple.stack());
+    println!("Interpreter: {:?} in {:.4}ms", simple.stack(), start.elapsed().as_micros() as f64 / 1000.0);
+
 }

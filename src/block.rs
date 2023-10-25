@@ -802,7 +802,6 @@ impl<'a> BasicBlockBuilder<'a> {
         self.add_value(x);
         x
     }
-    
 
     /// Return absolute value of a floating point value. The type of `value`
     /// must be `Type::Float` or `Type::Double`.
@@ -1239,16 +1238,12 @@ impl<'a> BasicBlockBuilder<'a> {
     ///
     /// If `None` is passed this is a void return, otherwise the value is returned.
     pub fn return_(&mut self, value: Option<ValueId>) {
-        let args = if value.is_none() {
-            vec![]
-        } else {
-            vec![value.unwrap()]
-        };
+        let args = value.as_ref().map(std::slice::from_ref).unwrap_or(&[]);
         let value = Value::new(
             Opcode::Return,
             Type::Void,
             value.map(|_| NumChildren::One).unwrap_or(NumChildren::Zero),
-            &args,
+            args,
             ValueData::None,
         );
 

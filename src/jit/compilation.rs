@@ -44,6 +44,7 @@ impl Compilation {
         // SAFETY:
         // `code_ref` is fully initialized
         //
+        #[cfg(feature = "disassembly")]
         unsafe {
             try_to_disassemble(
                 self.code_ref.start(),
@@ -52,6 +53,11 @@ impl Compilation {
                 &mut out,
             )
             .unwrap();
+        }
+
+        #[cfg(not(feature = "disassembly"))]
+        {
+            out.push_str("please enable the disassembly feature to show code disassembly");
         }
 
         out

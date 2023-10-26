@@ -48,7 +48,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "b3"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "cfg-if",
  "cool-bitvector",
@@ -625,9 +625,9 @@ dependencies = [
 
 [[package]]
 name = "macroassembler"
-version = "1.0.2"
+version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "834969cfebd28682980186f0c1981455daa9c62d32747eaf5ace317e1cbe1750"
+checksum = "9e8003115465e65931c42925fb7cc6701e8502f339cf90d017db18c1c639572e"
 dependencies = [
  "capstone",
  "cfg-if",

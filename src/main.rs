@@ -1,5 +1,5 @@
 use b3::{self, Reg};
-use macroassembler::jit::gpr_info::{ARGUMENT_GPR0, ARGUMENT_GPR1};
+use macroassembler::jit::gpr_info::ARGUMENT_GPR0;
 
 fn main() {
     let mut opts = b3::Options::default();
@@ -9,7 +9,7 @@ fn main() {
     //opts.dump_b3_reduce_strength = true;
 
     let mut proc = b3::Procedure::new(opts);
-   
+
     let entry = proc.add_block(1.0);
 
     let mut builder = b3::BasicBlockBuilder::new(&mut proc, entry);

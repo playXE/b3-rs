@@ -24,6 +24,8 @@ impl Compilation {
         }
     }
 
+    
+
     pub fn entrypoint(&self, at: usize) -> *const u8 {
         self.entrypoints[at]
     }

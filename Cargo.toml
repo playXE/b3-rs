@@ -28,7 +28,7 @@ disassembly = ["macroassembler/x86-disasm", "macroassembler/arm-disasm"]
 [dev-dependencies]
 criterion = "0.5"
 target-lexicon = "0.12"
-cranelift = "0.95"
+cranelift = "0.100"
 cranelift-module = "0.95"
 cranelift-jit = "0.95"
 pico-args = "0.5"

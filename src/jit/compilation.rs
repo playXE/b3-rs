@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use macroassembler::{
-    assembler::disassembler::try_to_disassemble, wtf::executable_memory_handle::CodeRef,
-};
+use macroassembler::wtf::executable_memory_handle::CodeRef;
 
 use crate::data_section::DataSection;
 
@@ -44,14 +42,20 @@ impl Compilation {
         // SAFETY:
         // `code_ref` is fully initialized
         //
+        #[cfg(feature = "disassembly")]
         unsafe {
-            try_to_disassemble(
+            macroassembler::assembler::disassembler::try_to_disassemble(
                 self.code_ref.start(),
                 self.code_ref.size_in_bytes(),
                 "  ",
                 &mut out,
             )
             .unwrap();
+        }
+
+        #[cfg(not(feature = "disassembly"))]
+        {
+            out.push_str("please enable the disassembly feature to show code disassembly");
         }
 
         out
